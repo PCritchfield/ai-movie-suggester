@@ -1,0 +1,48 @@
+# =============================================================================
+# ai-movie-suggester — standalone deployment
+# =============================================================================
+# This is the base compose file. It runs the backend and frontend only.
+# Ollama must be provided separately (see docker-compose.ollama.yml or set OLLAMA_HOST).
+#
+# Quick start:
+#   cp .env.example .env     # fill in your values
+#   docker compose up -d     # if you already run Ollama elsewhere
+#
+# With bundled Ollama:
+#   docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
+# =============================================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - backend-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      - BACKEND_URL=http://backend:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend-data:

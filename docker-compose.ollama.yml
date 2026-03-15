@@ -1,0 +1,41 @@
+# =============================================================================
+# Ollama sidecar — opt-in for users who don't already run Ollama
+# =============================================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
+#
+# If you already run Ollama, skip this file and set OLLAMA_HOST in your .env
+# to point at your existing instance (e.g., http://host.docker.internal:11434).
+#
+# GPU support requires nvidia-container-toolkit on the host.
+# Verify with: docker info | grep -i nvidia
+# Without GPU, Ollama falls back to CPU (slower but functional).
+# =============================================================================
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    restart: unless-stopped
+
+  # Override backend to depend on ollama and use internal network name
+  backend:
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      - ollama
+
+volumes:
+  ollama-data:

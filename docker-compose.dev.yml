@@ -1,0 +1,36 @@
+# =============================================================================
+# Development overrides — bind mounts, hot reload, debug ports
+# =============================================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Or use the Makefile:
+#   make dev-full    # full stack + Ollama
+#   make dev-ui      # frontend only
+# =============================================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ./backend:/app
+      - backend-data:/app/data
+    command: uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    environment:
+      - LOG_LEVEL=debug
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # preserve container's node_modules over bind mount
+      - /app/.next          # preserve Next.js build cache
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
