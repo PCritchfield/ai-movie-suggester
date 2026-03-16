@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Path filtering — detect which runtimes changed
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      # Pinned to SHA per Angua (Security) — supply chain concern
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+
+  # ---------------------------------------------------------------------------
+  # Backend — lint, type-check, test with coverage
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend — Lint / Type-Check / Test
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check .
+
+      - name: Type check (pyright)
+        run: uv run pyright .
+
+      - name: Test with coverage
+        run: |
+          uv run pytest \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-fail-under=70 \
+            -v
+
+  # ---------------------------------------------------------------------------
+  # Frontend — lint, type-check, test with coverage, build
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend — Lint / Type-Check / Test / Build
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Format check (prettier)
+        run: npm run format:check
+
+      - name: Type check (tsc)
+        run: npm run type-check
+
+      - name: Test with coverage
+        run: npm run test:coverage -- --coverage.thresholds.lines=70
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  # ---------------------------------------------------------------------------
+  # TDD signal — advisory check that tests accompany new code
+  # ---------------------------------------------------------------------------
+  tdd-signal:
+    name: TDD check — tests accompany new code
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for untested new code
+        run: |
+          BACKEND_APP=$(git diff --name-only origin/main...HEAD | grep '^backend/app/' | wc -l | tr -d ' ')
+          BACKEND_TEST=$(git diff --name-only origin/main...HEAD | grep '^backend/tests/' | wc -l | tr -d ' ')
+          FRONTEND_SRC=$(git diff --name-only origin/main...HEAD | grep '^frontend/src/' | wc -l | tr -d ' ')
+          FRONTEND_TEST=$(git diff --name-only origin/main...HEAD | grep '^frontend/tests/' | wc -l | tr -d ' ')
+
+          echo "Backend: $BACKEND_APP app files, $BACKEND_TEST test files"
+          echo "Frontend: $FRONTEND_SRC src files, $FRONTEND_TEST test files"
+
+          if [ "$BACKEND_APP" -gt 0 ] && [ "$BACKEND_TEST" -eq 0 ]; then
+            echo "::warning::backend/app/ files changed but no tests were added or modified"
+          fi
+          if [ "$FRONTEND_SRC" -gt 0 ] && [ "$FRONTEND_TEST" -eq 0 ]; then
+            echo "::warning::frontend/src/ files changed but no tests were added or modified"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Pass-through jobs — required status checks that handle skipped jobs
+  # Register THESE as required checks in branch protection, not the CI jobs
+  # ---------------------------------------------------------------------------
+  backend-check:
+    name: Backend check
+    runs-on: ubuntu-latest
+    needs: [changes, backend]
+    if: always()
+    steps:
+      - name: Check backend result
+        run: |
+          if [[ "${{ needs.changes.outputs.backend }}" == "false" ]]; then
+            echo "No backend changes — skipping"
+            exit 0
+          fi
+          if [[ "${{ needs.backend.result }}" != "success" ]]; then
+            echo "Backend CI failed"
+            exit 1
+          fi
+          echo "Backend CI passed"
+
+  frontend-check:
+    name: Frontend check
+    runs-on: ubuntu-latest
+    needs: [changes, frontend]
+    if: always()
+    steps:
+      - name: Check frontend result
+        run: |
+          if [[ "${{ needs.changes.outputs.frontend }}" == "false" ]]; then
+            echo "No frontend changes — skipping"
+            exit 0
+          fi
+          if [[ "${{ needs.frontend.result }}" != "success" ]]; then
+            echo "Frontend CI failed"
+            exit 1
+          fi
+          echo "Frontend CI passed"
