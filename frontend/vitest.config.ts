@@ -11,7 +11,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "text-summary"],
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/**/*.d.ts"],
+      exclude: ["src/**/*.d.ts", "src/**/layout.tsx"],
     },
   },
   resolve: {
