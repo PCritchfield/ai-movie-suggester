@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-commit hook for ai-movie-suggester monorepo
+# Install with: make hooks
+# Runs ruff on staged Python files, eslint+prettier on staged TS/TSX files
+# Deliberately fast — no tests or type-checking (that's CI's job)
+
+# Backend: ruff on staged Python files
+PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '^backend/.*\.py$' || true)
+if [ -n "$PYTHON_FILES" ]; then
+  echo "🐍 Running ruff on backend..."
+  cd backend
+  uv run ruff check --fix $PYTHON_FILES
+  uv run ruff format $PYTHON_FILES
+  cd ..
+  echo $PYTHON_FILES | xargs git add
+fi
+
+# Frontend: eslint + prettier on staged TS/TSX files
+TS_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '^frontend/.*\.\(ts\|tsx\)$' || true)
+if [ -n "$TS_FILES" ]; then
+  echo "📦 Running eslint + prettier on frontend..."
+  cd frontend
+  npx eslint --fix $TS_FILES
+  npx prettier --write $TS_FILES
+  cd ..
+  echo $TS_FILES | xargs git add
+fi
