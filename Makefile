@@ -1,4 +1,4 @@
-.PHONY: dev dev-full dev-ui build test lint clean logs health
+.PHONY: dev dev-full dev-ui build test lint clean logs health hooks
 
 # Default dev target — full stack with Ollama
 dev: dev-full
@@ -32,6 +32,11 @@ logs:
 # Check service health
 health:
 	@curl -sf http://localhost:8000/health | python3 -m json.tool 2>/dev/null || echo "Backend not reachable"
+
+# Install pre-commit hooks
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Pre-commit hooks installed (.githooks/pre-commit)"
 
 # Tear down everything including volumes
 clean:
