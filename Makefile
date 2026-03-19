@@ -17,7 +17,7 @@ build:
 
 # Run all tests
 test:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend pytest
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend pytest -m "not integration"
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm test
 
 # Lint both runtimes

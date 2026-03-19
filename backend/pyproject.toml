@@ -30,6 +30,11 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "--strict-markers"
+strict_markers = true
+markers = [
+    "integration: marks tests as requiring a live Jellyfin instance (deselect with '-m \"not integration\"')",
+]
 
 [tool.pyright]
 typeCheckingMode = "basic"
