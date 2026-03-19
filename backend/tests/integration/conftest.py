@@ -39,7 +39,7 @@ async def jellyfin_url() -> str:
                 resp = await client.get(f"{base}/health")
                 if resp.status_code == 200:
                     break
-            except httpx.ConnectError:
+            except httpx.TransportError:
                 pass
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
             elapsed += POLL_INTERVAL_SECONDS
@@ -65,7 +65,7 @@ async def jellyfin_url() -> str:
         resp = await client.get(f"{base}/Startup/Configuration")
         if resp.status_code == 200:
             # Wizard not yet completed — run through the 4-step sequence
-            await client.post(
+            resp = await client.post(
                 f"{base}/Startup/Configuration",
                 json={
                     "UICulture": "en-US",
@@ -73,20 +73,37 @@ async def jellyfin_url() -> str:
                     "PreferredMetadataLanguage": "en",
                 },
             )
-            await client.post(
+            resp.raise_for_status()
+
+            # POST /Startup/User returns 500 on Jellyfin 10.10.7 when the
+            # internal user database isn't fully initialized. The wizard
+            # still completes without it, so we log but don't fail.
+            resp = await client.post(
                 f"{base}/Startup/User",
                 json={
                     "Name": TEST_ADMIN_USER,
                     "Password": TEST_ADMIN_PASS,
                 },
             )
-            await client.post(
+            if not resp.is_success:
+                import warnings
+
+                warnings.warn(
+                    f"POST /Startup/User returned {resp.status_code} "
+                    f"(known Jellyfin 10.10.7 quirk, wizard still completes)",
+                    stacklevel=1,
+                )
+
+            resp = await client.post(
                 f"{base}/Startup/RemoteAccess",
                 json={
                     "EnableRemoteAccess": True,
                     "EnableAutomaticPortMapping": False,
                 },
             )
-            await client.post(f"{base}/Startup/Complete")
+            resp.raise_for_status()
+
+            resp = await client.post(f"{base}/Startup/Complete")
+            resp.raise_for_status()
 
     return base
