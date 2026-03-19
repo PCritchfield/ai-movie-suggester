@@ -63,7 +63,7 @@ Establish the `@pytest.mark.integration` marker and ensure `make test` and CI ex
 - [x] 1.7 **Verify:** Run `make test` with no Jellyfin running. Confirm it passes, output shows 0 integration tests collected, and existing unit tests still run.
 - [x] 1.8 **Verify:** Temporarily add `@pytest.mark.typo` to a unit test, run `make test`, confirm it errors. Revert the typo.
 
-### [ ] 2.0 Jellyfin Docker Fixture + Makefile Targets
+### [x] 2.0 Jellyfin Docker Fixture + Makefile Targets
 
 Provide a disposable Jellyfin container via `docker-compose.test.yml` and local DX targets. Infrastructure only — no Python code.
 
@@ -79,14 +79,14 @@ Provide a disposable Jellyfin container via `docker-compose.test.yml` and local 
 
 #### 2.0 Tasks
 
-- [ ] 2.1 Create `docker-compose.test.yml` with Jellyfin service: image `jellyfin/jellyfin:10.10.7`, port `127.0.0.1:8096:8096`, healthcheck on `/health` with `start_period: 30s`, named volumes `jellyfin-test-config` and `jellyfin-test-cache`.
-- [ ] 2.2 Add `jellyfin-up` target to `Makefile`: `docker compose -p ai-movie-suggester-test -f docker-compose.test.yml up -d jellyfin` followed by a poll loop or `docker compose wait` until healthy. Print "Jellyfin available at http://localhost:8096" on success.
-- [ ] 2.3 Add `jellyfin-down` target to `Makefile`: `docker compose -p ai-movie-suggester-test -f docker-compose.test.yml down -v`. The `-v` is critical — removes named volumes for clean state.
-- [ ] 2.4 **Verify:** Run `make jellyfin-up`, then `docker compose -p ai-movie-suggester-test -f docker-compose.test.yml ps` shows `(healthy)`. Run `curl http://localhost:8096/health`. Run `make jellyfin-down` and confirm volumes are gone.
-- [ ] 2.5 Add `test-integration` target to `Makefile`: `docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm --add-host=host.docker.internal:host-gateway -e JELLYFIN_TEST_URL=http://host.docker.internal:8096 backend pytest -m integration -v`. The `--add-host` flag is unconditional (harmless on Mac, required on Linux).
-- [ ] 2.6 Add `test-integration-full` target to `Makefile` with unconditional teardown. Use a shell block pattern so `jellyfin-down` runs even if tests fail. Example: `@$(MAKE) jellyfin-up && $(MAKE) test-integration; ret=$$?; $(MAKE) jellyfin-down; exit $$ret`. Test by temporarily making the placeholder test fail.
-- [ ] 2.7 Update `.PHONY` line in `Makefile` to include all new targets: `jellyfin-up jellyfin-down test-integration test-integration-full`.
-- [ ] 2.8 **Verify:** Run `make test-integration-full` — starts Jellyfin, runs placeholder integration test, tears down. Then make the placeholder test deliberately fail, run `make test-integration-full` again — confirm `jellyfin-down` still runs (no orphaned containers via `docker ps`).
+- [x] 2.1 Create `docker-compose.test.yml` with Jellyfin service: image `jellyfin/jellyfin:10.10.7`, port `127.0.0.1:8096:8096`, healthcheck on `/health` with `start_period: 30s`, named volumes `jellyfin-test-config` and `jellyfin-test-cache`.
+- [x] 2.2 Add `jellyfin-up` target to `Makefile`: `docker compose -p ai-movie-suggester-test -f docker-compose.test.yml up -d jellyfin` followed by a poll loop or `docker compose wait` until healthy. Print "Jellyfin available at http://localhost:8096" on success.
+- [x] 2.3 Add `jellyfin-down` target to `Makefile`: `docker compose -p ai-movie-suggester-test -f docker-compose.test.yml down -v`. The `-v` is critical — removes named volumes for clean state.
+- [x] 2.4 **Verify:** Run `make jellyfin-up` (attempt 2), then `docker compose -p ai-movie-suggester-test -f docker-compose.test.yml ps` shows `(healthy)`. Run `curl http://localhost:8096/health`. Run `make jellyfin-down` and confirm volumes are gone.
+- [x] 2.5 Add `test-integration` target to `Makefile`: `docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm --add-host=host.docker.internal:host-gateway -e JELLYFIN_TEST_URL=http://host.docker.internal:8096 backend pytest -m integration -v`. The `--add-host` flag is unconditional (harmless on Mac, required on Linux).
+- [x] 2.6 Add `test-integration-full` target to `Makefile` with unconditional teardown. Use a shell block pattern so `jellyfin-down` runs even if tests fail. Example: `@$(MAKE) jellyfin-up && $(MAKE) test-integration; ret=$$?; $(MAKE) jellyfin-down; exit $$ret`. Test by temporarily making the placeholder test fail.
+- [x] 2.7 Update `.PHONY` line in `Makefile` to include all new targets: `jellyfin-up jellyfin-down test-integration test-integration-full`.
+- [x] 2.8 **Verify:** Run `make test-integration-full` — starts Jellyfin, runs placeholder integration test, tears down. Then make the placeholder test deliberately fail, run `make test-integration-full` again — confirm `jellyfin-down` still runs (no orphaned containers via `docker ps`).
 
 ### [ ] 3.0 First-Run Wizard Automation + Smoke Tests
 

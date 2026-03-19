@@ -1,4 +1,4 @@
-.PHONY: dev dev-full dev-ui build test lint clean logs health hooks
+.PHONY: dev dev-full dev-ui build test lint clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full
 
 # Default dev target — full stack with Ollama
 dev: dev-full
@@ -37,6 +37,40 @@ health:
 hooks:
 	git config core.hooksPath .githooks
 	@echo "Pre-commit hooks installed (.githooks/pre-commit)"
+
+# ---------------------------------------------------------------------------
+# Integration test targets (Jellyfin test stack)
+# ---------------------------------------------------------------------------
+
+# Start disposable Jellyfin for integration tests
+jellyfin-up:
+	docker compose -p ai-movie-suggester-test -f docker-compose.test.yml up -d jellyfin
+	@echo "Waiting for Jellyfin to become healthy..."
+	@timeout=120; while [ $$timeout -gt 0 ]; do \
+		status=$$(docker compose -p ai-movie-suggester-test -f docker-compose.test.yml ps --format json 2>/dev/null | python3 -c "import sys,json; data=json.load(sys.stdin); print(data['Health'] if isinstance(data,dict) else next((s['Health'] for s in data if s['Service']=='jellyfin'),'unknown'))" 2>/dev/null || echo "unknown"); \
+		if [ "$$status" = "healthy" ]; then \
+			echo "Jellyfin available at http://localhost:8096"; \
+			exit 0; \
+		fi; \
+		sleep 2; \
+		timeout=$$((timeout - 2)); \
+	done; \
+	echo "ERROR: Jellyfin did not become healthy within 120s"; exit 1
+
+# Stop Jellyfin test stack and remove volumes
+jellyfin-down:
+	docker compose -p ai-movie-suggester-test -f docker-compose.test.yml down -v
+
+# Run integration tests (requires Jellyfin via jellyfin-up)
+# Runs on host (same as CI) — Jellyfin is on localhost:8096
+test-integration:
+	cd backend && JELLYFIN_TEST_URL=http://localhost:8096 uv run pytest -m integration -v
+
+# Full cycle: start Jellyfin, run integration tests, teardown (unconditional)
+test-integration-full:
+	@$(MAKE) jellyfin-up && $(MAKE) test-integration; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
+
+# ---------------------------------------------------------------------------
 
 # Tear down everything including volumes
 clean:

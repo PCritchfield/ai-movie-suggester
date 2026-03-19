@@ -1,0 +1,20 @@
+# Test stack — disposable Jellyfin for integration tests
+# Usage: docker compose -p ai-movie-suggester-test -f docker-compose.test.yml up -d
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:10.10.7
+    ports:
+      - "127.0.0.1:8096:8096"
+    volumes:
+      - jellyfin-test-config:/config
+      - jellyfin-test-cache:/cache
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8096/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  jellyfin-test-config:
+  jellyfin-test-cache:
