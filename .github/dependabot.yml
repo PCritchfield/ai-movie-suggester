@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Monitor Jellyfin image version in the test compose file.
+  # Additional ecosystems (pip, npm, github-actions) can be added in future PRs.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"

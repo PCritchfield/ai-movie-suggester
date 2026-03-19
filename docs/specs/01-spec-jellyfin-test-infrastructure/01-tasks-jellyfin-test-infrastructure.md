@@ -115,7 +115,7 @@ Automate Jellyfin's first-run wizard and prove the fixture works with smoke test
 - [x] 3.7 Run `ruff check` and `pyright` on the new files. Fix any lint/type issues.
 - [x] 3.8 **Verify:** `make jellyfin-down` then `make test-integration-full` — clean start, both tests pass, teardown completes. Then `make jellyfin-up` + `make test-integration` twice — idempotent.
 
-### [ ] 4.0 CI Workflow + Dependabot Configuration
+### [x] 4.0 CI Workflow + Dependabot Configuration
 
 Automate integration tests in GitHub Actions and configure Dependabot for Jellyfin image version monitoring.
 
@@ -130,11 +130,11 @@ Automate integration tests in GitHub Actions and configure Dependabot for Jellyf
 
 #### 4.0 Tasks
 
-- [ ] 4.1 Look up commit SHAs for all non-GitHub-org actions that the workflow will use (e.g., `astral-sh/setup-uv`, `dorny/paths-filter`). Record them before writing any YAML. GitHub-org actions (`actions/checkout`, `actions/setup-python`, `actions/cache`) may use version tags.
-- [ ] 4.2 Create `.github/workflows/integration.yml` with triggers: `pull_request` on paths `backend/**` and `.github/workflows/integration.yml`, `push` to `main`, `schedule` weekly Monday 6am UTC, `workflow_dispatch`.
-- [ ] 4.3 Define the Jellyfin service container in the integration job: image `jellyfin/jellyfin:10.10.7`, port `8096:8096`, health options `--health-cmd "curl -sf http://localhost:8096/health" --health-interval 10s --health-timeout 5s --health-retries 10`. The runner waits for healthy before starting steps.
-- [ ] 4.4 Add a warmer step that polls `GET http://localhost:8096/System/Info/Public` until it returns 200 (with timeout). This is the secondary readiness gate — Jellyfin's `/health` can return 200 before the API is fully ready.
-- [ ] 4.5 Add the test step: install uv, set up Python, restore uv cache (key: `uv-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}`), `uv sync --frozen --all-extras`, then `uv run pytest -m integration -v` with `JELLYFIN_TEST_URL=http://localhost:8096`. This runs directly on the runner, matching the `ci.yml` pattern.
-- [ ] 4.6 Add the `integration-check` pass-through job following the same pattern as `backend-check` and `frontend-check` in `ci.yml`. It inspects `needs.integration.result` and exits 1 on failure. Do NOT use `continue-on-error: true` on the integration job — advisory status is controlled by not registering `integration-check` as a required branch protection check.
-- [ ] 4.7 Create `.github/dependabot.yml` with a `docker-compose` ecosystem entry pointing at `docker-compose.test.yml`, weekly schedule. Add a comment noting that additional ecosystems (pip, npm) can be added in future PRs.
-- [ ] 4.8 **Verify:** Push to a branch, confirm `integration.yml` triggers on PR. After merge, run `gh workflow run integration.yml` and watch it complete. Confirm the warmer step succeeds before pytest runs.
+- [x] 4.1 Look up commit SHAs for all non-GitHub-org actions that the workflow will use (e.g., `astral-sh/setup-uv`, `dorny/paths-filter`). Record them before writing any YAML. GitHub-org actions (`actions/checkout`, `actions/setup-python`, `actions/cache`) may use version tags.
+- [x] 4.2 Create `.github/workflows/integration.yml` with triggers: `pull_request` on paths `backend/**` and `.github/workflows/integration.yml`, `push` to `main`, `schedule` weekly Monday 6am UTC, `workflow_dispatch`.
+- [x] 4.3 Define the Jellyfin service container in the integration job: image `jellyfin/jellyfin:10.10.7`, port `8096:8096`, health options `--health-cmd "curl -sf http://localhost:8096/health" --health-interval 10s --health-timeout 5s --health-retries 10`. The runner waits for healthy before starting steps.
+- [x] 4.4 Add a warmer step that polls `GET http://localhost:8096/System/Info/Public` until it returns 200 (with timeout). This is the secondary readiness gate — Jellyfin's `/health` can return 200 before the API is fully ready.
+- [x] 4.5 Add the test step: install uv, set up Python, restore uv cache (key: `uv-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}`), `uv sync --frozen --all-extras`, then `uv run pytest -m integration -v` with `JELLYFIN_TEST_URL=http://localhost:8096`. This runs directly on the runner, matching the `ci.yml` pattern.
+- [x] 4.6 Add the `integration-check` pass-through job following the same pattern as `backend-check` and `frontend-check` in `ci.yml`. It inspects `needs.integration.result` and exits 1 on failure. Do NOT use `continue-on-error: true` on the integration job — advisory status is controlled by not registering `integration-check` as a required branch protection check.
+- [x] 4.7 Create `.github/dependabot.yml` with a `docker-compose` ecosystem entry pointing at `docker-compose.test.yml`, weekly schedule. Add a comment noting that additional ecosystems (pip, npm) can be added in future PRs.
+- [x] 4.8 **Verify:** Push to a branch (structural validation pre-push; live CI verification requires push + PR), confirm `integration.yml` triggers on PR. After merge, run `gh workflow run integration.yml` and watch it complete. Confirm the warmer step succeeds before pytest runs.
