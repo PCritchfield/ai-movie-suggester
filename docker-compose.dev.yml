@@ -35,9 +35,6 @@ services:
     command: npm run dev
     environment:
       - NODE_ENV=development
-    depends_on:
-      backend:
-        condition: service_healthy
 
 volumes:
   backend-venv:

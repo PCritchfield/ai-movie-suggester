@@ -5,12 +5,13 @@ FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.10.11 /uv /usr/local/bin/uv
 
 COPY pyproject.toml uv.lock ./
 
 # =============================================================================
 # Stage 2: dev — all deps including dev extras, hot reload CMD
+# Requires bind mount at /app — use docker-compose.dev.yml, not standalone
 # =============================================================================
 FROM base AS dev
 
