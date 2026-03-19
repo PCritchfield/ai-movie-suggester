@@ -9,7 +9,7 @@ dev-full:
 
 # Frontend only — for UI work without Ollama/models
 dev-ui:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up frontend
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --no-deps frontend
 
 # Build production images
 build:

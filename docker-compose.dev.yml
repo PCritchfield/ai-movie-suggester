@@ -17,6 +17,7 @@ services:
       target: dev
     volumes:
       - ./backend:/app
+      - backend-venv:/app/.venv
       - backend-data:/app/data
     command: uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
     environment:
@@ -29,8 +30,13 @@ services:
       target: dev
     volumes:
       - ./frontend:/app
-      - /app/node_modules  # preserve container's node_modules over bind mount
-      - /app/.next          # preserve Next.js build cache
+      - frontend-node-modules:/app/node_modules
+      - frontend-next-cache:/app/.next
     command: npm run dev
     environment:
       - NODE_ENV=development
+
+volumes:
+  backend-venv:
+  frontend-node-modules:
+  frontend-next-cache:
