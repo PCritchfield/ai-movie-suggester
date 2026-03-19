@@ -23,7 +23,7 @@ services:
     volumes:
       - backend-data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -39,9 +39,6 @@ services:
       - BACKEND_URL=http://backend:8000
     ports:
       - "127.0.0.1:3000:3000"
-    depends_on:
-      backend:
-        condition: service_healthy
     restart: unless-stopped
 
 volumes:

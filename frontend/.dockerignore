@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.gitignore
+tests/
+*.test.ts
+*.test.tsx
+coverage/
