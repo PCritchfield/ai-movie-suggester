@@ -28,6 +28,7 @@ async def _check_service(client: httpx.AsyncClient, url: str) -> ServiceStatus:
         resp = await client.get(url, timeout=3.0)
         return "ok" if resp.status_code == 200 else "error"
     except Exception:
+        logger.debug("service check failed url=%s", url, exc_info=True)
         return "error"
 
 
