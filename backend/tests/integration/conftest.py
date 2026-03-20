@@ -17,6 +17,19 @@ EXPECTED_JELLYFIN_VERSION = "10.11.6"
 TEST_ADMIN_USER = "admin"
 TEST_ADMIN_PASS = "test-admin-password"
 
+# Test users — known credentials for downstream permission-scoping tests
+TEST_USER_ALICE = "test-alice"
+TEST_USER_ALICE_PASS = "test-alice-password"
+
+TEST_USER_BOB = "test-bob"
+TEST_USER_BOB_PASS = "test-bob-password"
+
+# Jellyfin client header required for authenticated API calls
+JELLYFIN_AUTH_HEADER = (
+    'MediaBrowser Client="ai-movie-suggester-tests", '
+    'Device="pytest", DeviceId="integration-test", Version="0.0.0"'
+)
+
 POLL_INTERVAL_SECONDS = 2
 POLL_TIMEOUT_SECONDS = 60
 
@@ -107,3 +120,59 @@ async def jellyfin_url() -> str:
             resp.raise_for_status()
 
     return base
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped fixture — authenticates as admin, returns access token
+# ---------------------------------------------------------------------------
+@pytest_asyncio.fixture(scope="session")
+async def admin_auth_token(jellyfin_url: str) -> str:
+    """Authenticate as the admin user and return the access token."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{jellyfin_url}/Users/AuthenticateByName",
+            json={"Username": TEST_ADMIN_USER, "Pw": TEST_ADMIN_PASS},
+            headers={"X-Emby-Authorization": JELLYFIN_AUTH_HEADER},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        token: str = data["AccessToken"]
+    return token
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped fixture — provisions test users (idempotent)
+# ---------------------------------------------------------------------------
+@pytest_asyncio.fixture(scope="session")
+async def test_users(jellyfin_url: str, admin_auth_token: str) -> dict[str, str]:
+    """Create test users if they don't exist. Returns {username: user_id}.
+
+    Idempotent — safe to run against an already-provisioned instance.
+    """
+    auth_headers = {
+        "X-Emby-Authorization": (f'{JELLYFIN_AUTH_HEADER}, Token="{admin_auth_token}"'),
+    }
+    users_to_create = [
+        (TEST_USER_ALICE, TEST_USER_ALICE_PASS),
+        (TEST_USER_BOB, TEST_USER_BOB_PASS),
+    ]
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(f"{jellyfin_url}/Users", headers=auth_headers)
+        resp.raise_for_status()
+        existing = {u["Name"]: u["Id"] for u in resp.json()}
+
+        created: dict[str, str] = {}
+        for username, password in users_to_create:
+            if username in existing:
+                created[username] = existing[username]
+                continue
+            resp = await client.post(
+                f"{jellyfin_url}/Users/New",
+                json={"Name": username, "Password": password},
+                headers=auth_headers,
+            )
+            resp.raise_for_status()
+            created[username] = resp.json()["Id"]
+
+    return created

@@ -48,6 +48,28 @@ make test
 make lint
 ```
 
+### Integration Tests
+
+Integration tests run against a real Jellyfin instance. A disposable container is provided via Docker Compose.
+
+```bash
+# Start a disposable Jellyfin for testing
+make jellyfin-up
+
+# Run integration tests (Jellyfin must be running)
+make test-integration
+
+# Full cycle: start Jellyfin, run tests, teardown
+make test-integration-full
+
+# Stop and remove the test Jellyfin
+make jellyfin-down
+```
+
+The test suite automatically completes the Jellyfin first-run wizard and provisions test users on first run. Subsequent runs are idempotent.
+
+**Prerequisites:** Docker running, port 8096 available, `uv` installed.
+
 ## Coding Standards
 
 ### Python (Backend)
