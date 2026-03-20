@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.jellyfin.client import JellyfinClient
 from app.jellyfin.errors import (
     JellyfinAuthError,
     JellyfinConnectionError,
@@ -12,6 +13,7 @@ from app.jellyfin.models import AuthResult, LibraryItem, PaginatedItems, UserInf
 __all__ = [
     "AuthResult",
     "JellyfinAuthError",
+    "JellyfinClient",
     "JellyfinConnectionError",
     "JellyfinError",
     "LibraryItem",

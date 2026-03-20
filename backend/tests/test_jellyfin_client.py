@@ -3,15 +3,33 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
+import httpx
 import pytest
 from pydantic import ValidationError
 
+from app.jellyfin.client import JellyfinClient
 from app.jellyfin.errors import (
     JellyfinAuthError,
     JellyfinConnectionError,
     JellyfinError,
 )
 from app.jellyfin.models import AuthResult, LibraryItem, PaginatedItems, UserInfo
+
+
+@pytest.fixture
+def mock_http() -> AsyncMock:
+    """Mock httpx.AsyncClient for unit tests."""
+    return AsyncMock(spec=httpx.AsyncClient)
+
+
+@pytest.fixture
+def jf_client(mock_http: AsyncMock) -> JellyfinClient:
+    return JellyfinClient(
+        base_url="http://jellyfin:8096",
+        http_client=mock_http,
+    )
 
 
 class TestErrorHierarchy:
@@ -112,3 +130,37 @@ class TestPaginatedItems:
         page = PaginatedItems.model_validate(data)
         assert page.items == []
         assert page.total_count == 0
+
+
+class TestHeaderConstruction:
+    def test_headers_without_token(self, jf_client: JellyfinClient) -> None:
+        headers = jf_client._headers()
+        auth = headers["Authorization"]
+        assert auth.startswith("MediaBrowser ")
+        assert 'Client="ai-movie-suggester"' in auth
+        assert 'Device="Server"' in auth
+        assert "DeviceId=" in auth
+        assert 'Version="0.1.0"' in auth
+        assert "Token=" not in auth
+
+    def test_headers_with_token(self, jf_client: JellyfinClient) -> None:
+        headers = jf_client._headers(token="my-token")
+        auth = headers["Authorization"]
+        assert auth.endswith(", Token=my-token")
+        assert 'Client="ai-movie-suggester"' in auth
+
+    def test_custom_device_id(self, mock_http: AsyncMock) -> None:
+        client = JellyfinClient(
+            base_url="http://jellyfin:8096",
+            http_client=mock_http,
+            device_id="custom-id",
+        )
+        headers = client._headers()
+        assert 'DeviceId="custom-id"' in headers["Authorization"]
+
+    def test_base_url_trailing_slash_stripped(self, mock_http: AsyncMock) -> None:
+        client = JellyfinClient(
+            base_url="http://jellyfin:8096/",
+            http_client=mock_http,
+        )
+        assert client._base_url == "http://jellyfin:8096"
