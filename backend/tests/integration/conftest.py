@@ -1,11 +1,24 @@
-"""Integration test fixtures — Jellyfin provisioning and readiness."""
+"""Integration test fixtures — Jellyfin provisioning and readiness.
+
+Wizard completion and auth follow the pattern from Jellyfin's own
+integration tests (tests/Jellyfin.Server.Integration.Tests/AuthHelper.cs).
+"""
 
 import asyncio
 import os
 import warnings
+from typing import NamedTuple
 
 import httpx
 import pytest_asyncio
+
+
+class JellyfinInstance(NamedTuple):
+    """Jellyfin connection info discovered during wizard setup."""
+
+    url: str
+    admin_user: str
+
 
 # ---------------------------------------------------------------------------
 # Constants — test-only, never imported outside backend/tests/integration/
@@ -13,24 +26,44 @@ import pytest_asyncio
 JELLYFIN_TEST_URL = os.environ.get(
     "JELLYFIN_TEST_URL", "http://host.docker.internal:8096"
 )
+# Must match the image version in docker-compose.test.yml
 EXPECTED_JELLYFIN_VERSION = "10.11.6"
-TEST_ADMIN_USER = "admin"
 TEST_ADMIN_PASS = "test-admin-password"
+
+TEST_USER_ALICE = "test-alice"
+TEST_USER_ALICE_PASS = "test-alice-password"
+
+TEST_USER_BOB = "test-bob"
+TEST_USER_BOB_PASS = "test-bob-password"
+
+# Auth header format matching Jellyfin's own integration tests.
+# Uses "Authorization" (not "X-Emby-Authorization") and no quotes on Token.
+_AUTH_HEADER = (
+    'MediaBrowser Client="ai-movie-suggester-tests", '
+    'DeviceId="integration-test", Device="pytest", Version="0.0.0"'
+)
 
 POLL_INTERVAL_SECONDS = 2
 POLL_TIMEOUT_SECONDS = 60
+
+
+def _auth_headers(token: str | None = None) -> dict[str, str]:
+    """Build Jellyfin Authorization header, optionally with token."""
+    value = _AUTH_HEADER if token is None else f"{_AUTH_HEADER}, Token={token}"
+    return {"Authorization": value}
 
 
 # ---------------------------------------------------------------------------
 # Session-scoped fixture — polls, version-checks, completes wizard
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="session")
-async def jellyfin_url() -> str:
+async def jellyfin() -> JellyfinInstance:
     """Wait for Jellyfin readiness, verify version, complete wizard if needed.
 
-    Returns the base URL of the ready Jellyfin instance.
+    Returns a JellyfinInstance with the URL and discovered admin username.
     """
     base = JELLYFIN_TEST_URL
+    admin_user = "root"
 
     async with httpx.AsyncClient() as client:
         # Phase 1: Poll for readiness
@@ -64,9 +97,16 @@ async def jellyfin_url() -> str:
             raise AssertionError(msg)
 
         # Phase 3: Complete first-run wizard (idempotent)
+        # Docker service containers need the full wizard sequence for auth
+        # to work. Jellyfin's own tests use just /Startup/Complete but they
+        # run in-process, not in Docker.
         resp = await client.get(f"{base}/Startup/Configuration")
         if resp.status_code == 200:
-            # Wizard not yet completed — run through the 4-step sequence
+            # Discover admin username before wizard changes state
+            resp = await client.get(f"{base}/Startup/User")
+            if resp.is_success:
+                admin_user = resp.json().get("Name", "root")
+
             resp = await client.post(
                 f"{base}/Startup/Configuration",
                 json={
@@ -77,22 +117,11 @@ async def jellyfin_url() -> str:
             )
             resp.raise_for_status()
 
-            # POST /Startup/User returns 500 on Jellyfin 10.11.6 when the
-            # internal user database isn't fully initialized. The wizard
-            # still completes without it, so we log but don't fail.
+            # Set admin user — may return 500 in CI, wizard still completes
             resp = await client.post(
                 f"{base}/Startup/User",
-                json={
-                    "Name": TEST_ADMIN_USER,
-                    "Password": TEST_ADMIN_PASS,
-                },
+                json={"Name": admin_user, "Password": TEST_ADMIN_PASS},
             )
-            if not resp.is_success:
-                warnings.warn(
-                    f"POST /Startup/User returned {resp.status_code} "
-                    f"(known Jellyfin 10.11.6 quirk, wizard still completes)",
-                    stacklevel=1,
-                )
 
             resp = await client.post(
                 f"{base}/Startup/RemoteAccess",
@@ -106,4 +135,102 @@ async def jellyfin_url() -> str:
             resp = await client.post(f"{base}/Startup/Complete")
             resp.raise_for_status()
 
-    return base
+    return JellyfinInstance(url=base, admin_user=admin_user)
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped fixture — authenticates as admin, returns access token
+# ---------------------------------------------------------------------------
+@pytest_asyncio.fixture(scope="session")
+async def admin_auth_token(jellyfin: JellyfinInstance) -> str:
+    """Authenticate as admin and return the access token.
+
+    On a fresh instance after /Startup/Complete, the default user has an
+    empty password. We authenticate, then set the expected password.
+    Retries handle the case where auth isn't ready immediately after wizard.
+    """
+    credentials = [
+        (jellyfin.admin_user, TEST_ADMIN_PASS),
+        (jellyfin.admin_user, ""),
+    ]
+    max_attempts = 10
+    last_status = 0
+
+    async with httpx.AsyncClient() as client:
+        for attempt in range(max_attempts):
+            for username, password in credentials:
+                resp = await client.post(
+                    f"{jellyfin.url}/Users/AuthenticateByName",
+                    json={"Username": username, "Pw": password},
+                    headers=_auth_headers(),
+                )
+                last_status = resp.status_code
+                if resp.is_success:
+                    data = resp.json()
+                    token: str = data["AccessToken"]
+                    user_id: str = data["User"]["Id"]
+
+                    if password != TEST_ADMIN_PASS:
+                        resp = await client.post(
+                            f"{jellyfin.url}/Users/{user_id}/Password",
+                            json={
+                                "CurrentPw": password,
+                                "NewPw": TEST_ADMIN_PASS,
+                            },
+                            headers=_auth_headers(token),
+                        )
+                        if not resp.is_success:
+                            warnings.warn(
+                                f"Could not set admin password "
+                                f"(status {resp.status_code})",
+                                stacklevel=2,
+                            )
+
+                    return token
+
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(3)
+
+    msg = (
+        f"Cannot authenticate as {jellyfin.admin_user} after "
+        f"{max_attempts} attempts (last status: {last_status})"
+    )
+    raise RuntimeError(msg)
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped fixture — provisions test users (idempotent)
+# ---------------------------------------------------------------------------
+@pytest_asyncio.fixture(scope="session")
+async def test_users(
+    jellyfin: JellyfinInstance, admin_auth_token: str
+) -> dict[str, str]:
+    """Create test users if they don't exist. Returns {username: user_id}.
+
+    Idempotent — safe to run against an already-provisioned instance.
+    """
+    headers = _auth_headers(admin_auth_token)
+    users_to_create = [
+        (TEST_USER_ALICE, TEST_USER_ALICE_PASS),
+        (TEST_USER_BOB, TEST_USER_BOB_PASS),
+    ]
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(f"{jellyfin.url}/Users", headers=headers)
+        resp.raise_for_status()
+        existing = {u["Name"]: u["Id"] for u in resp.json()}
+
+        created: dict[str, str] = {}
+        for username, password in users_to_create:
+            if username in existing:
+                created[username] = existing[username]
+                continue
+            resp = await client.post(
+                f"{jellyfin.url}/Users/New",
+                json={"Name": username, "Password": password},
+                headers=headers,
+            )
+            resp.raise_for_status()
+            created[username] = resp.json()["Id"]
+
+    return created
