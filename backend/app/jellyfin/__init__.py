@@ -7,9 +7,14 @@ from app.jellyfin.errors import (
     JellyfinConnectionError,
     JellyfinError,
 )
+from app.jellyfin.models import AuthResult, LibraryItem, PaginatedItems, UserInfo
 
 __all__ = [
+    "AuthResult",
     "JellyfinAuthError",
     "JellyfinConnectionError",
     "JellyfinError",
+    "LibraryItem",
+    "PaginatedItems",
+    "UserInfo",
 ]

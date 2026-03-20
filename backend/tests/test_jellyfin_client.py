@@ -3,11 +3,15 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from app.jellyfin.errors import (
     JellyfinAuthError,
     JellyfinConnectionError,
     JellyfinError,
 )
+from app.jellyfin.models import AuthResult, LibraryItem, PaginatedItems, UserInfo
 
 
 class TestErrorHierarchy:
@@ -27,3 +31,84 @@ class TestErrorHierarchy:
     def test_connection_error_message(self) -> None:
         err = JellyfinConnectionError("Connection refused")
         assert str(err) == "Connection refused"
+
+
+class TestAuthResult:
+    def test_parse_jellyfin_response(self) -> None:
+        """AuthResult parses from Jellyfin's AuthenticateByName response."""
+        data = {
+            "AccessToken": "abc123",
+            "User": {"Id": "user-1", "Name": "alice"},
+        }
+        result = AuthResult.from_jellyfin(data)
+        assert result.access_token == "abc123"
+        assert result.user_id == "user-1"
+        assert result.user_name == "alice"
+
+
+class TestUserInfo:
+    def test_parse_from_jellyfin(self) -> None:
+        data = {
+            "Id": "user-1",
+            "Name": "alice",
+            "ServerId": "server-1",
+            "HasPassword": True,
+        }
+        user = UserInfo.model_validate(data)
+        assert user.id == "user-1"
+        assert user.name == "alice"
+        assert user.server_id == "server-1"
+        assert user.has_password is True
+
+    def test_missing_required_field_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            UserInfo.model_validate({"Name": "alice"})
+
+
+class TestLibraryItem:
+    def test_parse_minimal_item(self) -> None:
+        data = {"Id": "item-1", "Name": "Alien", "Type": "Movie"}
+        item = LibraryItem.model_validate(data)
+        assert item.id == "item-1"
+        assert item.name == "Alien"
+        assert item.type == "Movie"
+        assert item.overview is None
+        assert item.genres == []
+        assert item.production_year is None
+
+    def test_parse_full_item(self) -> None:
+        data = {
+            "Id": "item-2",
+            "Name": "Galaxy Quest",
+            "Type": "Movie",
+            "Overview": "A great comedy.",
+            "Genres": ["Comedy", "Sci-Fi"],
+            "ProductionYear": 1999,
+        }
+        item = LibraryItem.model_validate(data)
+        assert item.overview == "A great comedy."
+        assert item.genres == ["Comedy", "Sci-Fi"]
+        assert item.production_year == 1999
+
+
+class TestPaginatedItems:
+    def test_parse_from_jellyfin(self) -> None:
+        data = {
+            "Items": [
+                {"Id": "1", "Name": "Alien", "Type": "Movie"},
+                {"Id": "2", "Name": "Aliens", "Type": "Movie"},
+            ],
+            "TotalRecordCount": 50,
+            "StartIndex": 0,
+        }
+        page = PaginatedItems.model_validate(data)
+        assert len(page.items) == 2
+        assert page.total_count == 50
+        assert page.start_index == 0
+        assert page.items[0].name == "Alien"
+
+    def test_empty_library(self) -> None:
+        data = {"Items": [], "TotalRecordCount": 0, "StartIndex": 0}
+        page = PaginatedItems.model_validate(data)
+        assert page.items == []
+        assert page.total_count == 0
