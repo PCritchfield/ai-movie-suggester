@@ -8,10 +8,15 @@ format (Authorization header, not X-Emby-Authorization; no quotes on Token).
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import httpx
+import httpx
+
+from app.jellyfin.errors import (
+    JellyfinAuthError,
+    JellyfinConnectionError,
+    JellyfinError,
+)
+from app.jellyfin.models import AuthResult
 
 logger = logging.getLogger(__name__)
 
@@ -47,3 +52,33 @@ class JellyfinClient:
             else f"{self._auth_value}, Token={token}"
         )
         return {"Authorization": value}
+
+    async def authenticate(self, username: str, password: str) -> AuthResult:
+        """Authenticate a user against Jellyfin.
+
+        Returns an AuthResult with the access token and user info.
+        Raises JellyfinAuthError on invalid credentials.
+        Raises JellyfinConnectionError if Jellyfin is unreachable.
+        """
+        try:
+            resp = await self._client.post(
+                f"{self._base_url}/Users/AuthenticateByName",
+                json={"Username": username, "Pw": password},
+                headers=self._headers(),
+            )
+        except httpx.TransportError as exc:
+            raise JellyfinConnectionError(
+                f"Cannot reach Jellyfin at {self._base_url}"
+            ) from exc
+
+        if resp.status_code == 401:
+            raise JellyfinAuthError("Invalid username or password")
+
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise JellyfinError(
+                f"Unexpected response from Jellyfin: {resp.status_code}"
+            ) from exc
+
+        return AuthResult.from_jellyfin(resp.json())

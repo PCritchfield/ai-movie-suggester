@@ -164,3 +164,51 @@ class TestHeaderConstruction:
             http_client=mock_http,
         )
         assert client._base_url == "http://jellyfin:8096"
+
+
+_FAKE_REQUEST = httpx.Request("GET", "http://fake")
+
+
+class TestAuthenticate:
+    async def test_authenticate_success(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = httpx.Response(
+            200,
+            json={
+                "AccessToken": "tok-123",
+                "User": {"Id": "uid-1", "Name": "alice"},
+            },
+            request=_FAKE_REQUEST,
+        )
+        result = await jf_client.authenticate("alice", "password123")
+        assert isinstance(result, AuthResult)
+        assert result.access_token == "tok-123"
+        assert result.user_id == "uid-1"
+        assert result.user_name == "alice"
+        # Verify correct URL and payload
+        mock_http.post.assert_called_once()
+        call_args = mock_http.post.call_args
+        assert "/Users/AuthenticateByName" in call_args.args[0]
+        assert call_args.kwargs["json"] == {"Username": "alice", "Pw": "password123"}
+
+    async def test_authenticate_invalid_credentials(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = httpx.Response(401, request=_FAKE_REQUEST)
+        with pytest.raises(JellyfinAuthError):
+            await jf_client.authenticate("alice", "wrong")
+
+    async def test_authenticate_server_unreachable(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.side_effect = httpx.ConnectError("Connection refused")
+        with pytest.raises(JellyfinConnectionError):
+            await jf_client.authenticate("alice", "password")
+
+    async def test_authenticate_unexpected_status(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = httpx.Response(500, request=_FAKE_REQUEST)
+        with pytest.raises(JellyfinError):
+            await jf_client.authenticate("alice", "password")
