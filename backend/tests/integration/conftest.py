@@ -165,7 +165,17 @@ async def admin_auth_token(jellyfin_url: str) -> str:
                 break
 
         if token is None or user_id is None:
-            msg = "Cannot authenticate as admin with any known credential combination"
+            # Debug: try to discover what users exist
+            debug_info = ""
+            try:
+                r = await client.get(f"{jellyfin_url}/Startup/FirstUser")
+                debug_info += f" FirstUser={r.status_code}:{r.text}"
+            except Exception as e:
+                debug_info += f" FirstUser=error:{e}"
+            msg = (
+                "Cannot authenticate as admin with any known credential "
+                f"combination.{debug_info}"
+            )
             raise RuntimeError(msg)
 
         token_header = {
