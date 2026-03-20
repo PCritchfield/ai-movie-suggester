@@ -16,7 +16,7 @@ from app.jellyfin.errors import (
     JellyfinConnectionError,
     JellyfinError,
 )
-from app.jellyfin.models import AuthResult
+from app.jellyfin.models import AuthResult, UserInfo
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +82,32 @@ class JellyfinClient:
             ) from exc
 
         return AuthResult.from_jellyfin(resp.json())
+
+    async def get_user(self, token: str) -> UserInfo:
+        """Get the current user's info. Validates the token is still active.
+
+        Calls /Users/Me which returns the user associated with the token.
+        Raises JellyfinAuthError if the token is invalid/expired.
+        Raises JellyfinConnectionError if Jellyfin is unreachable.
+        """
+        try:
+            resp = await self._client.get(
+                f"{self._base_url}/Users/Me",
+                headers=self._headers(token),
+            )
+        except httpx.TransportError as exc:
+            raise JellyfinConnectionError(
+                f"Cannot reach Jellyfin at {self._base_url}"
+            ) from exc
+
+        if resp.status_code == 401:
+            raise JellyfinAuthError("Token is invalid or expired")
+
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise JellyfinError(
+                f"Unexpected response from Jellyfin: {resp.status_code}"
+            ) from exc
+
+        return UserInfo.model_validate(resp.json())

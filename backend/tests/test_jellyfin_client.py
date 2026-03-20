@@ -212,3 +212,48 @@ class TestAuthenticate:
         mock_http.post.return_value = httpx.Response(500, request=_FAKE_REQUEST)
         with pytest.raises(JellyfinError):
             await jf_client.authenticate("alice", "password")
+
+
+class TestGetUser:
+    async def test_get_user_success(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(
+            200,
+            json={
+                "Id": "uid-1",
+                "Name": "alice",
+                "ServerId": "srv-1",
+                "HasPassword": True,
+            },
+            request=_FAKE_REQUEST,
+        )
+        user = await jf_client.get_user("tok-123")
+        assert isinstance(user, UserInfo)
+        assert user.id == "uid-1"
+        assert user.name == "alice"
+        assert user.server_id == "srv-1"
+        # Verify token is passed in headers
+        call_args = mock_http.get.call_args
+        assert "Token=tok-123" in call_args.kwargs["headers"]["Authorization"]
+
+    async def test_get_user_invalid_token(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(401, request=_FAKE_REQUEST)
+        with pytest.raises(JellyfinAuthError):
+            await jf_client.get_user("expired-token")
+
+    async def test_get_user_server_unreachable(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.side_effect = httpx.ConnectError("Connection refused")
+        with pytest.raises(JellyfinConnectionError):
+            await jf_client.get_user("tok-123")
+
+    async def test_get_user_unexpected_status(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(500, request=_FAKE_REQUEST)
+        with pytest.raises(JellyfinError):
+            await jf_client.get_user("tok-123")
