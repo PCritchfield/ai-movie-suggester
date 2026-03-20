@@ -33,10 +33,8 @@ async def test_admin_authentication(admin_auth_token: str) -> None:
 @pytest.mark.integration
 async def test_test_users_provisioned(test_users: dict[str, str]) -> None:
     """Verify test users exist with expected names and valid IDs."""
-    from tests.integration.conftest import TEST_USER_ALICE, TEST_USER_BOB
-
-    assert TEST_USER_ALICE in test_users
-    assert TEST_USER_BOB in test_users
+    assert "test-alice" in test_users
+    assert "test-bob" in test_users
     for user_id in test_users.values():
         assert isinstance(user_id, str)
         assert len(user_id) > 0

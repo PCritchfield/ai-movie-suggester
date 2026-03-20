@@ -6,6 +6,7 @@ integration tests (tests/Jellyfin.Server.Integration.Tests/AuthHelper.cs).
 
 import asyncio
 import os
+import warnings
 
 import httpx
 import pytest_asyncio
@@ -16,10 +17,10 @@ import pytest_asyncio
 JELLYFIN_TEST_URL = os.environ.get(
     "JELLYFIN_TEST_URL", "http://host.docker.internal:8096"
 )
+# Must match the image version in docker-compose.test.yml
 EXPECTED_JELLYFIN_VERSION = "10.11.6"
 TEST_ADMIN_PASS = "test-admin-password"
 
-# Test users — known credentials for downstream permission-scoping tests
 TEST_USER_ALICE = "test-alice"
 TEST_USER_ALICE_PASS = "test-alice-password"
 
@@ -36,9 +37,6 @@ _AUTH_HEADER = (
 POLL_INTERVAL_SECONDS = 2
 POLL_TIMEOUT_SECONDS = 60
 
-# Set during wizard completion — the actual admin username on this instance
-_discovered_admin_user: str = "root"
-
 
 def _auth_headers(token: str | None = None) -> dict[str, str]:
     """Build Jellyfin Authorization header, optionally with token."""
@@ -53,9 +51,7 @@ def _auth_headers(token: str | None = None) -> dict[str, str]:
 async def jellyfin_url() -> str:
     """Wait for Jellyfin readiness, verify version, complete wizard if needed.
 
-    Follows Jellyfin's own test pattern: read default user from
-    GET /Startup/User, then POST /Startup/Complete. Skips the unreliable
-    /Startup/Configuration, /Startup/User POST, and /Startup/RemoteAccess.
+    Returns the base URL of the ready Jellyfin instance.
     """
     base = JELLYFIN_TEST_URL
 
@@ -96,12 +92,6 @@ async def jellyfin_url() -> str:
         # run in-process, not in Docker.
         resp = await client.get(f"{base}/Startup/Configuration")
         if resp.status_code == 200:
-            # Read default user before modifying anything
-            global _discovered_admin_user  # noqa: PLW0603
-            resp = await client.get(f"{base}/Startup/User")
-            resp.raise_for_status()
-            _discovered_admin_user = resp.json().get("Name", "root")
-
             resp = await client.post(
                 f"{base}/Startup/Configuration",
                 json={
@@ -112,15 +102,11 @@ async def jellyfin_url() -> str:
             )
             resp.raise_for_status()
 
-            # Set admin user — may return 500 in CI but wizard still completes
+            # Read default user — may return 500 in CI, wizard still completes
             resp = await client.post(
                 f"{base}/Startup/User",
-                json={
-                    "Name": _discovered_admin_user,
-                    "Password": TEST_ADMIN_PASS,
-                },
+                json={"Name": "root", "Password": TEST_ADMIN_PASS},
             )
-            # Don't raise — this is known to fail in CI service containers
 
             resp = await client.post(
                 f"{base}/Startup/RemoteAccess",
@@ -138,26 +124,40 @@ async def jellyfin_url() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Session-scoped fixture — discovers the admin username
+# ---------------------------------------------------------------------------
+@pytest_asyncio.fixture(scope="session")
+async def jellyfin_admin_user(jellyfin_url: str) -> str:
+    """Discover the admin username from Jellyfin.
+
+    Returns the default admin username (typically 'root' on fresh instances).
+    """
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(f"{jellyfin_url}/Startup/User")
+        if resp.is_success:
+            return resp.json().get("Name", "root")
+    return "root"
+
+
+# ---------------------------------------------------------------------------
 # Session-scoped fixture — authenticates as admin, returns access token
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="session")
-async def admin_auth_token(jellyfin_url: str) -> str:
+async def admin_auth_token(jellyfin_url: str, jellyfin_admin_user: str) -> str:
     """Authenticate as admin and return the access token.
 
-    On a fresh instance after /Startup/Complete, the default user ("root")
-    has an empty password. We authenticate, then set the expected password
-    for downstream use.
+    On a fresh instance after /Startup/Complete, the default user has an
+    empty password. We authenticate, then set the expected password.
+    Retries handle the case where auth isn't ready immediately after wizard.
     """
+    credentials = [
+        (jellyfin_admin_user, TEST_ADMIN_PASS),
+        (jellyfin_admin_user, ""),
+    ]
+    max_attempts = 10
+    last_status = 0
+
     async with httpx.AsyncClient() as client:
-        # Authenticate with retries — Jellyfin's auth subsystem may not
-        # be ready immediately after /Startup/Complete in Docker containers.
-        admin_user = _discovered_admin_user
-        credentials = [
-            (admin_user, TEST_ADMIN_PASS),  # Wizard set password or prev run
-            (admin_user, ""),  # Fresh instance, empty password
-        ]
-        max_attempts = 10
-        last_status = 0
         for attempt in range(max_attempts):
             for username, password in credentials:
                 resp = await client.post(
@@ -171,7 +171,6 @@ async def admin_auth_token(jellyfin_url: str) -> str:
                     token: str = data["AccessToken"]
                     user_id: str = data["User"]["Id"]
 
-                    # Set expected password if authenticated with empty
                     if password != TEST_ADMIN_PASS:
                         resp = await client.post(
                             f"{jellyfin_url}/Users/{user_id}/Password",
@@ -182,12 +181,10 @@ async def admin_auth_token(jellyfin_url: str) -> str:
                             headers=_auth_headers(token),
                         )
                         if not resp.is_success:
-                            import warnings
-
                             warnings.warn(
                                 f"Could not set admin password "
                                 f"(status {resp.status_code})",
-                                stacklevel=1,
+                                stacklevel=2,
                             )
 
                     return token
@@ -195,11 +192,11 @@ async def admin_auth_token(jellyfin_url: str) -> str:
             if attempt < max_attempts - 1:
                 await asyncio.sleep(3)
 
-        msg = (
-            f"Cannot authenticate as {admin_user} after "
-            f"{max_attempts} attempts (last status: {last_status})"
-        )
-        raise RuntimeError(msg)
+    msg = (
+        f"Cannot authenticate as {jellyfin_admin_user} after "
+        f"{max_attempts} attempts (last status: {last_status})"
+    )
+    raise RuntimeError(msg)
 
 
 # ---------------------------------------------------------------------------
