@@ -52,6 +52,17 @@ def test_settings_rejects_short_session_secret() -> None:
         Settings()  # type: ignore[call-arg]
 
 
+def test_settings_jellyfin_timeout_default() -> None:
+    """Jellyfin timeout should default to 10 seconds."""
+    env = {
+        "JELLYFIN_URL": "http://jellyfin:8096",
+        "SESSION_SECRET": _VALID_SECRET,
+    }
+    with patch.dict(os.environ, env, clear=False):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.jellyfin_timeout == 10.0
+
+
 def test_settings_rejects_tmdb_enabled_without_key() -> None:
     """TMDB_ENABLED=true requires TMDB_API_KEY."""
     env = {
