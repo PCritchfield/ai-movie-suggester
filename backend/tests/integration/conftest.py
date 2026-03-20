@@ -114,43 +114,55 @@ async def admin_auth_token(jellyfin_url: str) -> str:
         resp = await client.get(f"{jellyfin_url}/Startup/User")
         default_user = resp.json().get("Name", "root") if resp.is_success else "root"
 
-        # Authenticate — try expected creds first, then default empty password
-        for username, password in [
+        # Authenticate with retries — Jellyfin's auth subsystem may not
+        # be ready immediately after /Startup/Complete in Docker containers.
+        credentials = [
             (default_user, TEST_ADMIN_PASS),  # Previous run set password
             (default_user, ""),  # Fresh instance, empty password
-        ]:
-            resp = await client.post(
-                f"{jellyfin_url}/Users/AuthenticateByName",
-                json={"Username": username, "Pw": password},
-                headers=_auth_headers(),
-            )
-            if resp.is_success:
-                data = resp.json()
-                token: str = data["AccessToken"]
-                user_id: str = data["User"]["Id"]
+        ]
+        max_attempts = 10
+        last_status = 0
+        for attempt in range(max_attempts):
+            for username, password in credentials:
+                resp = await client.post(
+                    f"{jellyfin_url}/Users/AuthenticateByName",
+                    json={"Username": username, "Pw": password},
+                    headers=_auth_headers(),
+                )
+                last_status = resp.status_code
+                if resp.is_success:
+                    data = resp.json()
+                    token: str = data["AccessToken"]
+                    user_id: str = data["User"]["Id"]
 
-                # Set expected password if authenticated with empty
-                if password != TEST_ADMIN_PASS:
-                    resp = await client.post(
-                        f"{jellyfin_url}/Users/{user_id}/Password",
-                        json={
-                            "CurrentPw": password,
-                            "NewPw": TEST_ADMIN_PASS,
-                        },
-                        headers=_auth_headers(token),
-                    )
-                    # Non-fatal — password change may fail but auth works
-                    if not resp.is_success:
-                        import warnings
-
-                        warnings.warn(
-                            f"Could not set admin password (status {resp.status_code})",
-                            stacklevel=1,
+                    # Set expected password if authenticated with empty
+                    if password != TEST_ADMIN_PASS:
+                        resp = await client.post(
+                            f"{jellyfin_url}/Users/{user_id}/Password",
+                            json={
+                                "CurrentPw": password,
+                                "NewPw": TEST_ADMIN_PASS,
+                            },
+                            headers=_auth_headers(token),
                         )
+                        if not resp.is_success:
+                            import warnings
 
-                return token
+                            warnings.warn(
+                                f"Could not set admin password "
+                                f"(status {resp.status_code})",
+                                stacklevel=1,
+                            )
 
-        msg = f"Cannot authenticate as {default_user} with any known password"
+                    return token
+
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(3)
+
+        msg = (
+            f"Cannot authenticate as {default_user} after "
+            f"{max_attempts} attempts (last status: {last_status})"
+        )
         raise RuntimeError(msg)
 
 
