@@ -1,0 +1,97 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/integration.yml'
+  push:
+    branches: [main]
+  schedule:
+    # Weekly: Monday 6am UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Integration tests — Jellyfin service container + pytest
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Integration — Jellyfin smoke tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      jellyfin:
+        image: jellyfin/jellyfin:10.10.7
+        ports:
+          - 8096:8096
+        options: >-
+          --health-cmd "curl -sf http://localhost:8096/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Secondary readiness gate — /health can return 200 before API is ready
+      - name: Wait for Jellyfin API readiness
+        run: |
+          echo "Waiting for Jellyfin API..."
+          timeout=120
+          while [ $timeout -gt 0 ]; do
+            if curl -sf http://localhost:8096/System/Info/Public > /dev/null 2>&1; then
+              echo "Jellyfin API is ready"
+              exit 0
+            fi
+            sleep 2
+            timeout=$((timeout - 2))
+          done
+          echo "ERROR: Jellyfin API not ready after 120s"
+          exit 1
+        working-directory: .
+
+      - name: Install uv
+        # Pinned to SHA per Angua (Security) — supply chain concern
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a  # v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Run integration tests
+        run: uv run pytest -m integration -v
+        env:
+          JELLYFIN_TEST_URL: http://localhost:8096
+
+  # ---------------------------------------------------------------------------
+  # Pass-through job — ready for future promotion to required check
+  # ---------------------------------------------------------------------------
+  integration-check:
+    name: Integration check
+    runs-on: ubuntu-latest
+    needs: integration
+    if: always()
+    steps:
+      - name: Check integration result
+        run: |
+          if [[ "${{ needs.integration.result }}" != "success" ]]; then
+            echo "Integration tests failed"
+            exit 1
+          fi
+          echo "Integration tests passed"
