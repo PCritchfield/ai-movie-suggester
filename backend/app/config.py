@@ -5,6 +5,8 @@ All configuration is centralized here. No ad-hoc os.environ calls elsewhere.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +31,6 @@ class Settings(BaseSettings):
     tmdb_api_key: str = ""
 
     # Tuning
-    log_level: str = "info"
+    log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     session_expiry_hours: int = 24
     chat_rate_limit: int = 10

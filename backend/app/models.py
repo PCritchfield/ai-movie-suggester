@@ -9,6 +9,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+ServiceStatus = Literal["ok", "error"]
+
 
 class EmbeddingsStatus(BaseModel):
     total: int = 0
@@ -18,6 +20,6 @@ class EmbeddingsStatus(BaseModel):
 class HealthResponse(BaseModel):
     """Response model for GET /health."""
 
-    jellyfin: Literal["ok", "error"]
-    ollama: Literal["ok", "error"]
+    jellyfin: ServiceStatus
+    ollama: ServiceStatus
     embeddings: EmbeddingsStatus
