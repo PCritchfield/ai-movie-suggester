@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import warnings
 
 import httpx
 import pytest_asyncio
@@ -51,6 +52,7 @@ async def jellyfin_url() -> str:
 
         # Phase 2: Version check
         resp = await client.get(f"{base}/System/Info/Public")
+        resp.raise_for_status()
         info = resp.json()
         actual = info.get("Version", "unknown")
         if actual != EXPECTED_JELLYFIN_VERSION:
@@ -86,8 +88,6 @@ async def jellyfin_url() -> str:
                 },
             )
             if not resp.is_success:
-                import warnings
-
                 warnings.warn(
                     f"POST /Startup/User returned {resp.status_code} "
                     f"(known Jellyfin 10.10.7 quirk, wizard still completes)",

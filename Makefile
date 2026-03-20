@@ -67,6 +67,8 @@ test-integration:
 	cd backend && JELLYFIN_TEST_URL=http://localhost:8096 uv run pytest -m integration -v
 
 # Full cycle: start Jellyfin, run integration tests, teardown (unconditional)
+# WARNING: This MUST remain a single logical line. Make runs each recipe line
+# in a separate shell — splitting this would break unconditional teardown.
 test-integration-full:
 	@$(MAKE) jellyfin-up && $(MAKE) test-integration; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
 
