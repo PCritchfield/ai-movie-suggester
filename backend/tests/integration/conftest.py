@@ -7,9 +7,18 @@ integration tests (tests/Jellyfin.Server.Integration.Tests/AuthHelper.cs).
 import asyncio
 import os
 import warnings
+from typing import NamedTuple
 
 import httpx
 import pytest_asyncio
+
+
+class JellyfinInstance(NamedTuple):
+    """Jellyfin connection info discovered during wizard setup."""
+
+    url: str
+    admin_user: str
+
 
 # ---------------------------------------------------------------------------
 # Constants — test-only, never imported outside backend/tests/integration/
@@ -48,12 +57,13 @@ def _auth_headers(token: str | None = None) -> dict[str, str]:
 # Session-scoped fixture — polls, version-checks, completes wizard
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="session")
-async def jellyfin_url() -> str:
+async def jellyfin() -> JellyfinInstance:
     """Wait for Jellyfin readiness, verify version, complete wizard if needed.
 
-    Returns the base URL of the ready Jellyfin instance.
+    Returns a JellyfinInstance with the URL and discovered admin username.
     """
     base = JELLYFIN_TEST_URL
+    admin_user = "root"
 
     async with httpx.AsyncClient() as client:
         # Phase 1: Poll for readiness
@@ -92,6 +102,11 @@ async def jellyfin_url() -> str:
         # run in-process, not in Docker.
         resp = await client.get(f"{base}/Startup/Configuration")
         if resp.status_code == 200:
+            # Discover admin username before wizard changes state
+            resp = await client.get(f"{base}/Startup/User")
+            if resp.is_success:
+                admin_user = resp.json().get("Name", "root")
+
             resp = await client.post(
                 f"{base}/Startup/Configuration",
                 json={
@@ -102,10 +117,10 @@ async def jellyfin_url() -> str:
             )
             resp.raise_for_status()
 
-            # Read default user — may return 500 in CI, wizard still completes
+            # Set admin user — may return 500 in CI, wizard still completes
             resp = await client.post(
                 f"{base}/Startup/User",
-                json={"Name": "root", "Password": TEST_ADMIN_PASS},
+                json={"Name": admin_user, "Password": TEST_ADMIN_PASS},
             )
 
             resp = await client.post(
@@ -120,30 +135,14 @@ async def jellyfin_url() -> str:
             resp = await client.post(f"{base}/Startup/Complete")
             resp.raise_for_status()
 
-    return base
-
-
-# ---------------------------------------------------------------------------
-# Session-scoped fixture — discovers the admin username
-# ---------------------------------------------------------------------------
-@pytest_asyncio.fixture(scope="session")
-async def jellyfin_admin_user(jellyfin_url: str) -> str:
-    """Discover the admin username from Jellyfin.
-
-    Returns the default admin username (typically 'root' on fresh instances).
-    """
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{jellyfin_url}/Startup/User")
-        if resp.is_success:
-            return resp.json().get("Name", "root")
-    return "root"
+    return JellyfinInstance(url=base, admin_user=admin_user)
 
 
 # ---------------------------------------------------------------------------
 # Session-scoped fixture — authenticates as admin, returns access token
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="session")
-async def admin_auth_token(jellyfin_url: str, jellyfin_admin_user: str) -> str:
+async def admin_auth_token(jellyfin: JellyfinInstance) -> str:
     """Authenticate as admin and return the access token.
 
     On a fresh instance after /Startup/Complete, the default user has an
@@ -151,8 +150,8 @@ async def admin_auth_token(jellyfin_url: str, jellyfin_admin_user: str) -> str:
     Retries handle the case where auth isn't ready immediately after wizard.
     """
     credentials = [
-        (jellyfin_admin_user, TEST_ADMIN_PASS),
-        (jellyfin_admin_user, ""),
+        (jellyfin.admin_user, TEST_ADMIN_PASS),
+        (jellyfin.admin_user, ""),
     ]
     max_attempts = 10
     last_status = 0
@@ -161,7 +160,7 @@ async def admin_auth_token(jellyfin_url: str, jellyfin_admin_user: str) -> str:
         for attempt in range(max_attempts):
             for username, password in credentials:
                 resp = await client.post(
-                    f"{jellyfin_url}/Users/AuthenticateByName",
+                    f"{jellyfin.url}/Users/AuthenticateByName",
                     json={"Username": username, "Pw": password},
                     headers=_auth_headers(),
                 )
@@ -173,7 +172,7 @@ async def admin_auth_token(jellyfin_url: str, jellyfin_admin_user: str) -> str:
 
                     if password != TEST_ADMIN_PASS:
                         resp = await client.post(
-                            f"{jellyfin_url}/Users/{user_id}/Password",
+                            f"{jellyfin.url}/Users/{user_id}/Password",
                             json={
                                 "CurrentPw": password,
                                 "NewPw": TEST_ADMIN_PASS,
@@ -193,7 +192,7 @@ async def admin_auth_token(jellyfin_url: str, jellyfin_admin_user: str) -> str:
                 await asyncio.sleep(3)
 
     msg = (
-        f"Cannot authenticate as {jellyfin_admin_user} after "
+        f"Cannot authenticate as {jellyfin.admin_user} after "
         f"{max_attempts} attempts (last status: {last_status})"
     )
     raise RuntimeError(msg)
@@ -203,7 +202,9 @@ async def admin_auth_token(jellyfin_url: str, jellyfin_admin_user: str) -> str:
 # Session-scoped fixture — provisions test users (idempotent)
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="session")
-async def test_users(jellyfin_url: str, admin_auth_token: str) -> dict[str, str]:
+async def test_users(
+    jellyfin: JellyfinInstance, admin_auth_token: str
+) -> dict[str, str]:
     """Create test users if they don't exist. Returns {username: user_id}.
 
     Idempotent — safe to run against an already-provisioned instance.
@@ -215,7 +216,7 @@ async def test_users(jellyfin_url: str, admin_auth_token: str) -> dict[str, str]
     ]
 
     async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{jellyfin_url}/Users", headers=headers)
+        resp = await client.get(f"{jellyfin.url}/Users", headers=headers)
         resp.raise_for_status()
         existing = {u["Name"]: u["Id"] for u in resp.json()}
 
@@ -225,7 +226,7 @@ async def test_users(jellyfin_url: str, admin_auth_token: str) -> dict[str, str]
                 created[username] = existing[username]
                 continue
             resp = await client.post(
-                f"{jellyfin_url}/Users/New",
+                f"{jellyfin.url}/Users/New",
                 json={"Name": username, "Password": password},
                 headers=headers,
             )

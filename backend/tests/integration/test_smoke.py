@@ -1,21 +1,28 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import httpx
 import pytest
 
+if TYPE_CHECKING:
+    from tests.integration.conftest import JellyfinInstance
+
 
 @pytest.mark.integration
-async def test_jellyfin_health(jellyfin_url: str) -> None:
+async def test_jellyfin_health(jellyfin: JellyfinInstance) -> None:
     """Verify Jellyfin is reachable and returns a healthy status."""
     async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{jellyfin_url}/health")
+        resp = await client.get(f"{jellyfin.url}/health")
     assert resp.status_code == 200
     assert resp.text == "Healthy"
 
 
 @pytest.mark.integration
-async def test_jellyfin_wizard_complete(jellyfin_url: str) -> None:
+async def test_jellyfin_wizard_complete(jellyfin: JellyfinInstance) -> None:
     """Verify the first-run wizard has been completed."""
     async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{jellyfin_url}/System/Info/Public")
+        resp = await client.get(f"{jellyfin.url}/System/Info/Public")
     assert resp.status_code == 200
     data = resp.json()
     assert "Version" in data
