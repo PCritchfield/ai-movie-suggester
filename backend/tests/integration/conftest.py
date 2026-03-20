@@ -13,7 +13,7 @@ import pytest_asyncio
 JELLYFIN_TEST_URL = os.environ.get(
     "JELLYFIN_TEST_URL", "http://host.docker.internal:8096"
 )
-EXPECTED_JELLYFIN_VERSION = "10.10.7"
+EXPECTED_JELLYFIN_VERSION = "10.11.6"
 TEST_ADMIN_USER = "admin"
 TEST_ADMIN_PASS = "test-admin-password"
 
@@ -77,7 +77,7 @@ async def jellyfin_url() -> str:
             )
             resp.raise_for_status()
 
-            # POST /Startup/User returns 500 on Jellyfin 10.10.7 when the
+            # POST /Startup/User returns 500 on Jellyfin 10.11.6 when the
             # internal user database isn't fully initialized. The wizard
             # still completes without it, so we log but don't fail.
             resp = await client.post(
@@ -90,7 +90,7 @@ async def jellyfin_url() -> str:
             if not resp.is_success:
                 warnings.warn(
                     f"POST /Startup/User returned {resp.status_code} "
-                    f"(known Jellyfin 10.10.7 quirk, wizard still completes)",
+                    f"(known Jellyfin 10.11.6 quirk, wizard still completes)",
                     stacklevel=1,
                 )
 
