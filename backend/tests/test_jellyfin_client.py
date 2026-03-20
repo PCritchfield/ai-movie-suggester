@@ -296,7 +296,10 @@ class TestGetItems:
             request=_FAKE_REQUEST,
         )
         await jf_client.get_items(
-            "tok-123", "uid-1", start_index=10, limit=25,
+            "tok-123",
+            "uid-1",
+            start_index=10,
+            limit=25,
         )
         call_args = mock_http.request.call_args
         params = call_args.kwargs["params"]
@@ -312,7 +315,9 @@ class TestGetItems:
             request=_FAKE_REQUEST,
         )
         await jf_client.get_items(
-            "tok-123", "uid-1", item_types=["Movie", "Series"],
+            "tok-123",
+            "uid-1",
+            item_types=["Movie", "Series"],
         )
         call_args = mock_http.request.call_args
         params = call_args.kwargs["params"]
