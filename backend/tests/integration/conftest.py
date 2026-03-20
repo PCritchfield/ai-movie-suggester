@@ -134,7 +134,14 @@ async def admin_auth_token(jellyfin_url: str) -> str:
     creating "admin" with the expected password. Tries multiple username/
     password combinations and normalizes to expected credentials.
     """
-    auth_header = {"X-Emby-Authorization": JELLYFIN_AUTH_HEADER}
+    # Jellyfin may need a moment after wizard completion before auth works
+    await asyncio.sleep(2)
+
+    # Try both header styles — Jellyfin versions vary
+    header_styles = [
+        {"X-Emby-Authorization": JELLYFIN_AUTH_HEADER},
+        {"Authorization": JELLYFIN_AUTH_HEADER},
+    ]
 
     # Candidates: (username, password) in priority order
     candidates = [
@@ -149,33 +156,31 @@ async def admin_auth_token(jellyfin_url: str) -> str:
         user_id: str | None = None
         matched_user: str | None = None
         matched_pass: str | None = None
+        debug_attempts: list[str] = []
 
-        for username, password in candidates:
-            resp = await client.post(
-                f"{jellyfin_url}/Users/AuthenticateByName",
-                json={"Username": username, "Pw": password},
-                headers=auth_header,
-            )
-            if resp.is_success:
-                data = resp.json()
-                token = data["AccessToken"]
-                user_id = data["User"]["Id"]
-                matched_user = username
-                matched_pass = password
+        for headers in header_styles:
+            for username, password in candidates:
+                resp = await client.post(
+                    f"{jellyfin_url}/Users/AuthenticateByName",
+                    json={"Username": username, "Pw": password},
+                    headers=headers,
+                )
+                hdr = "X-Emby" if "X-Emby-Authorization" in headers else "Auth"
+                debug_attempts.append(
+                    f"{username}/{password!r} {hdr} → {resp.status_code}"
+                )
+                if resp.is_success:
+                    data = resp.json()
+                    token = data["AccessToken"]
+                    user_id = data["User"]["Id"]
+                    matched_user = username
+                    matched_pass = password
+                    break
+            if token is not None:
                 break
 
         if token is None or user_id is None:
-            # Debug: try to discover what users exist
-            debug_info = ""
-            try:
-                r = await client.get(f"{jellyfin_url}/Startup/FirstUser")
-                debug_info += f" FirstUser={r.status_code}:{r.text}"
-            except Exception as e:
-                debug_info += f" FirstUser=error:{e}"
-            msg = (
-                "Cannot authenticate as admin with any known credential "
-                f"combination.{debug_info}"
-            )
+            msg = "Cannot authenticate as admin. Attempts: " + "; ".join(debug_attempts)
             raise RuntimeError(msg)
 
         token_header = {
