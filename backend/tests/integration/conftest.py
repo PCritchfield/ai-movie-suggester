@@ -127,16 +127,57 @@ async def jellyfin_url() -> str:
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="session")
 async def admin_auth_token(jellyfin_url: str) -> str:
-    """Authenticate as the admin user and return the access token."""
+    """Authenticate as the admin user and return the access token.
+
+    Handles the Jellyfin 10.11.6 quirk where POST /Startup/User may fail,
+    leaving the default root user with an empty password. If the expected
+    password fails, falls back to empty password and sets the expected one.
+    """
+    auth_header = {"X-Emby-Authorization": JELLYFIN_AUTH_HEADER}
+
     async with httpx.AsyncClient() as client:
+        # Try expected password first
         resp = await client.post(
             f"{jellyfin_url}/Users/AuthenticateByName",
             json={"Username": TEST_ADMIN_USER, "Pw": TEST_ADMIN_PASS},
-            headers={"X-Emby-Authorization": JELLYFIN_AUTH_HEADER},
+            headers=auth_header,
         )
-        resp.raise_for_status()
+        if resp.is_success:
+            return resp.json()["AccessToken"]
+
+        # Fallback: try empty password (Jellyfin default for fresh root)
+        resp = await client.post(
+            f"{jellyfin_url}/Users/AuthenticateByName",
+            json={"Username": TEST_ADMIN_USER, "Pw": ""},
+            headers=auth_header,
+        )
+        if not resp.is_success:
+            msg = (
+                f"Cannot authenticate as {TEST_ADMIN_USER} with expected "
+                f"or empty password (status {resp.status_code})"
+            )
+            raise RuntimeError(msg)
+
         data = resp.json()
         token: str = data["AccessToken"]
+        user_id: str = data["User"]["Id"]
+
+        # Set the expected password so future runs work with either path
+        token_header = {
+            "X-Emby-Authorization": f'{JELLYFIN_AUTH_HEADER}, Token="{token}"',
+        }
+        resp = await client.post(
+            f"{jellyfin_url}/Users/{user_id}/Password",
+            json={"CurrentPw": "", "NewPw": TEST_ADMIN_PASS},
+            headers=token_header,
+        )
+        if not resp.is_success:
+            warnings.warn(
+                f"Failed to set admin password (status {resp.status_code}), "
+                f"continuing with empty password auth",
+                stacklevel=1,
+            )
+
     return token
 
 
