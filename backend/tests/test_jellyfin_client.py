@@ -257,3 +257,107 @@ class TestGetUser:
         mock_http.get.return_value = httpx.Response(500, request=_FAKE_REQUEST)
         with pytest.raises(JellyfinError):
             await jf_client.get_user("tok-123")
+
+
+class TestGetItems:
+    async def test_get_items_success(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(
+            200,
+            json={
+                "Items": [
+                    {"Id": "1", "Name": "Alien", "Type": "Movie"},
+                    {"Id": "2", "Name": "Aliens", "Type": "Movie"},
+                ],
+                "TotalRecordCount": 50,
+                "StartIndex": 0,
+            },
+            request=_FAKE_REQUEST,
+        )
+        result = await jf_client.get_items("tok-123", "uid-1")
+        assert isinstance(result, PaginatedItems)
+        assert len(result.items) == 2
+        assert result.total_count == 50
+        assert result.items[0].name == "Alien"
+
+    async def test_get_items_passes_pagination_params(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 10},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items(
+            "tok-123", "uid-1", start_index=10, limit=25,
+        )
+        call_args = mock_http.get.call_args
+        params = call_args.kwargs["params"]
+        assert params["StartIndex"] == 10
+        assert params["Limit"] == 25
+
+    async def test_get_items_with_item_types_filter(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items(
+            "tok-123", "uid-1", item_types=["Movie", "Series"],
+        )
+        call_args = mock_http.get.call_args
+        params = call_args.kwargs["params"]
+        assert params["IncludeItemTypes"] == "Movie,Series"
+
+    async def test_get_items_requests_metadata_fields(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Verify we request the fields our models expect."""
+        mock_http.get.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items("tok-123", "uid-1")
+        call_args = mock_http.get.call_args
+        params = call_args.kwargs["params"]
+        assert "Fields" in params
+        assert "Overview" in params["Fields"]
+        assert "Genres" in params["Fields"]
+
+    async def test_get_items_uses_per_user_endpoint(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Items endpoint must be /Users/{id}/Items for permission filtering."""
+        mock_http.get.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items("tok-123", "uid-1")
+        url = mock_http.get.call_args.args[0]
+        assert "/Users/uid-1/Items" in url
+
+    async def test_get_items_invalid_token(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(401, request=_FAKE_REQUEST)
+        with pytest.raises(JellyfinAuthError):
+            await jf_client.get_items("bad-tok", "uid-1")
+
+    async def test_get_items_server_unreachable(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.side_effect = httpx.ConnectError("Connection refused")
+        with pytest.raises(JellyfinConnectionError):
+            await jf_client.get_items("tok-123", "uid-1")
+
+    async def test_get_items_unexpected_status(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(500, request=_FAKE_REQUEST)
+        with pytest.raises(JellyfinError):
+            await jf_client.get_items("tok-123", "uid-1")
