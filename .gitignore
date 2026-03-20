@@ -50,3 +50,6 @@ coverage/
 
 # Build artifacts
 *.log
+
+# SDD workflow artifacts — point-in-time, kept locally only
+docs/specs/
