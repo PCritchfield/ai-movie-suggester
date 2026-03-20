@@ -130,53 +130,74 @@ async def admin_auth_token(jellyfin_url: str) -> str:
     """Authenticate as the admin user and return the access token.
 
     Handles the Jellyfin 10.11.6 quirk where POST /Startup/User may fail,
-    leaving the default root user with an empty password. If the expected
-    password fails, falls back to empty password and sets the expected one.
+    leaving the default "root" user with an empty password instead of
+    creating "admin" with the expected password. Tries multiple username/
+    password combinations and normalizes to expected credentials.
     """
     auth_header = {"X-Emby-Authorization": JELLYFIN_AUTH_HEADER}
 
-    async with httpx.AsyncClient() as client:
-        # Try expected password first
-        resp = await client.post(
-            f"{jellyfin_url}/Users/AuthenticateByName",
-            json={"Username": TEST_ADMIN_USER, "Pw": TEST_ADMIN_PASS},
-            headers=auth_header,
-        )
-        if resp.is_success:
-            return resp.json()["AccessToken"]
+    # Candidates: (username, password) in priority order
+    candidates = [
+        (TEST_ADMIN_USER, TEST_ADMIN_PASS),  # Happy path: wizard worked
+        (TEST_ADMIN_USER, ""),  # Wizard renamed user but no password
+        ("root", ""),  # Default Jellyfin user, wizard POST failed
+        ("root", TEST_ADMIN_PASS),  # Previous run set password on root
+    ]
 
-        # Fallback: try empty password (Jellyfin default for fresh root)
-        resp = await client.post(
-            f"{jellyfin_url}/Users/AuthenticateByName",
-            json={"Username": TEST_ADMIN_USER, "Pw": ""},
-            headers=auth_header,
-        )
-        if not resp.is_success:
-            msg = (
-                f"Cannot authenticate as {TEST_ADMIN_USER} with expected "
-                f"or empty password (status {resp.status_code})"
+    async with httpx.AsyncClient() as client:
+        token: str | None = None
+        user_id: str | None = None
+        matched_user: str | None = None
+        matched_pass: str | None = None
+
+        for username, password in candidates:
+            resp = await client.post(
+                f"{jellyfin_url}/Users/AuthenticateByName",
+                json={"Username": username, "Pw": password},
+                headers=auth_header,
             )
+            if resp.is_success:
+                data = resp.json()
+                token = data["AccessToken"]
+                user_id = data["User"]["Id"]
+                matched_user = username
+                matched_pass = password
+                break
+
+        if token is None or user_id is None:
+            msg = "Cannot authenticate as admin with any known credential combination"
             raise RuntimeError(msg)
 
-        data = resp.json()
-        token: str = data["AccessToken"]
-        user_id: str = data["User"]["Id"]
-
-        # Set the expected password so future runs work with either path
         token_header = {
             "X-Emby-Authorization": f'{JELLYFIN_AUTH_HEADER}, Token="{token}"',
         }
-        resp = await client.post(
-            f"{jellyfin_url}/Users/{user_id}/Password",
-            json={"CurrentPw": "", "NewPw": TEST_ADMIN_PASS},
-            headers=token_header,
-        )
-        if not resp.is_success:
-            warnings.warn(
-                f"Failed to set admin password (status {resp.status_code}), "
-                f"continuing with empty password auth",
-                stacklevel=1,
+
+        # Rename user to expected name if needed
+        if matched_user != TEST_ADMIN_USER:
+            resp = await client.post(
+                f"{jellyfin_url}/Users/{user_id}",
+                json={"Name": TEST_ADMIN_USER},
+                headers=token_header,
             )
+            if not resp.is_success:
+                warnings.warn(
+                    f"Could not rename {matched_user} to {TEST_ADMIN_USER} "
+                    f"(status {resp.status_code})",
+                    stacklevel=1,
+                )
+
+        # Set expected password if needed
+        if matched_pass != TEST_ADMIN_PASS:
+            resp = await client.post(
+                f"{jellyfin_url}/Users/{user_id}/Password",
+                json={"CurrentPw": matched_pass, "NewPw": TEST_ADMIN_PASS},
+                headers=token_header,
+            )
+            if not resp.is_success:
+                warnings.warn(
+                    f"Could not set admin password (status {resp.status_code})",
+                    stacklevel=1,
+                )
 
     return token
 
