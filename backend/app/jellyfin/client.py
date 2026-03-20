@@ -8,6 +8,7 @@ format (Authorization header, not X-Emby-Authorization; no quotes on Token).
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import httpx
 
@@ -24,6 +25,8 @@ _APP_NAME = "ai-movie-suggester"
 _APP_VERSION = "0.1.0"
 _DEVICE = "Server"
 _DEFAULT_DEVICE_ID = "ai-movie-suggester-server"
+# Fields to request from Jellyfin — matches our LibraryItem model
+_ITEM_FIELDS = "Overview,Genres,ProductionYear"
 
 
 class JellyfinClient:
@@ -49,22 +52,31 @@ class JellyfinClient:
         value = (
             self._auth_value
             if token is None
-            else f"{self._auth_value}, Token={token}"
+            else f"{self._auth_value}, Token={token.strip()}"
         )
         return {"Authorization": value}
 
-    async def authenticate(self, username: str, password: str) -> AuthResult:
-        """Authenticate a user against Jellyfin.
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        token: str | None = None,
+        auth_error_message: str = "Token is invalid or expired",
+        **kwargs: Any,
+    ) -> httpx.Response:
+        """Send a request to Jellyfin with standard error handling.
 
-        Returns an AuthResult with the access token and user info.
-        Raises JellyfinAuthError on invalid credentials.
-        Raises JellyfinConnectionError if Jellyfin is unreachable.
+        Raises JellyfinAuthError on 401.
+        Raises JellyfinConnectionError on transport failure.
+        Raises JellyfinError on other non-2xx responses.
         """
         try:
-            resp = await self._client.post(
-                f"{self._base_url}/Users/AuthenticateByName",
-                json={"Username": username, "Pw": password},
-                headers=self._headers(),
+            resp = await self._client.request(
+                method,
+                f"{self._base_url}{path}",
+                headers=self._headers(token),
+                **kwargs,
             )
         except httpx.TransportError as exc:
             raise JellyfinConnectionError(
@@ -72,7 +84,7 @@ class JellyfinClient:
             ) from exc
 
         if resp.status_code == 401:
-            raise JellyfinAuthError("Invalid username or password")
+            raise JellyfinAuthError(auth_error_message)
 
         try:
             resp.raise_for_status()
@@ -81,6 +93,25 @@ class JellyfinClient:
                 f"Unexpected response from Jellyfin: {resp.status_code}"
             ) from exc
 
+        return resp
+
+    async def authenticate(self, username: str, password: str) -> AuthResult:
+        """Authenticate a user against Jellyfin.
+
+        Returns an AuthResult with the access token and user info.
+        Caller is responsible for storing the returned token only in an
+        encrypted server-side session — never persist to disk or expose
+        to the frontend.
+
+        Raises JellyfinAuthError on invalid credentials.
+        Raises JellyfinConnectionError if Jellyfin is unreachable.
+        """
+        resp = await self._request(
+            "POST",
+            "/Users/AuthenticateByName",
+            json={"Username": username, "Pw": password},
+            auth_error_message="Invalid username or password",
+        )
         return AuthResult.from_jellyfin(resp.json())
 
     async def get_user(self, token: str) -> UserInfo:
@@ -90,30 +121,8 @@ class JellyfinClient:
         Raises JellyfinAuthError if the token is invalid/expired.
         Raises JellyfinConnectionError if Jellyfin is unreachable.
         """
-        try:
-            resp = await self._client.get(
-                f"{self._base_url}/Users/Me",
-                headers=self._headers(token),
-            )
-        except httpx.TransportError as exc:
-            raise JellyfinConnectionError(
-                f"Cannot reach Jellyfin at {self._base_url}"
-            ) from exc
-
-        if resp.status_code == 401:
-            raise JellyfinAuthError("Token is invalid or expired")
-
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise JellyfinError(
-                f"Unexpected response from Jellyfin: {resp.status_code}"
-            ) from exc
-
+        resp = await self._request("GET", "/Users/Me", token=token)
         return UserInfo.model_validate(resp.json())
-
-    # Fields to request from Jellyfin — matches our LibraryItem model
-    _ITEM_FIELDS = "Overview,Genres,ProductionYear"
 
     async def get_items(
         self,
@@ -135,30 +144,15 @@ class JellyfinClient:
             "StartIndex": start_index,
             "Limit": limit,
             "Recursive": recursive,
-            "Fields": self._ITEM_FIELDS,
+            "Fields": _ITEM_FIELDS,
         }
         if item_types:
             params["IncludeItemTypes"] = ",".join(item_types)
 
-        try:
-            resp = await self._client.get(
-                f"{self._base_url}/Users/{user_id}/Items",
-                headers=self._headers(token),
-                params=params,
-            )
-        except httpx.TransportError as exc:
-            raise JellyfinConnectionError(
-                f"Cannot reach Jellyfin at {self._base_url}"
-            ) from exc
-
-        if resp.status_code == 401:
-            raise JellyfinAuthError("Token is invalid or expired")
-
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise JellyfinError(
-                f"Unexpected response from Jellyfin: {resp.status_code}"
-            ) from exc
-
+        resp = await self._request(
+            "GET",
+            f"/Users/{user_id}/Items",
+            token=token,
+            params=params,
+        )
         return PaginatedItems.model_validate(resp.json())
