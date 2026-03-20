@@ -51,5 +51,8 @@ coverage/
 # Build artifacts
 *.log
 
+# Git worktrees
+.worktrees/
+
 # SDD workflow artifacts — point-in-time, kept locally only
 docs/specs/
