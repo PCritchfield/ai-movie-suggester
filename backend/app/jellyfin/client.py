@@ -8,9 +8,12 @@ format (Authorization header, not X-Emby-Authorization; no quotes on Token).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from app.jellyfin.errors import (
     JellyfinAuthError,
@@ -20,6 +23,8 @@ from app.jellyfin.errors import (
 from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 _APP_NAME = "ai-movie-suggester"
 _APP_VERSION = "0.1.0"
@@ -95,6 +100,18 @@ class JellyfinClient:
 
         return resp
 
+    @staticmethod
+    def _parse_response(resp: httpx.Response, parser: Callable[..., _T]) -> _T:
+        """Decode JSON and parse via *parser*, wrapping errors as JellyfinError."""
+        try:
+            data = resp.json()
+        except Exception as exc:
+            raise JellyfinError("Invalid JSON in Jellyfin response") from exc
+        try:
+            return parser(data)
+        except Exception as exc:
+            raise JellyfinError("Unexpected response shape from Jellyfin") from exc
+
     async def authenticate(self, username: str, password: str) -> AuthResult:
         """Authenticate a user against Jellyfin.
 
@@ -112,7 +129,7 @@ class JellyfinClient:
             json={"Username": username, "Pw": password},
             auth_error_message="Invalid username or password",
         )
-        return AuthResult.from_jellyfin(resp.json())
+        return self._parse_response(resp, AuthResult.from_jellyfin)
 
     async def get_user(self, token: str) -> UserInfo:
         """Get the current user's info. Validates the token is still active.
@@ -122,7 +139,7 @@ class JellyfinClient:
         Raises JellyfinConnectionError if Jellyfin is unreachable.
         """
         resp = await self._request("GET", "/Users/Me", token=token)
-        return UserInfo.model_validate(resp.json())
+        return self._parse_response(resp, UserInfo.model_validate)
 
     async def get_items(
         self,
@@ -155,4 +172,4 @@ class JellyfinClient:
             token=token,
             params=params,
         )
-        return PaginatedItems.model_validate(resp.json())
+        return self._parse_response(resp, PaginatedItems.model_validate)
