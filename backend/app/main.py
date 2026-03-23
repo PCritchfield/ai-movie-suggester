@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import pathlib
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
@@ -11,7 +12,12 @@ import httpx
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
+from app.auth.crypto import derive_keys
+from app.auth.router import create_auth_router
+from app.auth.service import AuthService
+from app.auth.session_store import SessionStore
 from app.config import Settings
+from app.jellyfin.client import JellyfinClient
 from app.logging_config import configure_logging
 from app.middleware import SecurityHeadersMiddleware
 from app.models import EmbeddingsStatus, HealthResponse, ServiceStatus
@@ -55,22 +61,76 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     _logger.info("docs_enabled=%s", docs_enabled)
 
+    # Derive crypto keys from session secret
+    cookie_key, column_key = derive_keys(settings.session_secret)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Startup: log config, check connectivity. Shutdown: clean up."""
         _logger.info("starting ai-movie-suggester backend")
-        async with httpx.AsyncClient() as client:
+
+        # Ensure data directory exists for session DB
+        db_dir = pathlib.Path(settings.session_db_path).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+
+        # Open session store
+        store = SessionStore(settings.session_db_path, column_key)
+        await store.init()
+        app.state.session_store = store
+        app.state.cookie_key = cookie_key
+
+        # Create shared HTTP client and Jellyfin client
+        http_client = httpx.AsyncClient(
+            timeout=settings.jellyfin_timeout
+        )
+        jf_client = JellyfinClient(
+            base_url=settings.jellyfin_url,
+            http_client=http_client,
+        )
+        app.state.jellyfin_client = jf_client
+
+        # Wire auth service and router
+        auth_service = AuthService(
+            session_store=store,
+            jellyfin_client=jf_client,
+            session_secret=settings.session_secret,
+            session_expiry_hours=settings.session_expiry_hours,
+            max_sessions_per_user=settings.max_sessions_per_user,
+        )
+        auth_router = create_auth_router(
+            auth_service=auth_service,
+            session_store=store,
+            settings=settings,
+            cookie_key=cookie_key,
+        )
+        app.include_router(auth_router)
+
+        # Startup connectivity checks
+        async with httpx.AsyncClient() as check_client:
             jf, ol = await asyncio.gather(
-                _check_service(client, f"{settings.jellyfin_url}/health", _logger),
-                _check_service(client, f"{settings.ollama_host}/api/tags", _logger),
+                _check_service(
+                    check_client,
+                    f"{settings.jellyfin_url}/health",
+                    _logger,
+                ),
+                _check_service(
+                    check_client,
+                    f"{settings.ollama_host}/api/tags",
+                    _logger,
+                ),
             )
         _logger.info("startup checks: jellyfin=%s ollama=%s", jf, ol)
         if jf == "error":
             _logger.warning("jellyfin not reachable at startup")
         if ol == "error":
             _logger.warning("ollama not reachable at startup")
+
         yield
+
+        # Shutdown
         _logger.info("shutting down ai-movie-suggester backend")
+        await store.close()
+        await http_client.aclose()
 
     application = FastAPI(
         title="ai-movie-suggester",
@@ -84,8 +144,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Service health: checks Jellyfin and Ollama connectivity."""
         async with httpx.AsyncClient() as client:
             jf, ol = await asyncio.gather(
-                _check_service(client, f"{settings.jellyfin_url}/health", _logger),
-                _check_service(client, f"{settings.ollama_host}/api/tags", _logger),
+                _check_service(
+                    client,
+                    f"{settings.jellyfin_url}/health",
+                    _logger,
+                ),
+                _check_service(
+                    client,
+                    f"{settings.ollama_host}/api/tags",
+                    _logger,
+                ),
             )
         return HealthResponse(
             jellyfin=jf,
@@ -95,9 +163,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Middleware registration order matters:
     # Security headers first, then CORS last (runs first on inbound requests)
-    # When spec 03 adds CSRF + rate limiter, order becomes:
+    # When spec 03 PR 4 adds CSRF + rate limiter, order becomes:
     # (1) security headers, (2) CSRF, (3) rate limiter, (4) CORS
-    application.add_middleware(SecurityHeadersMiddleware, docs_enabled=docs_enabled)
+    application.add_middleware(
+        SecurityHeadersMiddleware, docs_enabled=docs_enabled
+    )
 
     # CORS — register last so it runs first on inbound requests
     application.add_middleware(
