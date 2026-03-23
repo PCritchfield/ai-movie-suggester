@@ -265,6 +265,77 @@ class TestGetUser:
             await jf_client.get_user("tok-123")
 
 
+class TestLogout:
+    async def test_logout_success(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Logout returns normally on 204."""
+        mock_http.request.return_value = httpx.Response(204, request=_FAKE_REQUEST)
+        await jf_client.logout("tok-123")  # Should not raise
+        call_args = mock_http.request.call_args
+        assert call_args.args[0] == "POST"
+        assert "/Sessions/Logout" in call_args.args[1]
+        assert "Token=tok-123" in call_args.kwargs["headers"]["Authorization"]
+
+    async def test_logout_401_does_not_raise(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Logout on already-revoked token (401) returns normally."""
+        mock_http.request.return_value = httpx.Response(401, request=_FAKE_REQUEST)
+        await jf_client.logout("expired-tok")  # Should not raise
+
+    async def test_logout_transport_error_raises(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Transport error during logout raises JellyfinConnectionError."""
+        mock_http.request.side_effect = httpx.ConnectError("Connection refused")
+        with pytest.raises(JellyfinConnectionError):
+            await jf_client.logout("tok-123")
+
+
+class TestGetServerName:
+    async def test_returns_server_name(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """get_server_name returns ServerName from /System/Info/Public."""
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={
+                "ServerName": "MyJellyfin",
+                "Version": "10.9.0",
+                "Id": "srv-1",
+            },
+            request=_FAKE_REQUEST,
+        )
+        name = await jf_client.get_server_name()
+        assert name == "MyJellyfin"
+        # Verify no auth token is passed
+        call_args = mock_http.request.call_args
+        assert "Token=" not in call_args.kwargs["headers"]["Authorization"]
+
+    async def test_caches_result(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Second call uses cached value, no HTTP request."""
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={"ServerName": "MyJellyfin", "Version": "10.9.0", "Id": "srv-1"},
+            request=_FAKE_REQUEST,
+        )
+        first = await jf_client.get_server_name()
+        second = await jf_client.get_server_name()
+        assert first == second == "MyJellyfin"
+        assert mock_http.request.call_count == 1
+
+    async def test_transport_error_raises(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Transport error raises JellyfinConnectionError."""
+        mock_http.request.side_effect = httpx.ConnectError("Connection refused")
+        with pytest.raises(JellyfinConnectionError):
+            await jf_client.get_server_name()
+
+
 class TestGetItems:
     async def test_get_items_success(
         self, jf_client: JellyfinClient, mock_http: AsyncMock

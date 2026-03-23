@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from app.config import Settings
 
-_VALID_SECRET = "test-secret-value-at-least-32-chars-long"
+_VALID_SECRET = "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB"
 _REQUIRED_ENV = {
     "JELLYFIN_URL": "http://jellyfin:8096",
     "SESSION_SECRET": _VALID_SECRET,
@@ -144,3 +144,84 @@ def test_enable_docs_false() -> None:
     with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
     assert s.enable_docs is False
+
+
+# --- session config fields ---
+
+
+def test_session_secure_cookie_default_true() -> None:
+    """session_secure_cookie defaults to True."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.session_secure_cookie is True
+
+
+def test_max_sessions_per_user_default_five() -> None:
+    """max_sessions_per_user defaults to 5."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.max_sessions_per_user == 5
+
+
+def test_session_db_path_default() -> None:
+    """session_db_path defaults to 'data/sessions.db'."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.session_db_path == "data/sessions.db"
+
+
+# --- SESSION_SECRET blocklist ---
+
+
+def test_blocklist_rejects_changeme_in_production() -> None:
+    """SESSION_SECRET containing 'changeme' is rejected when not in debug."""
+    env = {
+        "JELLYFIN_URL": "http://jellyfin:8096",
+        "SESSION_SECRET": "changeme" * 5,  # meets min_length
+        "LOG_LEVEL": "info",
+    }
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_blocklist_rejects_repeated_chars_in_production() -> None:
+    """SESSION_SECRET of repeated characters is rejected when not in debug."""
+    env = {
+        "JELLYFIN_URL": "http://jellyfin:8096",
+        "SESSION_SECRET": "a" * 32,
+        "LOG_LEVEL": "info",
+    }
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_blocklist_allows_weak_secret_in_debug(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """In debug mode, blocklisted secrets log CRITICAL but don't raise."""
+    import logging
+
+    env = {
+        "JELLYFIN_URL": "http://jellyfin:8096",
+        "SESSION_SECRET": "changeme" * 5,
+        "LOG_LEVEL": "debug",
+    }
+    with patch.dict(os.environ, env, clear=True), caplog.at_level(logging.CRITICAL):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.session_secret == "changeme" * 5
+    assert any("SESSION_SECRET" in r.message for r in caplog.records)
+
+
+def test_blocklist_accepts_strong_secret() -> None:
+    """A strong random secret passes validation."""
+    env = {
+        "JELLYFIN_URL": "http://jellyfin:8096",
+        "SESSION_SECRET": "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB",
+        "LOG_LEVEL": "info",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert len(s.session_secret) >= 32
