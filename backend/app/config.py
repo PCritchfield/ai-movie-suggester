@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,7 +39,16 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return self
 
+    # Security
+    cors_origin: AnyHttpUrl = AnyHttpUrl("http://localhost:3000")
+    enable_docs: bool | None = None
+
     # Tuning
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     session_expiry_hours: int = 24
     chat_rate_limit: int = 10
+
+    @property
+    def cors_origin_str(self) -> str:
+        """Return cors_origin as a plain string with trailing slash stripped."""
+        return str(self.cors_origin).rstrip("/")
