@@ -7,6 +7,10 @@ from pydantic import ValidationError
 from app.config import Settings
 
 _VALID_SECRET = "test-secret-value-at-least-32-chars-long"
+_REQUIRED_ENV = {
+    "JELLYFIN_URL": "http://jellyfin:8096",
+    "SESSION_SECRET": _VALID_SECRET,
+}
 
 
 def test_settings_loads_defaults() -> None:
@@ -72,3 +76,71 @@ def test_settings_rejects_tmdb_enabled_without_key() -> None:
     }
     with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
         Settings()  # type: ignore[call-arg]
+
+
+# --- cors_origin ---
+
+
+def test_cors_origin_default() -> None:
+    """cors_origin defaults to http://localhost:3000."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.cors_origin_str == "http://localhost:3000"
+
+
+def test_cors_origin_custom_value() -> None:
+    """cors_origin accepts a valid URL."""
+    env = {**_REQUIRED_ENV, "CORS_ORIGIN": "https://movies.example.com"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.cors_origin_str == "https://movies.example.com"
+
+
+def test_cors_origin_rejects_invalid_url() -> None:
+    """cors_origin rejects non-URL strings."""
+    env = {**_REQUIRED_ENV, "CORS_ORIGIN": "not-a-url"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_cors_origin_rejects_url_with_path() -> None:
+    """cors_origin rejects URLs with paths — Origin headers never include paths."""
+    env = {**_REQUIRED_ENV, "CORS_ORIGIN": "https://example.com/app"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_cors_origin_strips_trailing_slash() -> None:
+    """cors_origin_str strips trailing slash for CORS matching."""
+    env = {**_REQUIRED_ENV, "CORS_ORIGIN": "http://localhost:3000/"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.cors_origin_str == "http://localhost:3000"
+
+
+# --- enable_docs ---
+
+
+def test_enable_docs_default_none() -> None:
+    """enable_docs defaults to None when not set."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.enable_docs is None
+
+
+def test_enable_docs_true() -> None:
+    """enable_docs=true produces True."""
+    env = {**_REQUIRED_ENV, "ENABLE_DOCS": "true"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.enable_docs is True
+
+
+def test_enable_docs_false() -> None:
+    """enable_docs=false produces False."""
+    env = {**_REQUIRED_ENV, "ENABLE_DOCS": "false"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.enable_docs is False
