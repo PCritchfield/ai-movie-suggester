@@ -26,7 +26,9 @@ def test_cors_allows_configured_origin_preflight() -> None:
             "Access-Control-Request-Method": "GET",
         },
     )
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    )
 
 
 def test_cors_allows_configured_origin_simple_request() -> None:
@@ -36,7 +38,9 @@ def test_cors_allows_configured_origin_simple_request() -> None:
         "/health",
         headers={"Origin": "http://localhost:3000"},
     )
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    )
 
 
 def test_cors_allows_credentials() -> None:

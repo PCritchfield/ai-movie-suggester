@@ -84,12 +84,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Service health: checks Jellyfin and Ollama connectivity."""
         async with httpx.AsyncClient() as client:
             jf, ol = await asyncio.gather(
-                _check_service(
-                    client, f"{settings.jellyfin_url}/health", _logger
-                ),
-                _check_service(
-                    client, f"{settings.ollama_host}/api/tags", _logger
-                ),
+                _check_service(client, f"{settings.jellyfin_url}/health", _logger),
+                _check_service(client, f"{settings.ollama_host}/api/tags", _logger),
             )
         return HealthResponse(
             jellyfin=jf,
