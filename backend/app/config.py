@@ -48,6 +48,31 @@ class Settings(BaseSettings):
     session_expiry_hours: int = 24
     chat_rate_limit: int = 10
 
+    @model_validator(mode="after")
+    def _validate_cors_origin(self) -> Settings:
+        """Reject CORS origins with paths, query strings, or fragments.
+
+        Browser Origin headers never include a path — allowing one would
+        silently break CORS matching.
+        """
+        from urllib.parse import urlparse
+
+        parsed = urlparse(str(self.cors_origin))
+        # AnyHttpUrl always adds a trailing slash, so "/" is the "no path" case
+        if parsed.path not in ("", "/"):
+            msg = (
+                "CORS_ORIGIN must be an origin (scheme + host + optional port), "
+                f"not a URL with a path: {self.cors_origin}"
+            )
+            raise ValueError(msg)
+        if parsed.query or parsed.fragment:
+            msg = (
+                "CORS_ORIGIN must not include query string or fragment: "
+                f"{self.cors_origin}"
+            )
+            raise ValueError(msg)
+        return self
+
     @property
     def cors_origin_str(self) -> str:
         """Return cors_origin as a plain string with trailing slash stripped."""

@@ -13,6 +13,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.config import Settings
 from app.logging_config import configure_logging
+from app.middleware import SecurityHeadersMiddleware
 from app.models import EmbeddingsStatus, HealthResponse, ServiceStatus
 
 if TYPE_CHECKING:
@@ -100,8 +101,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Security headers first, then CORS last (runs first on inbound requests)
     # When spec 03 adds CSRF + rate limiter, order becomes:
     # (1) security headers, (2) CSRF, (3) rate limiter, (4) CORS
-    from app.middleware import SecurityHeadersMiddleware
-
     application.add_middleware(SecurityHeadersMiddleware, docs_enabled=docs_enabled)
 
     # CORS — register last so it runs first on inbound requests

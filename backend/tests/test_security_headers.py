@@ -68,3 +68,27 @@ def test_csp_enable_docs_override() -> None:
     response = client.get("/health")
     csp = response.headers.get("content-security-policy", "")
     assert "script-src 'unsafe-inline' https://cdn.jsdelivr.net" in csp
+
+
+def test_csp_disable_docs_override_in_debug() -> None:
+    """ENABLE_DOCS=false overrides LOG_LEVEL=debug: CSP is strict production."""
+    client = make_test_client(log_level="debug", enable_docs=False)
+    response = client.get("/health")
+    csp = response.headers.get("content-security-policy", "")
+    assert csp == "default-src 'none'; frame-ancestors 'none'"
+
+
+def test_no_cache_control_on_404() -> None:
+    """Non-2xx responses do NOT get Cache-Control: no-store."""
+    client = make_test_client()
+    response = client.get("/nonexistent-route")
+    assert response.status_code == 404
+    assert "cache-control" not in response.headers
+
+
+def test_debug_csp_includes_connect_src() -> None:
+    """Debug CSP includes connect-src 'self' so Swagger can fetch /openapi.json."""
+    client = make_test_client(log_level="debug")
+    response = client.get("/health")
+    csp = response.headers.get("content-security-policy", "")
+    assert "connect-src 'self'" in csp

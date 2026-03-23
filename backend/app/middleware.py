@@ -11,7 +11,10 @@ _PRODUCTION_CSP = "default-src 'none'; frame-ancestors 'none'"
 _DEBUG_CSP = (
     "default-src 'none'; frame-ancestors 'none'; "
     "script-src 'unsafe-inline' https://cdn.jsdelivr.net; "
-    "style-src 'unsafe-inline' https://cdn.jsdelivr.net"
+    "style-src 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "connect-src 'self'; "
+    "img-src 'self' data:; "
+    "font-src https://cdn.jsdelivr.net"
 )
 
 
@@ -34,7 +37,7 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
-        status_code = 0
+        status_code = 0  # nonlocal sentinel — overwritten in http.response.start
 
         async def send_with_headers(message: Message) -> None:
             nonlocal status_code

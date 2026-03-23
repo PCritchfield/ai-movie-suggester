@@ -104,6 +104,13 @@ def test_cors_origin_rejects_invalid_url() -> None:
         Settings()  # type: ignore[call-arg]
 
 
+def test_cors_origin_rejects_url_with_path() -> None:
+    """cors_origin rejects URLs with paths — Origin headers never include paths."""
+    env = {**_REQUIRED_ENV, "CORS_ORIGIN": "https://example.com/app"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
 def test_cors_origin_strips_trailing_slash() -> None:
     """cors_origin_str strips trailing slash for CORS matching."""
     env = {**_REQUIRED_ENV, "CORS_ORIGIN": "http://localhost:3000/"}
