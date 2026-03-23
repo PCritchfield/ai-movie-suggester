@@ -8,6 +8,7 @@ import time
 from typing import TYPE_CHECKING
 
 from app.auth.models import LoginResponse
+from app.jellyfin.errors import JellyfinError
 
 if TYPE_CHECKING:
     from app.auth.session_store import SessionStore
@@ -31,6 +32,28 @@ class AuthService:
         self._expiry_hours = session_expiry_hours
         self._max_sessions = max_sessions_per_user
 
+    async def _enforce_session_cap(self, user_id: str) -> None:
+        """Evict oldest sessions until count < max_sessions_per_user."""
+        while await self._store.count_by_user(user_id) >= self._max_sessions:
+            oldest = await self._store.oldest_by_user(user_id)
+            if oldest is None:
+                break
+            # Best-effort Jellyfin token revocation
+            try:
+                await self._jf.logout(oldest.token)
+            except JellyfinError:
+                logger.warning(
+                    "jellyfin unreachable during eviction user_id=%s",
+                    user_id,
+                )
+            await self._store.delete(oldest.session_id)
+            count = await self._store.count_by_user(user_id)
+            logger.info(
+                "session_evicted user_id=%s sessions_count=%d",
+                user_id,
+                count,
+            )
+
     async def login(
         self, username: str, password: str
     ) -> tuple[str, str, LoginResponse]:
@@ -41,6 +64,9 @@ class AuthService:
         """
         auth_result = await self._jf.authenticate(username, password)
         server_name = await self._jf.get_server_name()
+
+        # Enforce session cap before creating new session
+        await self._enforce_session_cap(auth_result.user_id)
 
         session_id = secrets.token_urlsafe(32)
         csrf_token = secrets.token_urlsafe(32)
@@ -68,3 +94,20 @@ class AuthService:
                 server_name=server_name,
             ),
         )
+
+
+async def cleanup_expired_sessions(
+    store: SessionStore, jf_client: JellyfinClient
+) -> None:
+    """Delete expired sessions and attempt Jellyfin token revocation."""
+    expired = await store.get_expired()
+    for session in expired:
+        try:
+            await jf_client.logout(session.token)
+        except JellyfinError:
+            logger.warning(
+                "jellyfin unreachable during expiry cleanup user_id=%s",
+                session.user_id,
+            )
+        await store.delete(session.session_id)
+        logger.info("session_expired user_id=%s", session.user_id)
