@@ -22,7 +22,13 @@ def make_test_settings(**overrides: str | int | float | bool | None) -> Settings
     return Settings(**defaults)  # type: ignore[arg-type]
 
 
+def make_test_client(
+    **settings_overrides: str | int | float | bool | None,
+) -> TestClient:
+    """Create a TestClient with custom settings for tests needing overrides."""
+    return TestClient(create_app(make_test_settings(**settings_overrides)))
+
+
 @pytest.fixture
 def client() -> TestClient:
-    test_settings = make_test_settings()
-    return TestClient(create_app(test_settings))
+    return make_test_client()
