@@ -45,6 +45,7 @@ class JellyfinClient:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._client = http_client
+        self._server_name: str | None = None
         self._auth_value = (
             f'MediaBrowser Client="{_APP_NAME}", '
             f'Device="{_DEVICE}", '
@@ -111,6 +112,35 @@ class JellyfinClient:
             return parser(data)
         except Exception as exc:
             raise JellyfinError("Unexpected response shape from Jellyfin") from exc
+
+    async def logout(self, token: str) -> None:
+        """Revoke a Jellyfin session token.
+
+        Calls POST /Sessions/Logout. On 401 (already revoked), logs at
+        DEBUG and returns normally. On transport error, raises
+        JellyfinConnectionError for the caller to handle.
+        """
+        try:
+            await self._request(
+                "POST",
+                "/Sessions/Logout",
+                token=token,
+            )
+        except JellyfinAuthError:
+            logger.debug("token already revoked during logout")
+
+    async def get_server_name(self) -> str:
+        """Return the Jellyfin server name (cached after first call).
+
+        Calls GET /System/Info/Public (no auth required).
+        """
+        if self._server_name is not None:
+            return self._server_name
+        resp = await self._request("GET", "/System/Info/Public")
+        data: dict[str, Any] = self._parse_response(resp, lambda d: d)
+        name: str = data["ServerName"]
+        self._server_name = name
+        return name
 
     async def authenticate(self, username: str, password: str) -> AuthResult:
         """Authenticate a user against Jellyfin.

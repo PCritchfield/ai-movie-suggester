@@ -5,10 +5,13 @@ All configuration is centralized here. No ad-hoc os.environ calls elsewhere.
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Literal
 
 from pydantic import AnyHttpUrl, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -38,6 +41,33 @@ class Settings(BaseSettings):
             msg = "TMDB_API_KEY is required when TMDB_ENABLED=true"
             raise ValueError(msg)
         return self
+
+    @model_validator(mode="after")
+    def _validate_session_secret(self) -> Settings:
+        """Reject known-weak SESSION_SECRET values."""
+        secret = self.session_secret
+        _blocklist_patterns = ("changeme", "password", "secret", "example")
+        is_weak = len(set(secret)) <= 2 or any(
+            pat in secret.lower() for pat in _blocklist_patterns
+        )
+        if is_weak:
+            if self.log_level == "debug":
+                _logger.critical(
+                    "SESSION_SECRET matches a blocklist pattern — "
+                    "acceptable ONLY in debug mode"
+                )
+            else:
+                msg = (
+                    "SESSION_SECRET is too weak (matches a known pattern). "
+                    "Generate a strong secret with: openssl rand -hex 32"
+                )
+                raise ValueError(msg)
+        return self
+
+    # Sessions
+    session_secure_cookie: bool = True
+    max_sessions_per_user: int = 5
+    session_db_path: str = "data/sessions.db"
 
     # Security
     cors_origin: AnyHttpUrl = AnyHttpUrl("http://localhost:3000")
