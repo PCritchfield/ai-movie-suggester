@@ -47,9 +47,8 @@ class Settings(BaseSettings):
         """Reject known-weak SESSION_SECRET values."""
         secret = self.session_secret
         _blocklist_patterns = ("changeme", "password", "secret", "example")
-        is_weak = (
-            len(set(secret)) <= 2
-            or any(pat in secret.lower() for pat in _blocklist_patterns)
+        is_weak = len(set(secret)) <= 2 or any(
+            pat in secret.lower() for pat in _blocklist_patterns
         )
         if is_weak:
             if self.log_level == "debug":
