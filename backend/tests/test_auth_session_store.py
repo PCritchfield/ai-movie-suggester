@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 import pytest
 
-from collections.abc import AsyncIterator
-
 from app.auth.crypto import derive_keys
 from app.auth.session_store import SessionStore
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 _SECRET = "test-secret-at-least-32-characters-long"
 _COOKIE_KEY, _COLUMN_KEY = derive_keys(_SECRET)
