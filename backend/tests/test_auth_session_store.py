@@ -6,6 +6,8 @@ import time
 
 import pytest
 
+from collections.abc import AsyncIterator
+
 from app.auth.crypto import derive_keys
 from app.auth.session_store import SessionStore
 
@@ -14,7 +16,7 @@ _COOKIE_KEY, _COLUMN_KEY = derive_keys(_SECRET)
 
 
 @pytest.fixture
-async def store(tmp_path: object) -> SessionStore:
+async def store(tmp_path: object) -> AsyncIterator[SessionStore]:
     """Provide a fresh SessionStore backed by a temp DB."""
     # tmp_path is a pathlib.Path — pytest provides it
     import pathlib
