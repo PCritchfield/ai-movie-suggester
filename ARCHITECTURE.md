@@ -125,7 +125,7 @@ sequenceDiagram
 ## Security Model
 
 - **Authentication**: Jellyfin is the identity provider. No separate user accounts.
-- **Token handling**: Jellyfin AccessTokens stored in server-side encrypted sessions only. Never persisted to disk. Never exposed to frontend.
+- **Token handling**: Jellyfin AccessTokens stored in server-side encrypted sessions only. Tokens are never persisted unencrypted to disk — tokens are encrypted at rest in the session table using Fernet with HKDF-derived keys. Never exposed to frontend.
 - **Session expiry**: Configurable (default 24h). Logout revokes Jellyfin token.
 - **Permissions**: Enforced at query time via Jellyfin's API. Vector DB is not a security boundary.
 - **Network**: Backend binds to 127.0.0.1 by default. External access via existing reverse proxy (Caddy).
