@@ -50,9 +50,7 @@ def service(store: SessionStore, mock_jf: AsyncMock) -> AuthService:
     )
 
 
-async def _create_sessions(
-    store: SessionStore, user_id: str, count: int
-) -> list[str]:
+async def _create_sessions(store: SessionStore, user_id: str, count: int) -> list[str]:
     """Helper: create N sessions for a user, return session IDs."""
     now = int(time.time())
     ids = []
@@ -117,9 +115,7 @@ class TestSessionCapEnforcement:
         assert await store.count_by_user("uid-1") == 5
         assert await store.get(session_id) is not None
         assert any("session_evicted" in r.message for r in caplog.records)
-        assert any(
-            "jellyfin unreachable" in r.message for r in caplog.records
-        )
+        assert any("jellyfin unreachable" in r.message for r in caplog.records)
 
     async def test_new_session_valid_after_eviction(
         self, service: AuthService, store: SessionStore, mock_jf: AsyncMock
@@ -190,6 +186,4 @@ class TestExpiredSessionCleanup:
 
         # Session still deleted
         assert await store.get("sid-exp3") is None
-        assert any(
-            "jellyfin unreachable" in r.message.lower() for r in caplog.records
-        )
+        assert any("jellyfin unreachable" in r.message.lower() for r in caplog.records)
