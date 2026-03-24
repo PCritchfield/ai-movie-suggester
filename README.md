@@ -84,6 +84,10 @@ movies.yourdomain.duckdns.org {
 
 No watch history, user credentials, or personal data are sent. TMDb enrichment can be disabled at any time by setting `TMDB_ENABLED=false` — the app works fully with Jellyfin's own metadata.
 
+## Jellyfin Configuration
+
+Jellyfin must be configured with a session timeout (Jellyfin Settings > Networking > Session timeout). The app revokes Jellyfin tokens on logout and expiry, but tokens from sessions destroyed during a Jellyfin outage may remain valid until Jellyfin's own timeout fires. A timeout of 24 hours or less is recommended.
+
 ## Development
 
 ```bash
