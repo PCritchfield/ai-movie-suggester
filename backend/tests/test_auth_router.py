@@ -37,10 +37,11 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> TestClient:
     """Create a test app with auth routes wired up."""
     import pathlib
 
+    from fastapi import FastAPI
+
     from app.auth.router import create_auth_router
     from app.auth.service import AuthService
     from app.config import Settings
-    from app.main import create_app
 
     db_path = pathlib.Path(str(tmp_path)) / "test_sessions.db"
 
@@ -55,21 +56,20 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> TestClient:
     service = AuthService(
         session_store=store,
         jellyfin_client=mock_jf,
-        session_secret=_SECRET,
         session_expiry_hours=settings.session_expiry_hours,
         max_sessions_per_user=settings.max_sessions_per_user,
     )
 
-    app = create_app(settings)
-
+    app = FastAPI()
     auth_router = create_auth_router(
         auth_service=service,
         session_store=store,
         settings=settings,
-        cookie_key=service.cookie_key,
+        cookie_key=_COOKIE_KEY,
     )
     app.include_router(auth_router)
     app.state.session_store = store
+    app.state.cookie_key = _COOKIE_KEY
     app.state.jellyfin_client = mock_jf
 
     import asyncio

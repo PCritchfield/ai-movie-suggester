@@ -5,14 +5,16 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 
 from app.auth.crypto import fernet_decrypt, fernet_encrypt
+from app.auth.dependencies import get_current_session
 from app.auth.models import (
     ErrorResponse,
     LoginRequest,
     LoginResponse,
     LogoutResponse,
+    SessionMeta,
 )
 from app.jellyfin.errors import JellyfinAuthError, JellyfinConnectionError
 
@@ -96,33 +98,13 @@ def create_auth_router(
         response_model=LoginResponse,
         responses={401: {"model": ErrorResponse}},
     )
-    async def me(request: Request, response: Response) -> LoginResponse:
-        import time
-
-        session_id = _decrypt_session_cookie(request)
-        if session_id is None:
-            _clear_session_cookie(response)
-            return Response(  # type: ignore[return-value]
-                content='{"detail":"Not authenticated"}',
-                status_code=401,
-                media_type="application/json",
-            )
-
-        meta = await session_store.get_metadata(session_id)
-        if meta is None or meta.expires_at < int(time.time()):
-            if meta is not None:
-                await session_store.delete(session_id)
-            _clear_session_cookie(response)
-            return Response(  # type: ignore[return-value]
-                content='{"detail":"Not authenticated"}',
-                status_code=401,
-                media_type="application/json",
-            )
-
+    async def me(
+        session: SessionMeta = Depends(get_current_session),  # noqa: B008
+    ) -> LoginResponse:
         return LoginResponse(
-            user_id=meta.user_id,
-            username=meta.username,
-            server_name=meta.server_name,
+            user_id=session.user_id,
+            username=session.username,
+            server_name=session.server_name,
         )
 
     @router.post(
@@ -146,19 +128,12 @@ def create_auth_router(
 
         # Best-effort Jellyfin token revocation
         try:
-
             jf = request.app.state.jellyfin_client
             await jf.logout(session.token)
         except JellyfinConnectionError:
             logger.warning(
                 "jellyfin unreachable during logout user_id=%s",
                 session.user_id,
-            )
-        except Exception:
-            logger.warning(
-                "unexpected error during jellyfin logout user_id=%s",
-                session.user_id,
-                exc_info=True,
             )
 
         return LogoutResponse(detail="Logged out")

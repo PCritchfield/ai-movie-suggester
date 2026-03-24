@@ -7,7 +7,6 @@ import secrets
 import time
 from typing import TYPE_CHECKING
 
-from app.auth.crypto import derive_keys
 from app.auth.models import LoginResponse
 
 if TYPE_CHECKING:
@@ -24,20 +23,13 @@ class AuthService:
         self,
         session_store: SessionStore,
         jellyfin_client: JellyfinClient,
-        session_secret: str,
         session_expiry_hours: int,
         max_sessions_per_user: int,
     ) -> None:
         self._store = session_store
         self._jf = jellyfin_client
-        self._cookie_key, self._column_key = derive_keys(session_secret)
         self._expiry_hours = session_expiry_hours
         self._max_sessions = max_sessions_per_user
-
-    @property
-    def cookie_key(self) -> bytes:
-        """Cookie-signing Fernet key (for encrypting session ID in cookie)."""
-        return self._cookie_key
 
     async def login(
         self, username: str, password: str

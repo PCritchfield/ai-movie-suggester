@@ -93,7 +93,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         auth_service = AuthService(
             session_store=store,
             jellyfin_client=jf_client,
-            session_secret=settings.session_secret,
             session_expiry_hours=settings.session_expiry_hours,
             max_sessions_per_user=settings.max_sessions_per_user,
         )
