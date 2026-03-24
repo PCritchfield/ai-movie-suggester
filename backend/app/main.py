@@ -134,9 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 try:
                     await cleanup_expired_sessions(store, jf_client)
                 except Exception:
-                    _logger.warning(
-                        "session cleanup failed", exc_info=True
-                    )
+                    _logger.warning("session cleanup failed", exc_info=True)
 
         cleanup_task = asyncio.create_task(_periodic_cleanup())
 
