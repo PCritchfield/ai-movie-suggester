@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import FastAPI
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
 
 from app.auth.crypto import derive_keys
@@ -20,6 +22,8 @@ from app.config import Settings
 from app.jellyfin.client import JellyfinClient
 from app.logging_config import configure_logging
 from app.middleware import SecurityHeadersMiddleware
+from app.middleware.csrf import CSRFMiddleware
+from app.middleware.rate_limit import create_limiter
 from app.models import EmbeddingsStatus, HealthResponse, ServiceStatus
 
 if TYPE_CHECKING:
@@ -64,6 +68,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Derive crypto keys from session secret
     cookie_key, column_key = derive_keys(settings.session_secret)
 
+    # Create rate limiter (stateless, safe to create early)
+    limiter = create_limiter(settings.trusted_proxy_ips)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Startup: log config, check connectivity. Shutdown: clean up."""
@@ -99,6 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             session_store=store,
             settings=settings,
             cookie_key=cookie_key,
+            limiter=limiter,
         )
         app.include_router(auth_router)
 
@@ -175,11 +183,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             embeddings=EmbeddingsStatus(total=0, pending=0),
         )
 
-    # Middleware registration order matters:
-    # Security headers first, then CORS last (runs first on inbound requests)
-    # When spec 03 PR 4 adds CSRF + rate limiter, order becomes:
+    # Middleware registration order matters — FastAPI processes middleware
+    # in REVERSE registration order, so CORS (registered last) runs first
+    # on inbound requests:
     # (1) security headers, (2) CSRF, (3) rate limiter, (4) CORS
     application.add_middleware(SecurityHeadersMiddleware, docs_enabled=docs_enabled)
+    application.add_middleware(CSRFMiddleware)
+
+    # Rate limiter state (slowapi needs it on app.state)
+    application.state.limiter = limiter
+    application.add_exception_handler(
+        RateLimitExceeded,
+        _rate_limit_exceeded_handler,  # type: ignore[arg-type]
+    )
 
     # CORS — register last so it runs first on inbound requests
     application.add_middleware(

@@ -34,7 +34,8 @@ def mock_jf() -> AsyncMock:
 
 @pytest.fixture
 def auth_app(tmp_path: object, mock_jf: AsyncMock) -> TestClient:
-    """Create a test app with auth routes wired up."""
+    """Create a minimal test app with auth routes (no CSRF middleware)."""
+    import asyncio
     import pathlib
 
     from fastapi import FastAPI
@@ -71,8 +72,6 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> TestClient:
     app.state.session_store = store
     app.state.cookie_key = _COOKIE_KEY
     app.state.jellyfin_client = mock_jf
-
-    import asyncio
 
     asyncio.get_event_loop().run_until_complete(store.init())
 
