@@ -35,9 +35,7 @@ def create_auth_router(
     """Build the auth APIRouter with closures over service dependencies."""
     router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-    def _set_session_cookie(
-        response: Response, session_id: str
-    ) -> None:
+    def _set_session_cookie(response: Response, session_id: str) -> None:
         encrypted = fernet_encrypt(cookie_key, session_id).decode("utf-8")
         response.set_cookie(
             key="session_id",

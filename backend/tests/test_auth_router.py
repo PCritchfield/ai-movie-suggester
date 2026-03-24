@@ -108,9 +108,7 @@ class TestLoginSuccess:
         decrypted = fernet_decrypt(_COOKIE_KEY, cookie.encode("utf-8"))
         assert len(decrypted) > 20  # token_urlsafe(32) is ~43 chars
 
-    def test_cookie_attributes(
-        self, auth_app: TestClient, mock_jf: AsyncMock
-    ) -> None:
+    def test_cookie_attributes(self, auth_app: TestClient, mock_jf: AsyncMock) -> None:
         resp = auth_app.post(
             "/api/auth/login",
             json={"username": "alice", "password": "pass123"},
@@ -173,16 +171,12 @@ class TestMe:
         assert body["username"] == "alice"
         assert body["server_name"] == "MyJellyfin"
 
-    def test_missing_cookie_returns_401(
-        self, auth_app: TestClient
-    ) -> None:
+    def test_missing_cookie_returns_401(self, auth_app: TestClient) -> None:
         resp = auth_app.get("/api/auth/me")
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Not authenticated"
 
-    def test_tampered_cookie_returns_401(
-        self, auth_app: TestClient
-    ) -> None:
+    def test_tampered_cookie_returns_401(self, auth_app: TestClient) -> None:
         resp = auth_app.get(
             "/api/auth/me",
             cookies={"session_id": "garbage-not-fernet"},
@@ -196,9 +190,7 @@ class TestMe:
         cookies = self._login(auth_app)
 
         # Decrypt cookie to get session_id
-        session_id = fernet_decrypt(
-            _COOKIE_KEY, cookies["session_id"].encode("utf-8")
-        )
+        session_id = fernet_decrypt(_COOKIE_KEY, cookies["session_id"].encode("utf-8"))
 
         # Manually expire the session in the DB
         import asyncio
@@ -245,16 +237,12 @@ class TestLogout:
         self, auth_app: TestClient, mock_jf: AsyncMock
     ) -> None:
         cookies = self._login(auth_app)
-        mock_jf.logout.side_effect = JellyfinConnectionError(
-            "Cannot reach Jellyfin"
-        )
+        mock_jf.logout.side_effect = JellyfinConnectionError("Cannot reach Jellyfin")
         resp = auth_app.post("/api/auth/logout", cookies=cookies)
         assert resp.status_code == 200
         assert resp.json()["detail"] == "Logged out"
 
-    def test_logout_no_session_returns_200(
-        self, auth_app: TestClient
-    ) -> None:
+    def test_logout_no_session_returns_200(self, auth_app: TestClient) -> None:
         """Logout without a session is idempotent."""
         resp = auth_app.post("/api/auth/logout")
         assert resp.status_code == 200

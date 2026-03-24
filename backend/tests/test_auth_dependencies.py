@@ -62,9 +62,7 @@ class TestGetCurrentSession:
             )
         )
         cookie = _make_session_cookie("sid-dep")
-        resp = dep_app.get(
-            "/protected", cookies={"session_id": cookie}
-        )
+        resp = dep_app.get("/protected", cookies={"session_id": cookie})
         assert resp.status_code == 200
         assert resp.json()["user_id"] == "uid-1"
 
@@ -73,9 +71,7 @@ class TestGetCurrentSession:
         assert resp.status_code == 401
 
     def test_tampered_cookie_returns_401(self, dep_app: TestClient) -> None:
-        resp = dep_app.get(
-            "/protected", cookies={"session_id": "not-fernet"}
-        )
+        resp = dep_app.get("/protected", cookies={"session_id": "not-fernet"})
         assert resp.status_code == 401
 
     def test_expired_session_returns_401(self, dep_app: TestClient) -> None:
@@ -94,16 +90,10 @@ class TestGetCurrentSession:
             )
         )
         cookie = _make_session_cookie("sid-exp")
-        resp = dep_app.get(
-            "/protected", cookies={"session_id": cookie}
-        )
+        resp = dep_app.get("/protected", cookies={"session_id": cookie})
         assert resp.status_code == 401
 
-    def test_nonexistent_session_returns_401(
-        self, dep_app: TestClient
-    ) -> None:
+    def test_nonexistent_session_returns_401(self, dep_app: TestClient) -> None:
         cookie = _make_session_cookie("sid-does-not-exist")
-        resp = dep_app.get(
-            "/protected", cookies={"session_id": cookie}
-        )
+        resp = dep_app.get("/protected", cookies={"session_id": cookie})
         assert resp.status_code == 401

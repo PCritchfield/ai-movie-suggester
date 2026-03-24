@@ -29,9 +29,7 @@ async def get_current_session(request: Request) -> SessionMeta:
     try:
         session_id = fernet_decrypt(cookie_key, cookie_value.encode("utf-8"))
     except Exception as exc:
-        raise HTTPException(
-            status_code=401, detail="Not authenticated"
-        ) from exc
+        raise HTTPException(status_code=401, detail="Not authenticated") from exc
 
     meta = await session_store.get_metadata(session_id)
     if meta is None or meta.expires_at < int(time.time()):

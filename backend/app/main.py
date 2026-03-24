@@ -80,9 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.cookie_key = cookie_key
 
         # Create shared HTTP client and Jellyfin client
-        http_client = httpx.AsyncClient(
-            timeout=settings.jellyfin_timeout
-        )
+        http_client = httpx.AsyncClient(timeout=settings.jellyfin_timeout)
         jf_client = JellyfinClient(
             base_url=settings.jellyfin_url,
             http_client=http_client,
@@ -164,9 +162,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Security headers first, then CORS last (runs first on inbound requests)
     # When spec 03 PR 4 adds CSRF + rate limiter, order becomes:
     # (1) security headers, (2) CSRF, (3) rate limiter, (4) CORS
-    application.add_middleware(
-        SecurityHeadersMiddleware, docs_enabled=docs_enabled
-    )
+    application.add_middleware(SecurityHeadersMiddleware, docs_enabled=docs_enabled)
 
     # CORS — register last so it runs first on inbound requests
     application.add_middleware(
