@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     session_secure_cookie: bool = True
     max_sessions_per_user: int = 5
     session_db_path: str = "data/sessions.db"
+    trusted_proxy_ips: str = "127.0.0.1"
+    login_rate_limit: str = "5/minute"
 
     # Security
     cors_origin: AnyHttpUrl = AnyHttpUrl("http://localhost:3000")
