@@ -45,7 +45,6 @@ def service(store: SessionStore, mock_jf: AsyncMock) -> AuthService:
     return AuthService(
         session_store=store,
         jellyfin_client=mock_jf,
-        session_secret=_SECRET,
         session_expiry_hours=24,
         max_sessions_per_user=5,
     )
