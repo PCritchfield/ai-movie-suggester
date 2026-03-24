@@ -171,9 +171,10 @@ class SessionStore:
         ]
 
     async def count_by_user(self, user_id: str) -> int:
-        """Count active sessions for a user."""
+        """Count active (non-expired) sessions for a user."""
         cursor = await self._conn.execute(
-            "SELECT COUNT(*) FROM sessions WHERE user_id = ?", (user_id,)
+            "SELECT COUNT(*) FROM sessions WHERE user_id = ? AND expires_at >= ?",
+            (user_id, int(time.time())),
         )
         row = await cursor.fetchone()
         return row[0] if row else 0
