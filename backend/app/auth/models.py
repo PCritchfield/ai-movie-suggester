@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from pydantic import BaseModel
+
 
 @dataclass(frozen=True, slots=True)
 class SessionRow:
@@ -29,6 +31,36 @@ class SessionMeta:
     username: str
     server_name: str
     expires_at: int
+
+
+# --- API request/response models ---
+
+
+class LoginRequest(BaseModel):
+    """POST /api/auth/login request body."""
+
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """Successful login / /me response body."""
+
+    user_id: str
+    username: str
+    server_name: str
+
+
+class LogoutResponse(BaseModel):
+    """POST /api/auth/logout response body."""
+
+    detail: str
+
+
+class ErrorResponse(BaseModel):
+    """Error response body."""
+
+    detail: str
 
 
 # --- Session store protocol ---
