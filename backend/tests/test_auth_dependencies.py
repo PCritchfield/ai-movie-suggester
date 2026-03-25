@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
@@ -17,7 +21,7 @@ _COOKIE_KEY, _COLUMN_KEY = derive_keys(_SECRET)
 
 
 @pytest.fixture
-def dep_app(tmp_path: object) -> TestClient:
+def dep_app(tmp_path: object) -> Iterator[TestClient]:
     """Minimal app with a protected endpoint using get_current_session."""
     import asyncio
     import pathlib

@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 import httpx
 import pytest
@@ -33,7 +37,7 @@ def mock_jf() -> AsyncMock:
 
 
 @pytest.fixture
-def auth_app(tmp_path: object, mock_jf: AsyncMock) -> TestClient:
+def auth_app(tmp_path: object, mock_jf: AsyncMock) -> Iterator[TestClient]:
     """Create a test app with auth routes wired up."""
     import pathlib
 
