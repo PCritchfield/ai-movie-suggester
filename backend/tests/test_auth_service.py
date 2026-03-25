@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 import pytest
 
@@ -17,7 +21,7 @@ _COOKIE_KEY, _COLUMN_KEY = derive_keys(_SECRET)
 
 
 @pytest.fixture
-async def store(tmp_path: object) -> SessionStore:
+async def store(tmp_path: object) -> AsyncIterator[SessionStore]:
     import pathlib
 
     db_path = pathlib.Path(str(tmp_path)) / "svc_sessions.db"
