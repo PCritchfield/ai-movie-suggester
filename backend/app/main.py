@@ -14,7 +14,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.auth.crypto import derive_keys
 from app.auth.router import create_auth_router
-from app.auth.service import AuthService
+from app.auth.service import AuthService, cleanup_expired_sessions
 from app.auth.session_store import SessionStore
 from app.config import Settings
 from app.jellyfin.client import JellyfinClient
@@ -122,9 +122,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if ol == "error":
             _logger.warning("ollama not reachable at startup")
 
+        # Run expired-session cleanup once at startup
+        await cleanup_expired_sessions(store, jf_client)
+
+        # Schedule periodic cleanup
+        cleanup_interval = settings.session_expiry_hours * 3600 / 4
+
+        async def _periodic_cleanup() -> None:
+            while True:
+                await asyncio.sleep(cleanup_interval)
+                try:
+                    await cleanup_expired_sessions(store, jf_client)
+                except Exception:
+                    _logger.warning("session cleanup failed", exc_info=True)
+
+        cleanup_task = asyncio.create_task(_periodic_cleanup())
+
         yield
 
         # Shutdown
+        cleanup_task.cancel()
         _logger.info("shutting down ai-movie-suggester backend")
         await store.close()
         await http_client.aclose()
