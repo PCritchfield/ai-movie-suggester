@@ -37,7 +37,7 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
-        status_code = 0  # nonlocal sentinel — overwritten in http.response.start
+        status_code = 0
 
         async def send_with_headers(message: Message) -> None:
             nonlocal status_code

@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request, Response
+from slowapi import Limiter  # noqa: TC002
 
 from app.auth.crypto import fernet_decrypt, fernet_encrypt
 from app.auth.dependencies import get_current_session
@@ -31,9 +32,11 @@ def create_auth_router(
     session_store: SessionStore,
     settings: Settings,
     cookie_key: bytes,
+    limiter: Limiter | None = None,
 ) -> APIRouter:
     """Build the auth APIRouter with closures over service dependencies."""
     router = APIRouter(prefix="/api/auth", tags=["auth"])
+    _limit = limiter.limit(settings.login_rate_limit) if limiter else (lambda f: f)
 
     def _set_session_cookie(response: Response, session_id: str) -> None:
         encrypted = fernet_encrypt(cookie_key, session_id).decode("utf-8")
@@ -69,9 +72,15 @@ def create_auth_router(
     @router.post(
         "/login",
         response_model=LoginResponse,
-        responses={401: {"model": ErrorResponse}, 502: {"model": ErrorResponse}},
+        responses={
+            401: {"model": ErrorResponse},
+            502: {"model": ErrorResponse},
+        },
     )
-    async def login(body: LoginRequest, response: Response) -> LoginResponse:
+    @_limit
+    async def login(
+        request: Request, body: LoginRequest, response: Response
+    ) -> LoginResponse:
         try:
             session_id, csrf_token, login_resp = await auth_service.login(
                 body.username, body.password
@@ -89,6 +98,15 @@ def create_auth_router(
                 media_type="application/json",
             )
         _set_session_cookie(response, session_id)
+        # Set CSRF token cookie (readable by JS)
+        response.set_cookie(
+            key="csrf_token",
+            value=csrf_token,
+            httponly=False,
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path="/api",
+        )
         return login_resp
 
     @router.get(
@@ -113,6 +131,12 @@ def create_auth_router(
     async def logout(request: Request, response: Response) -> LogoutResponse:
         session_id = _decrypt_session_cookie(request)
         _clear_session_cookie(response)
+        response.delete_cookie(
+            key="csrf_token",
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path="/api",
+        )
 
         if session_id is None:
             return LogoutResponse(detail="Logged out")
