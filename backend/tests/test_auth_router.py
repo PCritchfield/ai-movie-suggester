@@ -116,12 +116,26 @@ class TestLoginSuccess:
             "/api/auth/login",
             json={"username": "alice", "password": "pass123"},
         )
-        set_cookie = resp.headers.get("set-cookie", "")
-        assert "httponly" in set_cookie.lower()
-        assert "samesite=lax" in set_cookie.lower()
-        assert "path=/api" in set_cookie.lower()
+        raw_headers = resp.headers.raw
+        # Find the primary session_id cookie (path=/, not the old-path cleanup)
+        session_cookies = [
+            v.decode()
+            for k, v in raw_headers
+            if k == b"set-cookie" and b"session_id" in v
+        ]
+        primary = [
+            c
+            for c in session_cookies
+            if "path=/" in c.lower()
+            and "path=/api" not in c.lower()
+        ]
+        assert len(primary) >= 1, "No session_id cookie at path=/ found"
+        sc = primary[0].lower()
+        assert "httponly" in sc
+        assert "samesite=lax" in sc
+        assert "path=/" in sc
         # max-age should be session_expiry_hours * 3600 = 86400
-        assert "max-age=86400" in set_cookie.lower()
+        assert "max-age=86400" in sc
 
 
 class TestLoginErrors:
@@ -250,6 +264,80 @@ class TestLogout:
         resp = auth_app.post("/api/auth/logout")
         assert resp.status_code == 200
         assert resp.json()["detail"] == "Logged out"
+
+
+class TestCookieFixes:
+    """Tests for Spec 04 Task 1.0 — cookie path widening and csrf max-age."""
+
+    def test_csrf_cookie_has_max_age(
+        self, auth_app: TestClient, mock_jf: AsyncMock
+    ) -> None:
+        resp = auth_app.post(
+            "/api/auth/login",
+            json={"username": "alice", "password": "pass123"},
+        )
+        assert resp.status_code == 200
+        # Find the csrf_token Set-Cookie header
+        raw_headers = resp.headers.raw
+        csrf_cookies = [
+            v.decode()
+            for k, v in raw_headers
+            if k == b"set-cookie" and b"csrf_token" in v
+        ]
+        assert len(csrf_cookies) >= 1, "csrf_token cookie not found"
+        csrf_cookie = csrf_cookies[0].lower()
+        # session_expiry_hours defaults to 24, so max-age = 86400
+        assert "max-age=86400" in csrf_cookie
+
+    def test_login_deletes_old_path_session_cookie(
+        self, auth_app: TestClient, mock_jf: AsyncMock
+    ) -> None:
+        resp = auth_app.post(
+            "/api/auth/login",
+            json={"username": "alice", "password": "pass123"},
+        )
+        assert resp.status_code == 200
+        # Should include a Set-Cookie that deletes session_id at the old path=/api
+        raw_headers = resp.headers.raw
+        session_cookies = [
+            v.decode()
+            for k, v in raw_headers
+            if k == b"set-cookie" and b"session_id" in v
+        ]
+        # Should have both: new (path=/) and delete (path=/api)
+        old_path_cookies = [
+            c for c in session_cookies
+            if "path=/api" in c.lower()
+        ]
+        assert len(old_path_cookies) >= 1, (
+            "No session_id delete cookie at path=/api found"
+        )
+        # The old-path cookie should have max-age=0 or an expired date
+        old_cookie = old_path_cookies[0].lower()
+        assert 'max-age=0' in old_cookie or "01 jan 1970" in old_cookie
+
+    def test_session_cookie_path_is_root(
+        self, auth_app: TestClient, mock_jf: AsyncMock
+    ) -> None:
+        resp = auth_app.post(
+            "/api/auth/login",
+            json={"username": "alice", "password": "pass123"},
+        )
+        assert resp.status_code == 200
+        raw_headers = resp.headers.raw
+        session_cookies = [
+            v.decode()
+            for k, v in raw_headers
+            if k == b"set-cookie" and b"session_id" in v
+        ]
+        # The primary session cookie should have path=/
+        root_path_cookies = [
+            c
+            for c in session_cookies
+            if "path=/" in c.lower()
+            and "path=/api" not in c.lower()
+        ]
+        assert len(root_path_cookies) >= 1, "No session_id cookie at path=/ found"
 
 
 class TestLogMessages:
