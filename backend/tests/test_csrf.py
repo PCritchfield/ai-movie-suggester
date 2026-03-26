@@ -13,15 +13,12 @@ if TYPE_CHECKING:
 import pytest
 from fastapi.testclient import TestClient
 
-from app.auth.crypto import derive_keys
 from app.auth.router import create_auth_router
 from app.auth.service import AuthService
 from app.auth.session_store import SessionStore
 from app.config import Settings
 from app.middleware.csrf import CSRFMiddleware
-
-_SECRET = "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB"
-_COOKIE_KEY, _COLUMN_KEY = derive_keys(_SECRET)
+from tests.conftest import TEST_COLUMN_KEY, TEST_COOKIE_KEY, TEST_SECRET
 
 
 @pytest.fixture
@@ -42,12 +39,12 @@ def csrf_app(tmp_path: object) -> Iterator[TestClient]:
 
     settings = Settings(
         jellyfin_url="http://jellyfin-test:8096",
-        session_secret=_SECRET,
+        session_secret=TEST_SECRET,
         session_secure_cookie=False,
         log_level="debug",
     )  # type: ignore[call-arg]
 
-    store = SessionStore(str(db_path), _COLUMN_KEY)
+    store = SessionStore(str(db_path), TEST_COLUMN_KEY)
     service = AuthService(
         session_store=store,
         jellyfin_client=mock_jf,
@@ -58,14 +55,14 @@ def csrf_app(tmp_path: object) -> Iterator[TestClient]:
     app = FastAPI()
     app.add_middleware(CSRFMiddleware)
     app.state.session_store = store
-    app.state.cookie_key = _COOKIE_KEY
+    app.state.cookie_key = TEST_COOKIE_KEY
     app.state.jellyfin_client = mock_jf
 
     auth_router = create_auth_router(
         auth_service=service,
         session_store=store,
         settings=settings,
-        cookie_key=_COOKIE_KEY,
+        cookie_key=TEST_COOKIE_KEY,
     )
     app.include_router(auth_router)
 

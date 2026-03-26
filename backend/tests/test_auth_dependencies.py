@@ -12,12 +12,10 @@ if TYPE_CHECKING:
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from app.auth.crypto import derive_keys, fernet_encrypt
+from app.auth.crypto import fernet_encrypt
 from app.auth.dependencies import get_current_session
 from app.auth.session_store import SessionStore
-
-_SECRET = "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB"
-_COOKIE_KEY, _COLUMN_KEY = derive_keys(_SECRET)
+from tests.conftest import TEST_COLUMN_KEY, TEST_COOKIE_KEY
 
 
 @pytest.fixture
@@ -27,10 +25,10 @@ def dep_app(tmp_path: object) -> Iterator[TestClient]:
     import pathlib
 
     db_path = pathlib.Path(str(tmp_path)) / "dep_sessions.db"
-    store = SessionStore(str(db_path), _COLUMN_KEY)
+    store = SessionStore(str(db_path), TEST_COLUMN_KEY)
 
     app = FastAPI()
-    app.state.cookie_key = _COOKIE_KEY
+    app.state.cookie_key = TEST_COOKIE_KEY
     app.state.session_store = store
 
     @app.get("/protected")
@@ -46,7 +44,7 @@ def dep_app(tmp_path: object) -> Iterator[TestClient]:
 
 
 def _make_session_cookie(session_id: str) -> str:
-    return fernet_encrypt(_COOKIE_KEY, session_id).decode("utf-8")
+    return fernet_encrypt(TEST_COOKIE_KEY, session_id).decode("utf-8")
 
 
 class TestGetCurrentSession:

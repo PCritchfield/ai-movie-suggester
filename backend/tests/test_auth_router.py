@@ -9,31 +9,15 @@ from unittest.mock import AsyncMock
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.auth.crypto import derive_keys, fernet_decrypt
+from app.auth.crypto import fernet_decrypt
 from app.auth.session_store import SessionStore
 from app.jellyfin.errors import JellyfinAuthError, JellyfinConnectionError
+from tests.conftest import TEST_COLUMN_KEY, TEST_COOKIE_KEY, TEST_SECRET
 
-_SECRET = "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB"
-_COOKIE_KEY, _COLUMN_KEY = derive_keys(_SECRET)
-_FAKE_REQUEST = httpx.Request("GET", "http://fake")
-
-
-@pytest.fixture
-def mock_jf() -> AsyncMock:
-    """Mock JellyfinClient."""
-    jf = AsyncMock()
-    jf.authenticate.return_value = AsyncMock(
-        access_token="jf-tok-123",
-        user_id="uid-1",
-        user_name="alice",
-    )
-    jf.get_server_name.return_value = "MyJellyfin"
-    jf.logout.return_value = None
-    return jf
+# mock_jf fixture is inherited from conftest.py
 
 
 @pytest.fixture
@@ -52,12 +36,12 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> Iterator[TestClient]:
 
     settings = Settings(
         jellyfin_url="http://jellyfin-test:8096",
-        session_secret=_SECRET,
+        session_secret=TEST_SECRET,
         session_secure_cookie=False,
         log_level="debug",
     )  # type: ignore[call-arg]
 
-    store = SessionStore(str(db_path), _COLUMN_KEY)
+    store = SessionStore(str(db_path), TEST_COLUMN_KEY)
     service = AuthService(
         session_store=store,
         jellyfin_client=mock_jf,
@@ -70,11 +54,11 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> Iterator[TestClient]:
         auth_service=service,
         session_store=store,
         settings=settings,
-        cookie_key=_COOKIE_KEY,
+        cookie_key=TEST_COOKIE_KEY,
     )
     app.include_router(auth_router)
     app.state.session_store = store
-    app.state.cookie_key = _COOKIE_KEY
+    app.state.cookie_key = TEST_COOKIE_KEY
     app.state.jellyfin_client = mock_jf
 
     asyncio.get_event_loop().run_until_complete(store.init())
@@ -108,7 +92,7 @@ class TestLoginSuccess:
         cookie = resp.cookies.get("session_id")
         assert cookie is not None
         # Cookie value should be Fernet-encrypted (not raw session ID)
-        decrypted = fernet_decrypt(_COOKIE_KEY, cookie.encode("utf-8"))
+        decrypted = fernet_decrypt(TEST_COOKIE_KEY, cookie.encode("utf-8"))
         assert len(decrypted) > 20  # token_urlsafe(32) is ~43 chars
 
     def test_cookie_attributes(self, auth_app: TestClient, mock_jf: AsyncMock) -> None:
@@ -203,7 +187,7 @@ class TestMe:
         cookies = self._login(auth_app)
 
         # Decrypt cookie to get session_id
-        session_id = fernet_decrypt(_COOKIE_KEY, cookies["session_id"].encode("utf-8"))
+        session_id = fernet_decrypt(TEST_COOKIE_KEY, cookies["session_id"].encode("utf-8"))
 
         # Manually expire the session in the DB
         import asyncio
