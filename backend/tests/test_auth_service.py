@@ -4,20 +4,19 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+    from unittest.mock import AsyncMock
 
 import pytest
 
-from app.auth.crypto import derive_keys
 from app.auth.service import AuthService, cleanup_expired_sessions
 from app.auth.session_store import SessionStore
 from app.jellyfin.errors import JellyfinConnectionError
+from tests.conftest import TEST_COLUMN_KEY
 
-_SECRET = "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB"
-_COOKIE_KEY, _COLUMN_KEY = derive_keys(_SECRET)
+# mock_jf fixture is inherited from conftest.py
 
 
 @pytest.fixture
@@ -25,23 +24,10 @@ async def store(tmp_path: object) -> AsyncIterator[SessionStore]:
     import pathlib
 
     db_path = pathlib.Path(str(tmp_path)) / "svc_sessions.db"
-    s = SessionStore(str(db_path), _COLUMN_KEY)
+    s = SessionStore(str(db_path), TEST_COLUMN_KEY)
     await s.init()
     yield s  # type: ignore[misc]
     await s.close()
-
-
-@pytest.fixture
-def mock_jf() -> AsyncMock:
-    jf = AsyncMock()
-    jf.authenticate.return_value = AsyncMock(
-        access_token="jf-tok-new",
-        user_id="uid-1",
-        user_name="alice",
-    )
-    jf.get_server_name.return_value = "MyJellyfin"
-    jf.logout.return_value = None
-    return jf
 
 
 @pytest.fixture

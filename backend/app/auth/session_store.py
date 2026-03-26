@@ -7,6 +7,7 @@ Uses aiosqlite in WAL mode for concurrent read access.
 from __future__ import annotations
 
 import time
+from typing import Any
 
 import aiosqlite
 
@@ -44,6 +45,22 @@ class SessionStore:
         self._db_path = db_path
         self._column_key = column_key
         self._db: aiosqlite.Connection | None = None
+
+    def _row_to_session(
+        self,
+        row: Any,
+    ) -> SessionRow:
+        """Build a SessionRow from a full DB row, decrypting the token."""
+        return SessionRow(
+            session_id=row[0],
+            user_id=row[1],
+            username=row[2],
+            server_name=row[3],
+            token=fernet_decrypt(self._column_key, row[4]),
+            csrf_token=row[5],
+            created_at=row[6],
+            expires_at=row[7],
+        )
 
     async def init(self) -> None:
         """Open the database connection and create the schema."""
@@ -110,16 +127,7 @@ class SessionStore:
         row = await cursor.fetchone()
         if row is None:
             return None
-        return SessionRow(
-            session_id=row[0],
-            user_id=row[1],
-            username=row[2],
-            server_name=row[3],
-            token=fernet_decrypt(self._column_key, row[4]),
-            csrf_token=row[5],
-            created_at=row[6],
-            expires_at=row[7],
-        )
+        return self._row_to_session(row)
 
     async def get_metadata(self, session_id: str) -> SessionMeta | None:
         """Fetch session metadata WITHOUT decrypting the token."""
@@ -156,19 +164,7 @@ class SessionStore:
             (now,),
         )
         rows = await cursor.fetchall()
-        return [
-            SessionRow(
-                session_id=r[0],
-                user_id=r[1],
-                username=r[2],
-                server_name=r[3],
-                token=fernet_decrypt(self._column_key, r[4]),
-                csrf_token=r[5],
-                created_at=r[6],
-                expires_at=r[7],
-            )
-            for r in rows
-        ]
+        return [self._row_to_session(r) for r in rows]
 
     async def count_by_user(self, user_id: str) -> int:
         """Count active (non-expired) sessions for a user."""
@@ -185,22 +181,13 @@ class SessionStore:
             """SELECT session_id, user_id, username, server_name, token_enc,
                       csrf_token, created_at, expires_at
                FROM sessions WHERE user_id = ?
-               ORDER BY created_at ASC LIMIT 1""",
+               ORDER BY created_at ASC, session_id ASC LIMIT 1""",
             (user_id,),
         )
         row = await cursor.fetchone()
         if row is None:
             return None
-        return SessionRow(
-            session_id=row[0],
-            user_id=row[1],
-            username=row[2],
-            server_name=row[3],
-            token=fernet_decrypt(self._column_key, row[4]),
-            csrf_token=row[5],
-            created_at=row[6],
-            expires_at=row[7],
-        )
+        return self._row_to_session(row)
 
     async def delete_all_by_user(self, user_id: str) -> int:
         """Delete all sessions for a user. Returns count of deleted rows."""

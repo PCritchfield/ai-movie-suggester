@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, Request, Response
 from slowapi import Limiter  # noqa: TC002
 
-from app.auth.crypto import fernet_decrypt, fernet_encrypt
+from app.auth.crypto import decrypt_cookie, fernet_encrypt
 from app.auth.dependencies import get_current_session
 from app.auth.models import (
     ErrorResponse,
@@ -61,13 +61,7 @@ def create_auth_router(
 
     def _decrypt_session_cookie(request: Request) -> str | None:
         """Extract and decrypt the session_id cookie. Returns None on failure."""
-        cookie_value = request.cookies.get("session_id")
-        if not cookie_value:
-            return None
-        try:
-            return fernet_decrypt(cookie_key, cookie_value.encode("utf-8"))
-        except Exception:
-            return None
+        return decrypt_cookie(cookie_key, request.cookies.get("session_id"))
 
     @router.post(
         "/login",

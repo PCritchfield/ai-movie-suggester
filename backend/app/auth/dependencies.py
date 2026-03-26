@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request
 
-from app.auth.crypto import fernet_decrypt
+from app.auth.crypto import decrypt_cookie
 
 if TYPE_CHECKING:
     from app.auth.models import SessionMeta
@@ -22,14 +22,9 @@ async def get_current_session(request: Request) -> SessionMeta:
     cookie_key: bytes = request.app.state.cookie_key
     session_store = request.app.state.session_store
 
-    cookie_value = request.cookies.get("session_id")
-    if not cookie_value:
+    session_id = decrypt_cookie(cookie_key, request.cookies.get("session_id"))
+    if session_id is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    try:
-        session_id = fernet_decrypt(cookie_key, cookie_value.encode("utf-8"))
-    except Exception as exc:
-        raise HTTPException(status_code=401, detail="Not authenticated") from exc
 
     meta = await session_store.get_metadata(session_id)
     if meta is None or meta.expires_at < int(time.time()):

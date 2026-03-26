@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import pathlib
 from contextlib import asynccontextmanager
@@ -150,6 +151,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         # Shutdown
         cleanup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await cleanup_task
         _logger.info("shutting down ai-movie-suggester backend")
         await store.close()
         await http_client.aclose()
