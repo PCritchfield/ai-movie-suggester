@@ -46,7 +46,7 @@ def create_auth_router(
             httponly=True,
             samesite="lax",
             secure=settings.session_secure_cookie,
-            path="/api",
+            path="/",
             max_age=settings.session_expiry_hours * 3600,
         )
 
@@ -56,7 +56,7 @@ def create_auth_router(
             httponly=True,
             samesite="lax",
             secure=settings.session_secure_cookie,
-            path="/api",
+            path="/",
         )
 
     def _decrypt_session_cookie(request: Request) -> str | None:
@@ -98,6 +98,14 @@ def create_auth_router(
                 media_type="application/json",
             )
         _set_session_cookie(response, session_id)
+        # Clean up stale session cookie at old path=/api
+        response.delete_cookie(
+            key="session_id",
+            httponly=True,
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path="/api",
+        )
         # Set CSRF token cookie (readable by JS)
         response.set_cookie(
             key="csrf_token",
@@ -106,6 +114,7 @@ def create_auth_router(
             samesite="lax",
             secure=settings.session_secure_cookie,
             path="/api",
+            max_age=settings.session_expiry_hours * 3600,
         )
         return login_resp
 
@@ -131,6 +140,14 @@ def create_auth_router(
     async def logout(request: Request, response: Response) -> LogoutResponse:
         session_id = _decrypt_session_cookie(request)
         _clear_session_cookie(response)
+        # Clean up stale session cookie at old path=/api
+        response.delete_cookie(
+            key="session_id",
+            httponly=True,
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path="/api",
+        )
         response.delete_cookie(
             key="csrf_token",
             samesite="lax",
