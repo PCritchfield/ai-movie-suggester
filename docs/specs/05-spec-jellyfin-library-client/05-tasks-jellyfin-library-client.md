@@ -24,7 +24,7 @@
 
 ## Tasks
 
-### [~] 1.0 Extended LibraryItem Model + Auto-Paginated Client
+### [x] 1.0 Extended LibraryItem Model + Auto-Paginated Client
 
 Extend the `LibraryItem` Pydantic model with fields needed for embedding (tags, studios, community_rating, people) and add `get_all_items()` async iterator to `JellyfinClient` for auto-paginated library fetching. Add `LIBRARY_SYNC_PAGE_SIZE` to `Settings`.
 
@@ -74,7 +74,7 @@ Extend the `LibraryItem` Pydantic model with fields needed for embedding (tags, 
 
 ---
 
-### [ ] 2.0 Library Metadata Store (SQLite Repository)
+### [~] 2.0 Library Metadata Store (SQLite Repository)
 
 Create `backend/app/library/` module with `LibraryStore` (SQLite repository following `SessionStore` pattern), `LibraryItemRow` and `UpsertResult` dataclasses, `LibraryStoreProtocol`, and placeholder content-hash function. Implements bulk upsert with created/updated/unchanged tracking, single/batch get, hash retrieval, and count.
 

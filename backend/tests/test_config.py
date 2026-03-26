@@ -236,3 +236,11 @@ def test_library_sync_page_size_default() -> None:
     with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
     assert s.library_sync_page_size == 200
+
+
+def test_library_db_path_default() -> None:
+    """library_db_path defaults to 'data/library.db'."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.library_db_path == "data/library.db"
