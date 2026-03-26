@@ -186,6 +186,9 @@ describe("LoginForm", () => {
     expect(screen.getByRole("button")).toBeDisabled();
 
     resolveLogin!({ user_id: "u1", username: "alice", server_name: "S" });
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith("/");
+    });
   });
 
   it("re-enables button after error", async () => {
