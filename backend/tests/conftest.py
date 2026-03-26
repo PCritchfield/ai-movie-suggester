@@ -1,10 +1,14 @@
 import os
 from unittest.mock import AsyncMock
 
+# Canonical test constants — single source of truth
+TEST_SECRET = "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB"
+TEST_JELLYFIN_URL = "http://jellyfin-test:8096"
+
 # Set test environment BEFORE any app imports happen.
 # Unconditional override — unit tests must never hit real services
-os.environ["JELLYFIN_URL"] = "http://jellyfin-test:8096"
-os.environ["SESSION_SECRET"] = "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB"
+os.environ["JELLYFIN_URL"] = TEST_JELLYFIN_URL
+os.environ["SESSION_SECRET"] = TEST_SECRET
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -13,8 +17,6 @@ from app.auth.crypto import derive_keys  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 
-# Canonical test secret — used by all test files via import
-TEST_SECRET = "kG7xP2mN9qR4wL8jT3vF6yA5dH0sE1cB"
 TEST_COOKIE_KEY, TEST_COLUMN_KEY = derive_keys(TEST_SECRET)
 
 

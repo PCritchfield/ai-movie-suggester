@@ -143,7 +143,7 @@ All configuration via environment variables (`.env` file). See `.env.example` fo
 | Security | `LOGIN_RATE_LIMIT`, `TRUSTED_PROXY_IPS`, `CORS_ORIGIN` | Defaults provided |
 | Ollama | `OLLAMA_HOST`, `OLLAMA_CHAT_MODEL`, `OLLAMA_EMBED_MODEL` | Defaults provided |
 | TMDb | `TMDB_ENABLED`, `TMDB_API_KEY` | No (opt-in) |
-| Tuning | `LOG_LEVEL`, `ENABLE_DOCS` | No (defaults provided) |
+| Tuning | `LOG_LEVEL`, `ENABLE_DOCS`, `CHAT_RATE_LIMIT` | No (defaults provided) |
 
 ## Deployment Models
 

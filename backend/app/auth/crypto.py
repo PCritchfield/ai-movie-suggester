@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import base64
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
@@ -61,5 +61,6 @@ def decrypt_cookie(key: bytes, cookie_value: str | None) -> str | None:
         return None
     try:
         return fernet_decrypt(key, cookie_value.encode("utf-8"))
-    except Exception:
+    except (InvalidToken, ValueError):
+        # InvalidToken: tampered/corrupt cookie; ValueError: bad base64 encoding
         return None

@@ -7,6 +7,7 @@ Uses aiosqlite in WAL mode for concurrent read access.
 from __future__ import annotations
 
 import time
+from typing import Any
 
 import aiosqlite
 
@@ -47,7 +48,7 @@ class SessionStore:
 
     def _row_to_session(
         self,
-        row: aiosqlite.Row,
+        row: Any,
     ) -> SessionRow:
         """Build a SessionRow from a full DB row, decrypting the token."""
         return SessionRow(

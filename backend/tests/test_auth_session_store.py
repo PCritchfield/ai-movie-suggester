@@ -146,6 +146,35 @@ class TestCountAndOldest:
         assert oldest is not None
         assert oldest.session_id == "sid-old"
 
+    async def test_oldest_by_user_tiebreak_by_session_id(
+        self, store: SessionStore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When created_at is identical, tie-break by session_id ASC."""
+        now = _now()
+        monkeypatch.setattr(time, "time", lambda: now)
+        await store.create(
+            session_id="sid-zebra",
+            user_id="uid-1",
+            username="alice",
+            server_name="MyJellyfin",
+            token="tok-z",
+            csrf_token="csrf-z",
+            expires_at=now + 3600,
+        )
+        await store.create(
+            session_id="sid-alpha",
+            user_id="uid-1",
+            username="alice",
+            server_name="MyJellyfin",
+            token="tok-a",
+            csrf_token="csrf-a",
+            expires_at=now + 3600,
+        )
+        monkeypatch.undo()
+        oldest = await store.oldest_by_user("uid-1")
+        assert oldest is not None
+        assert oldest.session_id == "sid-alpha"  # 'a' < 'z' in ASC order
+
     async def test_oldest_by_user_returns_none_when_empty(
         self, store: SessionStore
     ) -> None:
