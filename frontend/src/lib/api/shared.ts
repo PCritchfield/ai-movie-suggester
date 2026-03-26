@@ -8,7 +8,12 @@ export function getBaseUrl(): string {
 }
 
 export async function parseResponse<T>(response: Response): Promise<T> {
-  const body: unknown = await response.json();
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
 
   if (response.status === 401 || response.status === 403) {
     throw new ApiAuthError(response.status, body);

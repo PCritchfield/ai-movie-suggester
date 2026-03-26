@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useState,
   type ReactNode,
@@ -40,14 +41,14 @@ export function AuthProvider({
     isAuthenticated: true,
   });
 
-  function clearAuth() {
+  const clearAuth = useCallback(() => {
     setState({
       userId: "",
       username: "",
       serverName: "",
       isAuthenticated: false,
     });
-  }
+  }, []);
 
   return (
     <AuthContext value={{ ...state, clearAuth }}>
