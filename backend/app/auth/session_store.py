@@ -46,7 +46,8 @@ class SessionStore:
         self._db: aiosqlite.Connection | None = None
 
     def _row_to_session(
-        self, row: aiosqlite.Row,
+        self,
+        row: aiosqlite.Row,
     ) -> SessionRow:
         """Build a SessionRow from a full DB row, decrypting the token."""
         return SessionRow(
