@@ -45,7 +45,9 @@ class SessionStore:
         self._column_key = column_key
         self._db: aiosqlite.Connection | None = None
 
-    def _row_to_session(self, row: tuple[str, str, str, str, bytes, str, int, int]) -> SessionRow:
+    def _row_to_session(
+        self, row: tuple[str, str, str, str, bytes, str, int, int]
+    ) -> SessionRow:
         """Build a SessionRow from a full DB row, decrypting the token."""
         return SessionRow(
             session_id=row[0],

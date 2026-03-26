@@ -187,7 +187,9 @@ class TestMe:
         cookies = self._login(auth_app)
 
         # Decrypt cookie to get session_id
-        session_id = fernet_decrypt(TEST_COOKIE_KEY, cookies["session_id"].encode("utf-8"))
+        session_id = fernet_decrypt(
+            TEST_COOKIE_KEY, cookies["session_id"].encode("utf-8")
+        )
 
         # Manually expire the session in the DB
         import asyncio
