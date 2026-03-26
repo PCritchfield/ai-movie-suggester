@@ -57,7 +57,7 @@ describe("LoginForm", () => {
     render(<LoginForm />);
     await user.click(screen.getByRole("button", { name: /sign in/i }));
     expect(
-      screen.getByText(/username and password are required/i),
+      screen.getByText(/username and password are required/i)
     ).toBeInTheDocument();
     expect(mockApiPost).not.toHaveBeenCalled();
   });
@@ -87,7 +87,7 @@ describe("LoginForm", () => {
     await user.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
       expect(
-        screen.getByText(/invalid username or password/i),
+        screen.getByText(/invalid username or password/i)
       ).toBeInTheDocument();
     });
   });
@@ -100,9 +100,7 @@ describe("LoginForm", () => {
     await user.type(screen.getByLabelText(/password/i), "pass");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
-      expect(
-        screen.getByText(/something went wrong/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
     });
   });
 
@@ -115,7 +113,7 @@ describe("LoginForm", () => {
     await user.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
       expect(
-        screen.getByText(/unable to reach the media server/i),
+        screen.getByText(/unable to reach the media server/i)
       ).toBeInTheDocument();
     });
   });
@@ -128,9 +126,7 @@ describe("LoginForm", () => {
     await user.type(screen.getByLabelText(/password/i), "pass");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
-      expect(
-        screen.getByText(/too many login attempts/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/too many login attempts/i)).toBeInTheDocument();
     });
   });
 
@@ -143,16 +139,14 @@ describe("LoginForm", () => {
     await user.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
       expect(
-        screen.getByText(/could not connect to the server/i),
+        screen.getByText(/could not connect to the server/i)
       ).toBeInTheDocument();
     });
   });
 
   it("renders session_expired notice", () => {
     render(<LoginForm reason="session_expired" />);
-    expect(
-      screen.getByText(/your session has expired/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/your session has expired/i)).toBeInTheDocument();
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
@@ -172,7 +166,7 @@ describe("LoginForm", () => {
       () =>
         new Promise((resolve) => {
           resolveLogin = resolve;
-        }),
+        })
     );
     const user = userEvent.setup();
     render(<LoginForm />);
@@ -218,7 +212,7 @@ describe("LoginForm", () => {
     await user.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => {
       expect(
-        screen.getByText(/invalid username or password/i),
+        screen.getByText(/invalid username or password/i)
       ).toBeInTheDocument();
     });
     const results = await axe(container);

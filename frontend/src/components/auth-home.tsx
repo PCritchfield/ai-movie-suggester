@@ -2,12 +2,7 @@
 
 import { useAuth } from "@/lib/auth/auth-context";
 import { LogoutButton } from "@/components/logout-button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function AuthHome() {
   const { username, serverName } = useAuth();
@@ -21,7 +16,8 @@ export function AuthHome() {
       </CardHeader>
       <CardContent className="space-y-4 text-center">
         <p className="text-muted-foreground">
-          Signed in as <span className="font-medium text-foreground">{username}</span>
+          Signed in as{" "}
+          <span className="font-medium text-foreground">{username}</span>
         </p>
         <p className="text-sm text-muted-foreground">
           Connected to {serverName}

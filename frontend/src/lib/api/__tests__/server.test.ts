@@ -47,7 +47,7 @@ describe("serverGet", () => {
         ok: true,
         status: 200,
         json: () => Promise.resolve({ user_id: "u1" }),
-      }),
+      })
     );
 
     const { serverGet } = await import("../server");
@@ -59,7 +59,7 @@ describe("serverGet", () => {
         headers: expect.objectContaining({
           Cookie: "session_id=sess-xyz",
         }),
-      }),
+      })
     );
   });
 });

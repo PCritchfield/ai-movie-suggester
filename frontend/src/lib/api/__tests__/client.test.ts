@@ -8,7 +8,7 @@ function mockFetch(status: number, body: unknown): void {
       ok: status >= 200 && status < 300,
       status,
       json: () => Promise.resolve(body),
-    }),
+    })
   );
 }
 
@@ -31,7 +31,7 @@ describe("apiGet", () => {
     await apiGet("/api/auth/me");
     expect(fetch).toHaveBeenCalledWith(
       "/api/auth/me",
-      expect.objectContaining({ credentials: "include" }),
+      expect.objectContaining({ credentials: "include" })
     );
   });
 
@@ -55,20 +55,14 @@ describe("apiGet", () => {
     mockFetch(401, { detail: "Not authenticated" });
     const { apiGet } = await import("../client");
     await expect(apiGet("/api/auth/me")).rejects.toThrow(ApiAuthError);
-    await expect(apiGet("/api/auth/me")).rejects.toHaveProperty(
-      "status",
-      401,
-    );
+    await expect(apiGet("/api/auth/me")).rejects.toHaveProperty("status", 401);
   });
 
   it("throws ApiError on 500", async () => {
     mockFetch(500, { detail: "Server error" });
     const { apiGet } = await import("../client");
     await expect(apiGet("/api/auth/me")).rejects.toThrow(ApiError);
-    await expect(apiGet("/api/auth/me")).rejects.toHaveProperty(
-      "status",
-      500,
-    );
+    await expect(apiGet("/api/auth/me")).rejects.toHaveProperty("status", 500);
   });
 });
 
@@ -91,7 +85,7 @@ describe("apiPost", () => {
     await apiPost("/api/auth/login", { username: "alice" });
     expect(fetch).toHaveBeenCalledWith(
       "/api/auth/login",
-      expect.objectContaining({ credentials: "include" }),
+      expect.objectContaining({ credentials: "include" })
     );
   });
 
@@ -107,10 +101,9 @@ describe("apiPost", () => {
   it("returns parsed JSON on 200", async () => {
     mockFetch(200, { user_id: "u1", username: "alice" });
     const { apiPost } = await import("../client");
-    const result = await apiPost<{ user_id: string }>(
-      "/api/auth/login",
-      { username: "alice" },
-    );
+    const result = await apiPost<{ user_id: string }>("/api/auth/login", {
+      username: "alice",
+    });
     expect(result.user_id).toBe("u1");
   });
 
@@ -118,10 +111,10 @@ describe("apiPost", () => {
     mockFetch(403, { detail: "Forbidden" });
     const { apiPost } = await import("../client");
     await expect(
-      apiPost("/api/auth/login", { username: "alice" }),
+      apiPost("/api/auth/login", { username: "alice" })
     ).rejects.toThrow(ApiAuthError);
     await expect(
-      apiPost("/api/auth/login", { username: "alice" }),
+      apiPost("/api/auth/login", { username: "alice" })
     ).rejects.toHaveProperty("status", 403);
   });
 
@@ -129,10 +122,10 @@ describe("apiPost", () => {
     mockFetch(502, { detail: "Bad gateway" });
     const { apiPost } = await import("../client");
     await expect(
-      apiPost("/api/auth/login", { username: "alice" }),
+      apiPost("/api/auth/login", { username: "alice" })
     ).rejects.toThrow(ApiError);
     await expect(
-      apiPost("/api/auth/login", { username: "alice" }),
+      apiPost("/api/auth/login", { username: "alice" })
     ).rejects.toHaveProperty("status", 502);
   });
 });

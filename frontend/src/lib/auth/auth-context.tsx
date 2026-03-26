@@ -50,11 +50,7 @@ export function AuthProvider({
     });
   }, []);
 
-  return (
-    <AuthContext value={{ ...state, clearAuth }}>
-      {children}
-    </AuthContext>
-  );
+  return <AuthContext value={{ ...state, clearAuth }}>{children}</AuthContext>;
 }
 
 export function useAuth(): AuthContextValue {

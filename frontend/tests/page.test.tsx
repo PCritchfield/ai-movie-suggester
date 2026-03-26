@@ -20,7 +20,7 @@ test("protected page renders username and server name", () => {
   render(
     <AuthProvider userId="u1" username="alice" serverName="MyServer">
       <AuthHome />
-    </AuthProvider>,
+    </AuthProvider>
   );
   expect(screen.getByText("alice")).toBeInTheDocument();
   expect(screen.getByText(/MyServer/)).toBeInTheDocument();
@@ -30,9 +30,7 @@ test("protected page renders logout button", () => {
   render(
     <AuthProvider userId="u1" username="alice" serverName="MyServer">
       <AuthHome />
-    </AuthProvider>,
+    </AuthProvider>
   );
-  expect(
-    screen.getByRole("button", { name: /sign out/i }),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
 });

@@ -11,10 +11,7 @@ export async function apiGet<T>(path: string): Promise<T> {
   return parseResponse<T>(response);
 }
 
-export async function apiPost<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };

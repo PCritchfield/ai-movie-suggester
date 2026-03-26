@@ -6,12 +6,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiPost } from "@/lib/api/client";
 import { ApiAuthError, ApiError } from "@/lib/api/types";
 import type { LoginResponse } from "@/lib/api/types";
@@ -24,8 +19,7 @@ function mapError(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 502)
       return "Unable to reach the media server. Try again shortly.";
-    if (err.status === 429)
-      return "Too many login attempts. Please wait.";
+    if (err.status === 429) return "Too many login attempts. Please wait.";
     return "Something went wrong. Please try again.";
   }
   return "Could not connect to the server.";
@@ -131,7 +125,10 @@ export function LoginForm({ reason }: LoginFormProps) {
           >
             {isPending ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                <Loader2
+                  className="mr-2 h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
                 Signing in...
               </>
             ) : (

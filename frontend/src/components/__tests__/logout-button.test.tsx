@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mockPush = vi.fn();
@@ -25,7 +20,7 @@ function renderWithAuth(ui: React.ReactElement) {
   return render(
     <AuthProvider userId="u1" username="alice" serverName="MyServer">
       {ui}
-    </AuthProvider>,
+    </AuthProvider>
   );
 }
 
@@ -40,7 +35,7 @@ describe("LogoutButton", () => {
   it("renders with Sign out text", () => {
     renderWithAuth(<LogoutButton />);
     expect(
-      screen.getByRole("button", { name: /sign out/i }),
+      screen.getByRole("button", { name: /sign out/i })
     ).toBeInTheDocument();
   });
 
@@ -48,9 +43,7 @@ describe("LogoutButton", () => {
     mockApiPost.mockResolvedValue({ detail: "Logged out" });
     const user = userEvent.setup();
     renderWithAuth(<LogoutButton />);
-    await user.click(
-      screen.getByRole("button", { name: /sign out/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /sign out/i }));
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith("/api/auth/logout");
     });
@@ -60,9 +53,7 @@ describe("LogoutButton", () => {
     mockApiPost.mockResolvedValue({ detail: "Logged out" });
     const user = userEvent.setup();
     renderWithAuth(<LogoutButton />);
-    await user.click(
-      screen.getByRole("button", { name: /sign out/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /sign out/i }));
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith("/login");
     });
@@ -72,13 +63,9 @@ describe("LogoutButton", () => {
     mockApiPost.mockRejectedValue(new ApiAuthError(401, {}));
     const user = userEvent.setup();
     renderWithAuth(<LogoutButton />);
-    await user.click(
-      screen.getByRole("button", { name: /sign out/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /sign out/i }));
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(
-        "/login?reason=session_expired",
-      );
+      expect(mockPush).toHaveBeenCalledWith("/login?reason=session_expired");
     });
   });
 
@@ -86,13 +73,9 @@ describe("LogoutButton", () => {
     mockApiPost.mockRejectedValue(new TypeError("fetch failed"));
     const user = userEvent.setup();
     renderWithAuth(<LogoutButton />);
-    await user.click(
-      screen.getByRole("button", { name: /sign out/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /sign out/i }));
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(
-        "/login?reason=session_expired",
-      );
+      expect(mockPush).toHaveBeenCalledWith("/login?reason=session_expired");
     });
   });
 
@@ -102,13 +85,11 @@ describe("LogoutButton", () => {
       () =>
         new Promise((resolve) => {
           resolveLogout = resolve;
-        }),
+        })
     );
     const user = userEvent.setup();
     renderWithAuth(<LogoutButton />);
-    await user.click(
-      screen.getByRole("button", { name: /sign out/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /sign out/i }));
 
     const signingOut = await screen.findByText(/signing out\.\.\./i);
     expect(signingOut).toBeInTheDocument();
@@ -123,21 +104,15 @@ describe("LogoutButton", () => {
       () =>
         new Promise((resolve) => {
           resolveLogout = resolve;
-        }),
+        })
     );
     const user = userEvent.setup();
     renderWithAuth(<LogoutButton />);
-    await user.click(
-      screen.getByRole("button", { name: /sign out/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /sign out/i }));
 
     await waitFor(() => {
-      const liveRegion = document.querySelector(
-        "[aria-live='polite']",
-      );
-      expect(liveRegion?.textContent).toContain(
-        "Signing out, please wait",
-      );
+      const liveRegion = document.querySelector("[aria-live='polite']");
+      expect(liveRegion?.textContent).toContain("Signing out, please wait");
     });
 
     resolveLogout!({ detail: "Logged out" });

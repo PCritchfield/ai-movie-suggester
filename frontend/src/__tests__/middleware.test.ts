@@ -17,9 +17,7 @@ describe("middleware", () => {
     const req = makeRequest("/");
     const res = middleware(req);
     expect(res.status).toBe(307);
-    expect(res.headers.get("location")).toBe(
-      "http://localhost:3000/login",
-    );
+    expect(res.headers.get("location")).toBe("http://localhost:3000/login");
   });
 
   it("passes through when session_id cookie exists", () => {
@@ -28,7 +26,6 @@ describe("middleware", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
   });
-
 });
 
 describe("config.matcher", () => {

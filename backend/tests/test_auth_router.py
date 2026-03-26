@@ -321,8 +321,7 @@ class TestCookieFixes:
         root_path_cookies = [
             c
             for c in csrf_cookies
-            if "path=/" in c.lower()
-            and "path=/api" not in c.lower()
+            if "path=/" in c.lower() and "path=/api" not in c.lower()
         ]
         assert len(root_path_cookies) >= 1, "No csrf_token cookie at path=/ found"
 
@@ -341,15 +340,12 @@ class TestCookieFixes:
             if k == b"set-cookie" and b"csrf_token" in v
         ]
         # Should include a delete for csrf_token at the old path=/api
-        old_path_cookies = [
-            c for c in csrf_cookies
-            if "path=/api" in c.lower()
-        ]
+        old_path_cookies = [c for c in csrf_cookies if "path=/api" in c.lower()]
         assert len(old_path_cookies) >= 1, (
             "No csrf_token delete cookie at path=/api found"
         )
         old_cookie = old_path_cookies[0].lower()
-        assert 'max-age=0' in old_cookie or "01 jan 1970" in old_cookie
+        assert "max-age=0" in old_cookie or "01 jan 1970" in old_cookie
 
     def test_logout_clears_csrf_at_root_path(
         self, auth_app: TestClient, mock_jf: AsyncMock
@@ -371,8 +367,7 @@ class TestCookieFixes:
         root_path_cookies = [
             c
             for c in csrf_cookies
-            if "path=/" in c.lower()
-            and "path=/api" not in c.lower()
+            if "path=/" in c.lower() and "path=/api" not in c.lower()
         ]
         assert len(root_path_cookies) >= 1, (
             "No csrf_token delete cookie at path=/ found on logout"

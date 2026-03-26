@@ -25,13 +25,11 @@ describe("AuthContext", () => {
     render(
       <AuthProvider userId="u1" username="alice" serverName="MyServer">
         <TestConsumer />
-      </AuthProvider>,
+      </AuthProvider>
     );
     expect(screen.getByTestId("userId")).toHaveTextContent("u1");
     expect(screen.getByTestId("username")).toHaveTextContent("alice");
-    expect(screen.getByTestId("serverName")).toHaveTextContent(
-      "MyServer",
-    );
+    expect(screen.getByTestId("serverName")).toHaveTextContent("MyServer");
     expect(screen.getByTestId("isAuth")).toHaveTextContent("true");
   });
 
@@ -39,7 +37,7 @@ describe("AuthContext", () => {
     render(
       <AuthProvider userId="u1" username="alice" serverName="MyServer">
         <TestConsumer />
-      </AuthProvider>,
+      </AuthProvider>
     );
     await act(async () => {
       screen.getByText("clear").click();

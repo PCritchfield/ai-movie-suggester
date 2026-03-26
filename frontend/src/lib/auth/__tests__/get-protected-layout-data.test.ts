@@ -17,9 +17,8 @@ describe("getProtectedLayoutData", () => {
       username: "alice",
       server_name: "Srv",
     });
-    const { getProtectedLayoutData } = await import(
-      "../get-protected-layout-data"
-    );
+    const { getProtectedLayoutData } =
+      await import("../get-protected-layout-data");
     const result = await getProtectedLayoutData();
     expect(result).toEqual({
       type: "success",
@@ -30,9 +29,8 @@ describe("getProtectedLayoutData", () => {
   it("returns redirect on ApiAuthError (401)", async () => {
     const { serverGet } = await import("@/lib/api/server");
     vi.mocked(serverGet).mockRejectedValue(new ApiAuthError(401, {}));
-    const { getProtectedLayoutData } = await import(
-      "../get-protected-layout-data"
-    );
+    const { getProtectedLayoutData } =
+      await import("../get-protected-layout-data");
     const result = await getProtectedLayoutData();
     expect(result).toEqual({
       type: "redirect",
@@ -42,12 +40,9 @@ describe("getProtectedLayoutData", () => {
 
   it("returns redirect on network error", async () => {
     const { serverGet } = await import("@/lib/api/server");
-    vi.mocked(serverGet).mockRejectedValue(
-      new TypeError("fetch failed"),
-    );
-    const { getProtectedLayoutData } = await import(
-      "../get-protected-layout-data"
-    );
+    vi.mocked(serverGet).mockRejectedValue(new TypeError("fetch failed"));
+    const { getProtectedLayoutData } =
+      await import("../get-protected-layout-data");
     const result = await getProtectedLayoutData();
     expect(result).toEqual({
       type: "redirect",
