@@ -106,15 +106,22 @@ def create_auth_router(
             secure=settings.session_secure_cookie,
             path="/api",
         )
-        # Set CSRF token cookie (readable by JS)
+        # Set CSRF token cookie (readable by JS on all pages)
         response.set_cookie(
             key="csrf_token",
             value=csrf_token,
             httponly=False,
             samesite="lax",
             secure=settings.session_secure_cookie,
-            path="/api",
+            path="/",
             max_age=settings.session_expiry_hours * 3600,
+        )
+        # Clean up stale CSRF cookie at old path=/api
+        response.delete_cookie(
+            key="csrf_token",
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path="/api",
         )
         return login_resp
 
@@ -148,6 +155,14 @@ def create_auth_router(
             secure=settings.session_secure_cookie,
             path="/api",
         )
+        # Clear CSRF cookie at current path=/
+        response.delete_cookie(
+            key="csrf_token",
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path="/",
+        )
+        # Clean up stale CSRF cookie at old path=/api
         response.delete_cookie(
             key="csrf_token",
             samesite="lax",
