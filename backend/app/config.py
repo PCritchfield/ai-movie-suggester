@@ -64,6 +64,9 @@ class Settings(BaseSettings):
                 raise ValueError(msg)
         return self
 
+    # Library (shared by LibraryItemStore + SqliteVecRepository)
+    library_db_path: str = "data/library.db"
+
     # Sessions
     session_secure_cookie: bool = True
     max_sessions_per_user: int = 5
