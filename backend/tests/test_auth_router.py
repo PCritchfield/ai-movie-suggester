@@ -116,12 +116,9 @@ class TestLoginSuccess:
             "/api/auth/login",
             json={"username": "alice", "password": "pass123"},
         )
-        raw_headers = resp.headers.raw
         # Find the primary session_id cookie (path=/, not the old-path cleanup)
         session_cookies = [
-            v.decode()
-            for k, v in raw_headers
-            if k == b"set-cookie" and b"session_id" in v
+            c for c in resp.headers.get_list("set-cookie") if "session_id" in c
         ]
         primary = [
             c
@@ -277,11 +274,8 @@ class TestCookieFixes:
         )
         assert resp.status_code == 200
         # Find the csrf_token Set-Cookie header
-        raw_headers = resp.headers.raw
         csrf_cookies = [
-            v.decode()
-            for k, v in raw_headers
-            if k == b"set-cookie" and b"csrf_token" in v
+            c for c in resp.headers.get_list("set-cookie") if "csrf_token" in c
         ]
         assert len(csrf_cookies) >= 1, "csrf_token cookie not found"
         csrf_cookie = csrf_cookies[0].lower()
@@ -297,11 +291,8 @@ class TestCookieFixes:
         )
         assert resp.status_code == 200
         # Should include a Set-Cookie that deletes session_id at the old path=/api
-        raw_headers = resp.headers.raw
         session_cookies = [
-            v.decode()
-            for k, v in raw_headers
-            if k == b"set-cookie" and b"session_id" in v
+            c for c in resp.headers.get_list("set-cookie") if "session_id" in c
         ]
         # Should have both: new (path=/) and delete (path=/api)
         old_path_cookies = [c for c in session_cookies if "path=/api" in c.lower()]
@@ -320,11 +311,8 @@ class TestCookieFixes:
             json={"username": "alice", "password": "pass123"},
         )
         assert resp.status_code == 200
-        raw_headers = resp.headers.raw
         session_cookies = [
-            v.decode()
-            for k, v in raw_headers
-            if k == b"set-cookie" and b"session_id" in v
+            c for c in resp.headers.get_list("set-cookie") if "session_id" in c
         ]
         # The primary session cookie should have path=/
         root_path_cookies = [
