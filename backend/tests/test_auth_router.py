@@ -126,8 +126,7 @@ class TestLoginSuccess:
         primary = [
             c
             for c in session_cookies
-            if "path=/" in c.lower()
-            and "path=/api" not in c.lower()
+            if "path=/" in c.lower() and "path=/api" not in c.lower()
         ]
         assert len(primary) >= 1, "No session_id cookie at path=/ found"
         sc = primary[0].lower()
@@ -305,16 +304,13 @@ class TestCookieFixes:
             if k == b"set-cookie" and b"session_id" in v
         ]
         # Should have both: new (path=/) and delete (path=/api)
-        old_path_cookies = [
-            c for c in session_cookies
-            if "path=/api" in c.lower()
-        ]
+        old_path_cookies = [c for c in session_cookies if "path=/api" in c.lower()]
         assert len(old_path_cookies) >= 1, (
             "No session_id delete cookie at path=/api found"
         )
         # The old-path cookie should have max-age=0 or an expired date
         old_cookie = old_path_cookies[0].lower()
-        assert 'max-age=0' in old_cookie or "01 jan 1970" in old_cookie
+        assert "max-age=0" in old_cookie or "01 jan 1970" in old_cookie
 
     def test_session_cookie_path_is_root(
         self, auth_app: TestClient, mock_jf: AsyncMock
@@ -334,8 +330,7 @@ class TestCookieFixes:
         root_path_cookies = [
             c
             for c in session_cookies
-            if "path=/" in c.lower()
-            and "path=/api" not in c.lower()
+            if "path=/" in c.lower() and "path=/api" not in c.lower()
         ]
         assert len(root_path_cookies) >= 1, "No session_id cookie at path=/ found"
 

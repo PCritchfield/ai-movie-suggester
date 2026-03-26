@@ -140,6 +140,14 @@ def create_auth_router(
     async def logout(request: Request, response: Response) -> LogoutResponse:
         session_id = _decrypt_session_cookie(request)
         _clear_session_cookie(response)
+        # Clean up stale session cookie at old path=/api
+        response.delete_cookie(
+            key="session_id",
+            httponly=True,
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path="/api",
+        )
         response.delete_cookie(
             key="csrf_token",
             samesite="lax",
