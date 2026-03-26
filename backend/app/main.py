@@ -150,6 +150,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         # Shutdown
         cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
         _logger.info("shutting down ai-movie-suggester backend")
         await store.close()
         await http_client.aclose()
