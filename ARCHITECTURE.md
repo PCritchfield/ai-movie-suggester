@@ -138,11 +138,12 @@ All configuration via environment variables (`.env` file). See `.env.example` fo
 
 | Category | Variables | Required |
 |----------|----------|----------|
-| Jellyfin | `JELLYFIN_URL` | Yes |
-| Sessions | `SESSION_SECRET` | Yes |
+| Jellyfin | `JELLYFIN_URL`, `JELLYFIN_TIMEOUT` | `JELLYFIN_URL` required |
+| Sessions | `SESSION_SECRET`, `SESSION_SECURE_COOKIE`, `SESSION_EXPIRY_HOURS`, `SESSION_DB_PATH`, `MAX_SESSIONS_PER_USER` | `SESSION_SECRET` required |
+| Security | `LOGIN_RATE_LIMIT`, `TRUSTED_PROXY_IPS`, `CORS_ORIGIN` | Defaults provided |
 | Ollama | `OLLAMA_HOST`, `OLLAMA_CHAT_MODEL`, `OLLAMA_EMBED_MODEL` | Defaults provided |
 | TMDb | `TMDB_ENABLED`, `TMDB_API_KEY` | No (opt-in) |
-| Tuning | `LOG_LEVEL`, `SESSION_EXPIRY_HOURS`, `CHAT_RATE_LIMIT` | No (defaults provided) |
+| Tuning | `LOG_LEVEL`, `ENABLE_DOCS` | No (defaults provided) |
 
 ## Deployment Models
 
