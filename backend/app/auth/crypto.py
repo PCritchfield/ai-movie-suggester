@@ -53,3 +53,13 @@ def fernet_encrypt(key: bytes, plaintext: str) -> bytes:
 def fernet_decrypt(key: bytes, ciphertext: bytes) -> str:
     """Decrypt *ciphertext* with the given Fernet *key*."""
     return Fernet(key).decrypt(ciphertext).decode("utf-8")
+
+
+def decrypt_cookie(key: bytes, cookie_value: str | None) -> str | None:
+    """Decrypt a session cookie value. Returns None if absent or invalid."""
+    if not cookie_value:
+        return None
+    try:
+        return fernet_decrypt(key, cookie_value.encode("utf-8"))
+    except Exception:
+        return None
