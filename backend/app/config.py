@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     cors_origin: AnyHttpUrl = AnyHttpUrl("http://localhost:3000")
     enable_docs: bool | None = None
 
+    # Library sync
+    library_sync_page_size: int = 200
+
     # Tuning
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     session_expiry_hours: int = 24

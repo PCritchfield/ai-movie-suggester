@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 from pydantic import ValidationError
 
-from app.jellyfin.client import JellyfinClient
+from app.jellyfin.client import _ITEM_FIELDS, JellyfinClient
 from app.jellyfin.errors import (
     JellyfinAuthError,
     JellyfinConnectionError,
@@ -107,6 +107,87 @@ class TestLibraryItem:
         assert item.overview == "A great comedy."
         assert item.genres == ["Comedy", "Sci-Fi"]
         assert item.production_year == 1999
+
+    def test_parse_all_extended_fields(self) -> None:
+        """LibraryItem parses all new fields from representative Jellyfin JSON."""
+        data = {
+            "Id": "item-3",
+            "Name": "Toy Story",
+            "Type": "Movie",
+            "Overview": "A story about toys.",
+            "Genres": ["Animation", "Comedy"],
+            "ProductionYear": 1995,
+            "Tags": ["family", "classic"],
+            "Studios": [{"Name": "Pixar", "Id": "studio-1"}],
+            "CommunityRating": 8.3,
+            "People": [
+                {"Name": "Tom Hanks", "Role": "Woody", "Type": "Actor"},
+                {"Name": "John Lasseter", "Role": "", "Type": "Director"},
+            ],
+        }
+        item = LibraryItem.model_validate(data)
+        assert item.tags == ["family", "classic"]
+        assert item.studios == ["Pixar"]
+        assert item.community_rating == 8.3
+        assert len(item.people) == 2
+        assert item.people[0]["Name"] == "Tom Hanks"
+        assert item.people[0]["Type"] == "Actor"
+        assert item.people[1]["Type"] == "Director"
+
+    def test_extended_fields_default_when_absent(self) -> None:
+        """New fields default correctly when absent from JSON."""
+        data = {"Id": "item-4", "Name": "Minimal Movie", "Type": "Movie"}
+        item = LibraryItem.model_validate(data)
+        assert item.tags == []
+        assert item.studios == []
+        assert item.community_rating is None
+        assert item.people == []
+
+    def test_studios_validator_extracts_names_from_objects(self) -> None:
+        """Studios validator extracts Name from studio objects."""
+        data = {
+            "Id": "item-5",
+            "Name": "Finding Nemo",
+            "Type": "Movie",
+            "Studios": [
+                {"Name": "Pixar", "Id": "abc"},
+                {"Name": "Disney", "Id": "def"},
+            ],
+        }
+        item = LibraryItem.model_validate(data)
+        assert item.studios == ["Pixar", "Disney"]
+
+    def test_studios_validator_handles_plain_string_list(self) -> None:
+        """Studios validator passes through plain string list."""
+        data = {
+            "Id": "item-6",
+            "Name": "Some Movie",
+            "Type": "Movie",
+            "Studios": ["Pixar", "Disney"],
+        }
+        item = LibraryItem.model_validate(data)
+        assert item.studios == ["Pixar", "Disney"]
+
+    def test_people_field_parses_raw_jellyfin_array(self) -> None:
+        """People field parses raw Jellyfin People array with Name, Role, Type."""
+        data = {
+            "Id": "item-7",
+            "Name": "Cast Movie",
+            "Type": "Movie",
+            "People": [
+                {"Name": "Actor One", "Role": "Lead", "Type": "Actor"},
+                {"Name": "Director One", "Role": "", "Type": "Director"},
+                {"Name": "Writer One", "Role": "", "Type": "Writer"},
+            ],
+        }
+        item = LibraryItem.model_validate(data)
+        assert len(item.people) == 3
+        assert item.people[0] == {
+            "Name": "Actor One",
+            "Role": "Lead",
+            "Type": "Actor",
+        }
+        assert item.people[2]["Type"] == "Writer"
 
 
 class TestPaginatedItems:
@@ -443,3 +524,117 @@ class TestGetItems:
         mock_http.request.return_value = httpx.Response(500, request=_FAKE_REQUEST)
         with pytest.raises(JellyfinError):
             await jf_client.get_items("tok-123", "uid-1")
+
+
+class TestGetAllItems:
+    """Tests for get_all_items() auto-paginating async iterator."""
+
+    async def test_two_pages_yields_both(self, jf_client: JellyfinClient) -> None:
+        """Mock get_items() returning two pages, verify iterator yields both."""
+        page1_items = [
+            LibraryItem(id=f"item-{i}", name=f"Movie {i}", type="Movie")
+            for i in range(200)
+        ]
+        page2_items = [
+            LibraryItem(id=f"item-{i}", name=f"Movie {i}", type="Movie")
+            for i in range(200, 250)
+        ]
+        page1 = PaginatedItems(items=page1_items, total_count=250, start_index=0)
+        page2 = PaginatedItems(items=page2_items, total_count=250, start_index=200)
+
+        call_count = 0
+
+        async def mock_get_items(
+            token: str,
+            user_id: str,
+            *,
+            item_types: list[str] | None = None,
+            start_index: int = 0,
+            limit: int = 50,
+            recursive: bool = True,
+        ) -> PaginatedItems:
+            nonlocal call_count
+            call_count += 1
+            if start_index == 0:
+                return page1
+            return page2
+
+        with patch.object(jf_client, "get_items", side_effect=mock_get_items):
+            pages: list[PaginatedItems] = []
+            async for page in jf_client.get_all_items(
+                "tok-123", "uid-1", page_size=200
+            ):
+                pages.append(page)
+
+        assert len(pages) == 2
+        assert len(pages[0].items) == 200
+        assert len(pages[1].items) == 50
+        assert call_count == 2
+
+    async def test_empty_library(self, jf_client: JellyfinClient) -> None:
+        """Empty library yields one page with zero items and stops."""
+        empty_page = PaginatedItems(items=[], total_count=0, start_index=0)
+
+        with patch.object(jf_client, "get_items", return_value=empty_page):
+            pages: list[PaginatedItems] = []
+            async for page in jf_client.get_all_items("tok-123", "uid-1"):
+                pages.append(page)
+
+        assert len(pages) == 1
+        assert pages[0].items == []
+        assert pages[0].total_count == 0
+
+    async def test_auth_error_propagates(self, jf_client: JellyfinClient) -> None:
+        """JellyfinAuthError on first page propagates immediately."""
+        with (
+            patch.object(
+                jf_client, "get_items", side_effect=JellyfinAuthError("expired")
+            ),
+            pytest.raises(JellyfinAuthError),
+        ):
+            async for _page in jf_client.get_all_items("bad-tok", "uid-1"):
+                pass  # pragma: no cover
+
+    async def test_mid_pagination_error(self, jf_client: JellyfinClient) -> None:
+        """JellyfinConnectionError on second page propagates after first yielded."""
+        page1_items = [
+            LibraryItem(id=f"item-{i}", name=f"Movie {i}", type="Movie")
+            for i in range(200)
+        ]
+        page1 = PaginatedItems(items=page1_items, total_count=400, start_index=0)
+
+        call_count = 0
+
+        async def mock_get_items(
+            token: str,
+            user_id: str,
+            *,
+            item_types: list[str] | None = None,
+            start_index: int = 0,
+            limit: int = 50,
+            recursive: bool = True,
+        ) -> PaginatedItems:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return page1
+            raise JellyfinConnectionError("Connection lost")
+
+        pages_received: list[PaginatedItems] = []
+        with (
+            patch.object(jf_client, "get_items", side_effect=mock_get_items),
+            pytest.raises(JellyfinConnectionError),
+        ):
+            async for page in jf_client.get_all_items(
+                "tok-123", "uid-1", page_size=200
+            ):
+                pages_received.append(page)
+
+        assert len(pages_received) == 1
+
+    def test_item_fields_includes_extended_fields(self) -> None:
+        """_ITEM_FIELDS constant includes Tags, Studios, CommunityRating, People."""
+        assert "Tags" in _ITEM_FIELDS
+        assert "Studios" in _ITEM_FIELDS
+        assert "CommunityRating" in _ITEM_FIELDS
+        assert "People" in _ITEM_FIELDS

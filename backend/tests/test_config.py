@@ -225,3 +225,14 @@ def test_blocklist_accepts_strong_secret() -> None:
     with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
     assert len(s.session_secret) >= 32
+
+
+# --- library sync config ---
+
+
+def test_library_sync_page_size_default() -> None:
+    """library_sync_page_size defaults to 200."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.library_sync_page_size == 200
