@@ -45,8 +45,8 @@ export function LoginForm({ reason }: LoginFormProps) {
     setError(null);
 
     const form = new FormData(e.currentTarget);
-    const username = (form.get("username") as string).trim();
-    const password = form.get("password") as string;
+    const username = ((form.get("username") ?? "") as string).trim();
+    const password = (form.get("password") ?? "") as string;
 
     if (!username || !password) {
       setError("Username and password are required.");
@@ -95,7 +95,8 @@ export function LoginForm({ reason }: LoginFormProps) {
               type="text"
               autoComplete="username"
               autoFocus
-              aria-describedby="form-error"
+              aria-invalid={!!error}
+              aria-errormessage={error ? "form-error" : undefined}
               disabled={isPending}
             />
           </div>
@@ -107,7 +108,8 @@ export function LoginForm({ reason }: LoginFormProps) {
               name="password"
               type="password"
               autoComplete="current-password"
-              aria-describedby="form-error"
+              aria-invalid={!!error}
+              aria-errormessage={error ? "form-error" : undefined}
               disabled={isPending}
             />
           </div>
@@ -129,7 +131,7 @@ export function LoginForm({ reason }: LoginFormProps) {
           >
             {isPending ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                 Signing in...
               </>
             ) : (

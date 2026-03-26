@@ -1,5 +1,6 @@
 import { serverGet } from "@/lib/api/server";
 import type { LoginResponse } from "@/lib/api/types";
+import { ApiAuthError } from "@/lib/api/types";
 
 interface UserData {
   userId: string;
@@ -22,7 +23,10 @@ export async function getProtectedLayoutData(): Promise<LayoutData> {
         serverName: data.server_name,
       },
     };
-  } catch {
+  } catch (err) {
+    if (!(err instanceof ApiAuthError)) {
+      console.error("Unexpected error in getProtectedLayoutData:", err);
+    }
     return {
       type: "redirect",
       url: "/login?reason=session_expired",

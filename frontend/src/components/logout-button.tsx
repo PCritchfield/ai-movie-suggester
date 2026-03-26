@@ -18,6 +18,7 @@ export function LogoutButton() {
       await apiPost("/api/auth/logout");
       router.push("/login");
     } catch {
+      setIsPending(false);
       clearAuth();
       router.push("/login?reason=session_expired");
     }
@@ -33,7 +34,7 @@ export function LogoutButton() {
       >
         {isPending ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
             Signing out...
           </>
         ) : (
