@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+    from unittest.mock import AsyncMock
 
 import pytest
 
