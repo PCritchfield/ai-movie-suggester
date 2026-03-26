@@ -303,6 +303,76 @@ class TestCookieFixes:
         old_cookie = old_path_cookies[0].lower()
         assert "max-age=0" in old_cookie or "01 jan 1970" in old_cookie
 
+    def test_csrf_cookie_path_is_root(
+        self, auth_app: TestClient, mock_jf: AsyncMock
+    ) -> None:
+        resp = auth_app.post(
+            "/api/auth/login",
+            json={"username": "alice", "password": "pass123"},
+        )
+        assert resp.status_code == 200
+        raw_headers = resp.headers.raw
+        csrf_cookies = [
+            v.decode()
+            for k, v in raw_headers
+            if k == b"set-cookie" and b"csrf_token" in v
+        ]
+        # The primary csrf_token cookie should have path=/
+        root_path_cookies = [
+            c
+            for c in csrf_cookies
+            if "path=/" in c.lower() and "path=/api" not in c.lower()
+        ]
+        assert len(root_path_cookies) >= 1, "No csrf_token cookie at path=/ found"
+
+    def test_login_deletes_old_path_csrf_cookie(
+        self, auth_app: TestClient, mock_jf: AsyncMock
+    ) -> None:
+        resp = auth_app.post(
+            "/api/auth/login",
+            json={"username": "alice", "password": "pass123"},
+        )
+        assert resp.status_code == 200
+        raw_headers = resp.headers.raw
+        csrf_cookies = [
+            v.decode()
+            for k, v in raw_headers
+            if k == b"set-cookie" and b"csrf_token" in v
+        ]
+        # Should include a delete for csrf_token at the old path=/api
+        old_path_cookies = [c for c in csrf_cookies if "path=/api" in c.lower()]
+        assert len(old_path_cookies) >= 1, (
+            "No csrf_token delete cookie at path=/api found"
+        )
+        old_cookie = old_path_cookies[0].lower()
+        assert "max-age=0" in old_cookie or "01 jan 1970" in old_cookie
+
+    def test_logout_clears_csrf_at_root_path(
+        self, auth_app: TestClient, mock_jf: AsyncMock
+    ) -> None:
+        resp = auth_app.post(
+            "/api/auth/login",
+            json={"username": "alice", "password": "pass123"},
+        )
+        cookies = dict(resp.cookies)
+        resp = auth_app.post("/api/auth/logout", cookies=cookies)
+        assert resp.status_code == 200
+        raw_headers = resp.headers.raw
+        csrf_cookies = [
+            v.decode()
+            for k, v in raw_headers
+            if k == b"set-cookie" and b"csrf_token" in v
+        ]
+        # Should delete csrf_token at path=/ (primary)
+        root_path_cookies = [
+            c
+            for c in csrf_cookies
+            if "path=/" in c.lower() and "path=/api" not in c.lower()
+        ]
+        assert len(root_path_cookies) >= 1, (
+            "No csrf_token delete cookie at path=/ found on logout"
+        )
+
     def test_session_cookie_path_is_root(
         self, auth_app: TestClient, mock_jf: AsyncMock
     ) -> None:

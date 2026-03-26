@@ -1,14 +1,36 @@
-import { expect, test } from "vitest";
-import { render, screen } from "@testing-library/react";
-import Home from "@/app/page";
+import { expect, test, vi, afterEach } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { AuthProvider } from "@/lib/auth/auth-context";
+import { AuthHome } from "@/components/auth-home";
 
-test("home page renders heading", () => {
-  render(<Home />);
-  expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
+vi.mock("@/lib/api/client", () => ({
+  apiPost: vi.fn(),
+}));
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
 });
 
-test("home page displays project name", () => {
-  render(<Home />);
-  const elements = screen.getAllByText(/ai-movie-suggester/i);
-  expect(elements.length).toBeGreaterThan(0);
+test("protected page renders username and server name", () => {
+  render(
+    <AuthProvider userId="u1" username="alice" serverName="MyServer">
+      <AuthHome />
+    </AuthProvider>
+  );
+  expect(screen.getByText("alice")).toBeInTheDocument();
+  expect(screen.getByText(/MyServer/)).toBeInTheDocument();
+});
+
+test("protected page renders logout button", () => {
+  render(
+    <AuthProvider userId="u1" username="alice" serverName="MyServer">
+      <AuthHome />
+    </AuthProvider>
+  );
+  expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
 });

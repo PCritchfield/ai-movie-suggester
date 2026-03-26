@@ -136,8 +136,11 @@ class TestCSRFTokenLifecycle:
         # Verify NOT httponly (JS must read it)
         set_cookies = resp.headers.get_list("set-cookie")
         csrf_cookie = [c for c in set_cookies if "csrf_token" in c]
-        assert len(csrf_cookie) == 1
-        assert "httponly" not in csrf_cookie[0].lower()
+        # Expect 2: primary at path=/ and stale cleanup at path=/api
+        assert len(csrf_cookie) >= 1
+        primary = [c for c in csrf_cookie if "path=/api" not in c.lower()]
+        assert len(primary) == 1
+        assert "httponly" not in primary[0].lower()
 
     def test_logout_clears_csrf_cookie(self, csrf_app: TestClient) -> None:
         """Logout clears the csrf_token cookie."""
