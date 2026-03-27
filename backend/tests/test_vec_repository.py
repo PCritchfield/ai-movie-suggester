@@ -358,6 +358,13 @@ class TestCountAndStatus:
         with pytest.raises(ValueError, match="Invalid embedding status"):
             await vec_repo.set_embedding_status("bad-status", "banana")
 
+    async def test_set_embedding_status_nonexistent_raises_key_error(
+        self, vec_repo: SqliteVecRepository
+    ) -> None:
+        """set_embedding_status() raises KeyError for nonexistent ID."""
+        with pytest.raises(KeyError, match="No vector record for jellyfin_id="):
+            await vec_repo.set_embedding_status("nonexistent", PENDING)
+
     async def test_get_embedding_status_nonexistent(
         self, vec_repo: SqliteVecRepository
     ) -> None:

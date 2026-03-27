@@ -69,10 +69,18 @@ class SqliteVecRepository:
         return self._reader_db
 
     async def _load_vec0(self, conn: aiosqlite.Connection) -> None:
-        """Load the vec0 extension on an aiosqlite connection."""
+        """Load the vec0 extension on an aiosqlite connection.
+
+        Extension loading is disabled immediately after vec0 is loaded
+        to reduce the attack surface — no further extensions can be
+        injected via this connection.
+        """
         try:
             await conn.enable_load_extension(True)
             await conn.load_extension(sqlite_vec.loadable_path())
+            # Close extension loading capability now that vec0 is loaded
+            await conn.enable_load_extension(False)
+            _logger.info("sqlite-vec extension loaded: %s", sqlite_vec.loadable_path())
         except Exception as exc:
             msg = (
                 "Failed to load sqlite-vec extension (vec0). "
@@ -86,6 +94,10 @@ class SqliteVecRepository:
         await self._load_vec0(conn)
         await conn.execute("PRAGMA journal_mode=WAL")
         await conn.execute("PRAGMA foreign_keys=ON")
+        # Prevent "database is locked" errors when reader and writer
+        # contend — wait up to 5 s before raising instead of failing
+        # immediately.
+        await conn.execute("PRAGMA busy_timeout=5000")
 
     async def init(self) -> None:
         """Open connections, load vec0, create schema, validate metadata."""
@@ -161,19 +173,28 @@ class SqliteVecRepository:
     async def upsert(
         self, jellyfin_id: str, embedding: list[float], content_hash: str
     ) -> None:
-        """Insert or update a vector (DELETE + INSERT pattern)."""
+        """Insert or update a vector (DELETE + INSERT pattern).
+
+        Wrapped in an explicit transaction so a crash between DELETE and
+        INSERT rolls back cleanly — no data loss.
+        """
         serialized = _serialize_f32(embedding)
-        await self._writer.execute(
-            "DELETE FROM item_vectors WHERE jellyfin_id = ?",
-            (jellyfin_id,),
-        )
-        await self._writer.execute(
-            "INSERT INTO item_vectors "
-            "(jellyfin_id, embedding, content_hash, embedded_at, embedding_status) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (jellyfin_id, serialized, content_hash, int(time.time()), COMPLETE),
-        )
-        await self._writer.commit()
+        try:
+            await self._writer.execute("BEGIN")
+            await self._writer.execute(
+                "DELETE FROM item_vectors WHERE jellyfin_id = ?",
+                (jellyfin_id,),
+            )
+            await self._writer.execute(
+                "INSERT INTO item_vectors "
+                "(jellyfin_id, embedding, content_hash, embedded_at, embedding_status) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (jellyfin_id, serialized, content_hash, int(time.time()), COMPLETE),
+            )
+            await self._writer.commit()
+        except Exception:
+            await self._writer.rollback()
+            raise
 
     async def get(self, jellyfin_id: str) -> VectorRecord | None:
         """Retrieve a single record's metadata (not the embedding)."""
@@ -273,6 +294,7 @@ class SqliteVecRepository:
         """Update the embedding status for an item.
 
         Raises ValueError for invalid status strings.
+        Raises KeyError if no vector record exists for the given jellyfin_id.
         """
         if status not in VALID_STATUSES:
             msg = (
@@ -280,10 +302,13 @@ class SqliteVecRepository:
                 f"Must be one of: {', '.join(sorted(VALID_STATUSES))}"
             )
             raise ValueError(msg)
-        await self._writer.execute(
+        cursor = await self._writer.execute(
             "UPDATE item_vectors SET embedding_status = ? WHERE jellyfin_id = ?",
             (status, jellyfin_id),
         )
+        if cursor.rowcount == 0:
+            msg = f"No vector record for jellyfin_id={jellyfin_id}"
+            raise KeyError(msg)
         await self._writer.commit()
 
     async def close(self) -> None:

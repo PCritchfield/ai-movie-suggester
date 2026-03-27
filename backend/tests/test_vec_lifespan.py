@@ -143,7 +143,7 @@ class TestStartupFailures:
             await repo.init()
             await repo.close()
 
-        asyncio.get_event_loop().run_until_complete(prepopulate())
+        asyncio.run(prepopulate())
 
         settings = make_test_settings(
             library_db_path=str(db_path),
