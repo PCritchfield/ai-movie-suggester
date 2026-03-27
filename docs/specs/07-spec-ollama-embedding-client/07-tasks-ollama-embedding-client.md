@@ -105,7 +105,7 @@ Create `backend/app/ollama/text_builder.py` with `TEMPLATE_VERSION = 1` constant
 
 ---
 
-### [ ] 3.0 End-to-End Wiring + Health Integration
+### [x] 3.0 End-to-End Wiring + Health Integration
 
 Wire `OllamaEmbeddingClient` into the application lifespan in `main.py`: create a SEPARATE `httpx.AsyncClient` with `timeout=settings.ollama_embed_timeout`, instantiate `OllamaEmbeddingClient`, store on `app.state.ollama_client`. LIFO shutdown order (Ollama httpx closed before Jellyfin httpx). Update `/health` endpoint to use `OllamaEmbeddingClient.health()` instead of ad-hoc `_check_service()` for Ollama status. Update `.env.example` with new config fields. Document network trust assumption in `OllamaEmbeddingClient` docstring.
 
@@ -120,16 +120,16 @@ Wire `OllamaEmbeddingClient` into the application lifespan in `main.py`: create 
 
 #### 3.0 Tasks
 
-- [ ] 3.1 Update `backend/app/main.py` lifespan: after creating the Jellyfin httpx client, create a separate Ollama httpx client: `ollama_http = httpx.AsyncClient(timeout=settings.ollama_embed_timeout)`. Import `OllamaEmbeddingClient` from `app.ollama`.
-- [ ] 3.2 Instantiate `OllamaEmbeddingClient` in lifespan: `ollama_client = OllamaEmbeddingClient(base_url=settings.ollama_host, http_client=ollama_http, embed_model=settings.ollama_embed_model, health_timeout=settings.ollama_health_timeout)`. Store as `app.state.ollama_client`.
-- [ ] 3.3 Update lifespan shutdown to close `ollama_http` BEFORE `http_client` (Jellyfin) — LIFO order. Add `await ollama_http.aclose()` before the existing `await http_client.aclose()` line.
-- [ ] 3.4 Update the startup connectivity check: replace the ad-hoc `_check_service()` call for Ollama with `ollama_client.health()`. Convert the boolean result to `"ok"` / `"error"` for the existing log message format.
-- [ ] 3.5 Update the `/health` endpoint: replace the ad-hoc `_check_service()` call for Ollama with `app.state.ollama_client.health()`. Convert the boolean to `ServiceStatus` (`"ok"` if True, `"error"` if False). Keep the Jellyfin `_check_service()` call unchanged.
-- [ ] 3.6 Remove the Ollama-specific `_check_service()` usage from the `/health` endpoint. The `_check_service()` helper can remain for Jellyfin; only the Ollama path changes. Clean up the unused `asyncio.gather` if both calls are no longer grouped together, or restructure to gather both (Jellyfin via `_check_service`, Ollama via `health()`).
-- [ ] 3.7 Update `.env.example`: add `OLLAMA_EMBED_TIMEOUT=120` and `OLLAMA_HEALTH_TIMEOUT=5` as commented-out entries in the `# --- Ollama ---` section, with comments documenting the defaults and purpose (e.g., `# Timeout in seconds for embedding requests (default: 120)`).
-- [ ] 3.8 Write unit tests in `backend/tests/test_main.py` (or `test_lifespan.py`): verify that after lifespan startup, `app.state.ollama_client` is an instance of `OllamaEmbeddingClient`. Verify that on shutdown, the Ollama httpx client's `aclose()` is called.
-- [ ] 3.9 Write unit tests: mock `OllamaEmbeddingClient.health()` to return `True` and verify `/health` endpoint returns `{"ollama": "ok", ...}`. Mock it to return `False` and verify `/health` returns `{"ollama": "error", ...}`.
-- [ ] 3.10 Write unit tests: verify LIFO shutdown order — Ollama httpx `aclose()` is called before Jellyfin httpx `aclose()`. Use mock call order tracking.
-- [ ] 3.11 Write integration test (marked `@pytest.mark.integration`): full pipeline test — create a `LibraryItem` with realistic data, call `build_composite_text()`, pass result to `OllamaEmbeddingClient.embed()`, verify returned vector has 768 dimensions.
-- [ ] 3.12 Write integration test (marked `@pytest.mark.integration`): semantic similarity verification — create two similar `LibraryItem`s (e.g., both sci-fi: "Alien" and "Aliens") and one dissimilar (e.g., romantic comedy). Build composite text for each, embed all three, compute cosine similarity. Assert `similarity(sci-fi A, sci-fi B) > similarity(sci-fi A, romcom)`.
-- [ ] 3.13 Verify `.env.example` contains new fields: run `grep OLLAMA_EMBED_TIMEOUT .env.example && grep OLLAMA_HEALTH_TIMEOUT .env.example` and confirm both are present.
+- [x] 3.1 Update `backend/app/main.py` lifespan: after creating the Jellyfin httpx client, create a separate Ollama httpx client: `ollama_http = httpx.AsyncClient(timeout=settings.ollama_embed_timeout)`. Import `OllamaEmbeddingClient` from `app.ollama`.
+- [x] 3.2 Instantiate `OllamaEmbeddingClient` in lifespan: `ollama_client = OllamaEmbeddingClient(base_url=settings.ollama_host, http_client=ollama_http, embed_model=settings.ollama_embed_model, health_timeout=settings.ollama_health_timeout)`. Store as `app.state.ollama_client`.
+- [x] 3.3 Update lifespan shutdown to close `ollama_http` BEFORE `http_client` (Jellyfin) — LIFO order. Add `await ollama_http.aclose()` before the existing `await http_client.aclose()` line.
+- [x] 3.4 Update the startup connectivity check: replace the ad-hoc `_check_service()` call for Ollama with `ollama_client.health()`. Convert the boolean result to `"ok"` / `"error"` for the existing log message format.
+- [x] 3.5 Update the `/health` endpoint: replace the ad-hoc `_check_service()` call for Ollama with `app.state.ollama_client.health()`. Convert the boolean to `ServiceStatus` (`"ok"` if True, `"error"` if False). Keep the Jellyfin `_check_service()` call unchanged.
+- [x] 3.6 Remove the Ollama-specific `_check_service()` usage from the `/health` endpoint. The `_check_service()` helper can remain for Jellyfin; only the Ollama path changes. Clean up the unused `asyncio.gather` if both calls are no longer grouped together, or restructure to gather both (Jellyfin via `_check_service`, Ollama via `health()`).
+- [x] 3.7 Update `.env.example`: add `OLLAMA_EMBED_TIMEOUT=120` and `OLLAMA_HEALTH_TIMEOUT=5` as commented-out entries in the `# --- Ollama ---` section, with comments documenting the defaults and purpose (e.g., `# Timeout in seconds for embedding requests (default: 120)`).
+- [x] 3.8 Write unit tests in `backend/tests/test_main.py` (or `test_lifespan.py`): verify that after lifespan startup, `app.state.ollama_client` is an instance of `OllamaEmbeddingClient`. Verify that on shutdown, the Ollama httpx client's `aclose()` is called.
+- [x] 3.9 Write unit tests: mock `OllamaEmbeddingClient.health()` to return `True` and verify `/health` endpoint returns `{"ollama": "ok", ...}`. Mock it to return `False` and verify `/health` returns `{"ollama": "error", ...}`.
+- [x] 3.10 Write unit tests: verify LIFO shutdown order — Ollama httpx `aclose()` is called before Jellyfin httpx `aclose()`. Use mock call order tracking.
+- [x] 3.11 Write integration test (marked `@pytest.mark.integration`): full pipeline test — create a `LibraryItem` with realistic data, call `build_composite_text()`, pass result to `OllamaEmbeddingClient.embed()`, verify returned vector has 768 dimensions.
+- [x] 3.12 Write integration test (marked `@pytest.mark.integration`): semantic similarity verification — create two similar `LibraryItem`s (e.g., both sci-fi: "Alien" and "Aliens") and one dissimilar (e.g., romantic comedy). Build composite text for each, embed all three, compute cosine similarity. Assert `similarity(sci-fi A, sci-fi B) > similarity(sci-fi A, romcom)`.
+- [x] 3.13 Verify `.env.example` contains new fields: run `grep OLLAMA_EMBED_TIMEOUT .env.example && grep OLLAMA_HEALTH_TIMEOUT .env.example` and confirm both are present.

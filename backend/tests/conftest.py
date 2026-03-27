@@ -47,10 +47,19 @@ def make_test_settings(**overrides: str | int | float | bool | None) -> Settings
 def make_test_client(
     **settings_overrides: str | int | float | bool | None,
 ) -> TestClient:
-    """Create a TestClient with custom settings for tests needing overrides."""
-    return TestClient(create_app(make_test_settings(**settings_overrides)))
+    """Create a TestClient with custom settings for tests needing overrides.
+
+    Returns a TestClient with lifespan started (via context manager entry).
+    The caller should call ``client.close()`` or use ``with`` for cleanup,
+    but test-scoped clients are cleaned up automatically by pytest.
+    """
+    tc = TestClient(create_app(make_test_settings(**settings_overrides)))
+    tc.__enter__()
+    return tc
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return make_test_client()
+def client() -> TestClient:  # type: ignore[misc]
+    tc = make_test_client()
+    yield tc  # type: ignore[misc]
+    tc.__exit__(None, None, None)
