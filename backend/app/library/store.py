@@ -175,27 +175,32 @@ class LibraryStore:
             )
 
         if params_list:
-            await self._conn.executemany(
-                """INSERT INTO library_items
-                   (jellyfin_id, title, overview, production_year,
-                    genres, tags, studios, community_rating,
-                    people, content_hash, synced_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(jellyfin_id) DO UPDATE SET
-                    title = excluded.title,
-                    overview = excluded.overview,
-                    production_year = excluded.production_year,
-                    genres = excluded.genres,
-                    tags = excluded.tags,
-                    studios = excluded.studios,
-                    community_rating = excluded.community_rating,
-                    people = excluded.people,
-                    content_hash = excluded.content_hash,
-                    synced_at = excluded.synced_at""",
-                params_list,
-            )
-
-        await self._conn.commit()
+            await self._conn.execute("BEGIN")
+            try:
+                await self._conn.executemany(
+                    """INSERT INTO library_items
+                       (jellyfin_id, title, overview, production_year,
+                        genres, tags, studios, community_rating,
+                        people, content_hash, synced_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(jellyfin_id) DO UPDATE SET
+                        title = excluded.title,
+                        overview = excluded.overview,
+                        production_year = excluded.production_year,
+                        genres = excluded.genres,
+                        tags = excluded.tags,
+                        studios = excluded.studios,
+                        community_rating = excluded.community_rating,
+                        people = excluded.people,
+                        content_hash = excluded.content_hash,
+                        synced_at = excluded.synced_at""",
+                    params_list,
+                )
+            except Exception:
+                await self._conn.rollback()
+                raise
+            else:
+                await self._conn.commit()
         return UpsertResult(created=created, updated=updated, unchanged=unchanged)
 
     async def get(self, jellyfin_id: str) -> LibraryItemRow | None:

@@ -221,6 +221,10 @@ class JellyfinClient:
 
         Token is passed through to get_items() on each call, never stored.
         """
+        if page_size <= 0:
+            msg = f"page_size must be positive, got {page_size}"
+            raise ValueError(msg)
+
         start_index = 0
         page_number = 0
 
@@ -239,6 +243,16 @@ class JellyfinClient:
                 len(page.items),
             )
             yield page
+
+            if not page.items:
+                logger.warning(
+                    "empty page from Jellyfin; stopping pagination "
+                    "(page=%d, start_index=%d, total_count=%d)",
+                    page_number,
+                    start_index,
+                    page.total_count,
+                )
+                break
 
             start_index += len(page.items)
             if start_index >= page.total_count:
