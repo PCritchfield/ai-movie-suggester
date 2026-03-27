@@ -14,6 +14,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "slowapi" },
+    { name = "sqlite-vec" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -40,6 +41,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
     { name = "slowapi", specifier = ">=0.1.9" },
+    { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 provides-extras = ["dev"]
@@ -725,6 +727,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a0/99/adfc7f94ca024736f061257d39118e1542bade7a52e86415a4c4ae92d8ff/slowapi-0.1.9.tar.gz", hash = "sha256:639192d0f1ca01b1c6d95bf6c71d794c3a9ee189855337b4821f7f457dddad77", size = 14028, upload-time = "2024-02-05T12:11:52.13Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/bb/f71c4b7d7e7eb3fc1e8c0458a8979b912f40b58002b9fbf37729b8cb464b/slowapi-0.1.9-py3-none-any.whl", hash = "sha256:cfad116cfb84ad9d763ee155c1e5c5cbf00b0d47399a769b227865f5df576e36", size = 14670, upload-time = "2024-02-05T12:11:50.898Z" },
+]
+
+[[package]]
+name = "sqlite-vec"
+version = "0.1.7"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/50/7ad59cfd3003a2110cc366e526293de4c2520486f5ddaa8dc78b265f8d3e/sqlite_vec-0.1.7-py3-none-macosx_10_6_x86_64.whl", hash = "sha256:c34a136caecff4ae17d4c0cc268fcda89764ee870039caa21431e8e3fb2f4d48", size = 131171, upload-time = "2026-03-17T07:42:50.438Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/c9/1cd2f59b539096cd2ce6b540247b2dfe3c47ba04d9368b5e8e3dc86498d4/sqlite_vec-0.1.7-py3-none-macosx_11_0_arm64.whl", hash = "sha256:6d272593d1b45ec7ea289b160ee6e5fafbaa6e1f5ba15f1305c012b0bda43653", size = 165434, upload-time = "2026-03-17T07:42:51.555Z" },
+    { url = "https://files.pythonhosted.org/packages/75/91/30c3c382140dcc7bc6e3a07eac7ca610a2b5b70eb9bc7066dc3e7f748d58/sqlite_vec-0.1.7-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:8d27746d8e254a390bd15574aed899a0b9bb915b5321eb130a9c09722898cc03", size = 160076, upload-time = "2026-03-17T07:42:52.451Z" },
+    { url = "https://files.pythonhosted.org/packages/59/56/6ff304d917ee79da769708dad0aed5fd34c72cbd0ae5e38bcc56cdc652a4/sqlite_vec-0.1.7-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux1_x86_64.whl", hash = "sha256:ad654283cb9c059852ce2d82018c757b06a705ada568f8b126022a131189818e", size = 163388, upload-time = "2026-03-17T07:42:53.516Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/27/fb1b6e3f9072854fe405f7aa99c46d4b465e84c9cec2ff7778edf29ecbbd/sqlite_vec-0.1.7-py3-none-win_amd64.whl", hash = "sha256:0c67877a87cb49426237b950237e82dbeb77778ab2ba89bea859f391fd169382", size = 292804, upload-time = "2026-03-17T07:42:54.325Z" },
 ]
 
 [[package]]

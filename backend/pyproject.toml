@@ -12,6 +12,7 @@ dependencies = [
     "cryptography>=44.0.0",
     "aiosqlite>=0.20.0",
     "slowapi>=0.1.9",
+    "sqlite-vec>=0.1.6",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +38,7 @@ addopts = "--strict-markers"
 strict_markers = true
 markers = [
     "integration: marks tests as requiring a live Jellyfin instance (deselect with '-m \"not integration\"')",
+    "requires_sqlite_vec: marks tests that need the sqlite-vec extension",
 ]
 
 [tool.pyright]

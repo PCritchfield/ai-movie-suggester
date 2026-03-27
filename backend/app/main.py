@@ -27,6 +27,7 @@ from app.middleware import SecurityHeadersMiddleware
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.rate_limit import create_limiter
 from app.models import EmbeddingsStatus, HealthResponse, ServiceStatus
+from app.vectors.repository import SqliteVecRepository
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -94,6 +95,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         library_store = LibraryStore(settings.library_db_path)
         await library_store.init()
         app.state.library_store = library_store
+
+        # Open vector repository (shares library.db, after library store)
+        vec_repo = SqliteVecRepository(
+            db_path=settings.library_db_path,
+            expected_model=settings.ollama_embed_model,
+            expected_dimensions=settings.ollama_embed_dimensions,
+        )
+        try:
+            await vec_repo.init()
+        except RuntimeError:
+            _logger.critical(
+                "vec_repo init failed — extension or dimension mismatch",
+                exc_info=True,
+            )
+            raise
+        app.state.vec_repo = vec_repo
 
         # Create shared HTTP client and Jellyfin client
         http_client = httpx.AsyncClient(timeout=settings.jellyfin_timeout)
@@ -173,6 +190,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with contextlib.suppress(asyncio.CancelledError):
             await cleanup_task
         _logger.info("shutting down ai-movie-suggester backend")
+        # Shutdown: reverse init order (vec_repo → library_store → session store)
+        await vec_repo.close()
+        # TODO(Spec 07): WAL checkpoint after bulk embedding operations
         await library_store.close()
         await store.close()
         await http_client.aclose()
@@ -200,10 +220,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     _logger,
                 ),
             )
+        # Report real embedding count from vec_repo (if initialised)
+        try:
+            vec_repo = application.state.vec_repo
+            total = await vec_repo.count()
+        except Exception:
+            total = 0
         return HealthResponse(
             jellyfin=jf,
             ollama=ol,
-            embeddings=EmbeddingsStatus(total=0, pending=0),
+            embeddings=EmbeddingsStatus(
+                total=total,
+                pending=0,  # Updated by embedding pipeline (Spec 07)
+            ),
         )
 
     # Middleware registration order matters — FastAPI processes middleware
