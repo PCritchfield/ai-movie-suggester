@@ -321,7 +321,7 @@ class TestLengthWarning:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.ollama_integration
 class TestTextBuilderIntegration:
     """Integration: build text, embed via Ollama, verify vector dimensions."""
 

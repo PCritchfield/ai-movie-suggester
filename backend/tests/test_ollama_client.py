@@ -401,7 +401,7 @@ class TestConfigOllamaFields:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.ollama_integration
 class TestOllamaIntegration:
     """Integration tests requiring a running Ollama instance."""
 

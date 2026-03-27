@@ -89,7 +89,7 @@ class TestLifespanShutdownOrder:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
+@pytest.mark.ollama_integration
 class TestFullPipelineIntegration:
     """Full pipeline: LibraryItem -> composite text -> embed -> 768-dim vector."""
 
