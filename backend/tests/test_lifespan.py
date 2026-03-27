@@ -22,8 +22,10 @@ class TestLifespanOllamaWiring:
         """After lifespan startup, app.state.ollama_client is set."""
         client = make_test_client()
         try:
-            assert hasattr(client.app.state, "ollama_client")
-            assert isinstance(client.app.state.ollama_client, OllamaEmbeddingClient)
+            app = client.app
+            assert hasattr(app, "state")
+            assert hasattr(app.state, "ollama_client")  # type: ignore[union-attr]
+            assert isinstance(app.state.ollama_client, OllamaEmbeddingClient)  # type: ignore[union-attr]
         finally:
             client.close()
 
