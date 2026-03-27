@@ -74,7 +74,7 @@ Extend the `LibraryItem` Pydantic model with fields needed for embedding (tags, 
 
 ---
 
-### [~] 2.0 Library Metadata Store (SQLite Repository)
+### [x] 2.0 Library Metadata Store (SQLite Repository)
 
 Create `backend/app/library/` module with `LibraryStore` (SQLite repository following `SessionStore` pattern), `LibraryItemRow` and `UpsertResult` dataclasses, `LibraryStoreProtocol`, and placeholder content-hash function. Implements bulk upsert with created/updated/unchanged tracking, single/batch get, hash retrieval, and count.
 
@@ -166,7 +166,7 @@ Create `backend/app/library/` module with `LibraryStore` (SQLite repository foll
 
 ---
 
-### [ ] 3.0 App Wiring, Config, and Documentation
+### [x] 3.0 App Wiring, Config, and Documentation
 
 Wire `LibraryStore` into `main.py` lifespan (init after `SessionStore`, close before), add `JELLYFIN_API_KEY` config with whitespace validation, create sync-dedicated `JellyfinClient` instance when API key is set, update `.env.example` and `ARCHITECTURE.md`.
 

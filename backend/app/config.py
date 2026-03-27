@@ -76,8 +76,23 @@ class Settings(BaseSettings):
     enable_docs: bool | None = None
 
     # Library sync
+    jellyfin_api_key: str | None = None
     library_db_path: str = "data/library.db"
     library_sync_page_size: int = 200
+
+    @model_validator(mode="after")
+    def _validate_jellyfin_api_key(self) -> Settings:
+        """Strip whitespace from API key; treat empty/whitespace-only as None."""
+        if self.jellyfin_api_key is not None:
+            stripped = self.jellyfin_api_key.strip()
+            if not stripped:
+                _logger.warning(
+                    "JELLYFIN_API_KEY is empty/whitespace-only — treating as unset"
+                )
+                self.jellyfin_api_key = None
+            else:
+                self.jellyfin_api_key = stripped
+        return self
 
     # Tuning
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"

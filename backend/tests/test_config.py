@@ -244,3 +244,46 @@ def test_library_db_path_default() -> None:
     with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
     assert s.library_db_path == "data/library.db"
+
+
+# --- jellyfin_api_key ---
+
+
+def test_jellyfin_api_key_default_none() -> None:
+    """jellyfin_api_key defaults to None when env var not set."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.jellyfin_api_key is None
+
+
+def test_jellyfin_api_key_valid_value() -> None:
+    """Valid JELLYFIN_API_KEY is stored in settings."""
+    env = {**_REQUIRED_ENV, "JELLYFIN_API_KEY": "my-api-key-123"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.jellyfin_api_key == "my-api-key-123"
+
+
+def test_jellyfin_api_key_empty_treated_as_none() -> None:
+    """Empty string JELLYFIN_API_KEY is treated as None."""
+    env = {**_REQUIRED_ENV, "JELLYFIN_API_KEY": ""}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.jellyfin_api_key is None
+
+
+def test_jellyfin_api_key_whitespace_treated_as_none() -> None:
+    """Whitespace-only JELLYFIN_API_KEY is treated as None."""
+    env = {**_REQUIRED_ENV, "JELLYFIN_API_KEY": "   "}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.jellyfin_api_key is None
+
+
+def test_jellyfin_api_key_whitespace_stripped() -> None:
+    """JELLYFIN_API_KEY with leading/trailing whitespace is stripped."""
+    env = {**_REQUIRED_ENV, "JELLYFIN_API_KEY": "  key123  "}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.jellyfin_api_key == "key123"

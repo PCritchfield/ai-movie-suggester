@@ -21,6 +21,7 @@ from app.auth.service import AuthService, cleanup_expired_sessions
 from app.auth.session_store import SessionStore
 from app.config import Settings
 from app.jellyfin.client import JellyfinClient
+from app.library.store import LibraryStore
 from app.logging_config import configure_logging
 from app.middleware import SecurityHeadersMiddleware
 from app.middleware.csrf import CSRFMiddleware
@@ -87,6 +88,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.session_store = store
         app.state.cookie_key = cookie_key
 
+        # Open library store (after session store)
+        lib_db_dir = pathlib.Path(settings.library_db_path).parent
+        lib_db_dir.mkdir(parents=True, exist_ok=True)
+        library_store = LibraryStore(settings.library_db_path)
+        await library_store.init()
+        app.state.library_store = library_store
+
         # Create shared HTTP client and Jellyfin client
         http_client = httpx.AsyncClient(timeout=settings.jellyfin_timeout)
         jf_client = JellyfinClient(
@@ -94,6 +102,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             http_client=http_client,
         )
         app.state.jellyfin_client = jf_client
+
+        # Create sync JellyfinClient if API key is configured
+        if settings.jellyfin_api_key:
+            sync_jf_client = JellyfinClient(
+                base_url=settings.jellyfin_url,
+                http_client=http_client,
+                device_id="ai-movie-suggester-sync",
+            )
+            app.state.sync_jellyfin_client = sync_jf_client
+        else:
+            _logger.info("background sync disabled — JELLYFIN_API_KEY not configured")
 
         # Wire auth service and router
         auth_service = AuthService(
@@ -149,11 +168,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         yield
 
-        # Shutdown
+        # Shutdown (reverse initialization order)
         cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await cleanup_task
         _logger.info("shutting down ai-movie-suggester backend")
+        await library_store.close()
         await store.close()
         await http_client.aclose()
 
