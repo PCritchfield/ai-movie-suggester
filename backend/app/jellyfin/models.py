@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AuthResult(BaseModel):
@@ -49,6 +49,24 @@ class LibraryItem(BaseModel):
     overview: str | None = Field(default=None, alias="Overview")
     genres: list[str] = Field(default_factory=list, alias="Genres")
     production_year: int | None = Field(default=None, alias="ProductionYear")
+    tags: list[str] = Field(default_factory=list, alias="Tags")
+    studios: list[str] = Field(default_factory=list, alias="Studios")
+    community_rating: float | None = Field(default=None, alias="CommunityRating")
+    people: list[dict[str, Any]] = Field(default_factory=list, alias="People")
+
+    @field_validator("studios", mode="before")
+    @classmethod
+    def _extract_studio_names(cls, v: Any) -> list[str]:
+        """Extract Name from studio objects; pass through plain strings."""
+        if not isinstance(v, list):
+            return []
+        result: list[str] = []
+        for item in v:
+            if isinstance(item, dict) and "Name" in item:
+                result.append(item["Name"])
+            elif isinstance(item, str):
+                result.append(item)
+        return result
 
 
 class PaginatedItems(BaseModel):

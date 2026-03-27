@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Literal
 
-from pydantic import AnyHttpUrl, Field, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _logger = logging.getLogger(__name__)
@@ -74,6 +74,25 @@ class Settings(BaseSettings):
     # Security
     cors_origin: AnyHttpUrl = AnyHttpUrl("http://localhost:3000")
     enable_docs: bool | None = None
+
+    # Library sync
+    jellyfin_api_key: SecretStr | None = None
+    library_db_path: str = "data/library.db"
+    library_sync_page_size: int = 200
+
+    @model_validator(mode="after")
+    def _validate_jellyfin_api_key(self) -> Settings:
+        """Strip whitespace from API key; treat empty/whitespace-only as None."""
+        if self.jellyfin_api_key is not None:
+            stripped = self.jellyfin_api_key.get_secret_value().strip()
+            if not stripped:
+                _logger.warning(
+                    "JELLYFIN_API_KEY is empty/whitespace-only — treating as unset"
+                )
+                self.jellyfin_api_key = None
+            elif stripped != self.jellyfin_api_key.get_secret_value():
+                self.jellyfin_api_key = SecretStr(stripped)
+        return self
 
     # Tuning
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"

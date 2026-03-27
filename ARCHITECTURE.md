@@ -110,11 +110,15 @@ sequenceDiagram
 - **Session manager** (Epic 4): Device picker for "Play on TV"
 - **PWA shell**: Installable, mobile-first, works on phone-as-remote use case
 
-### SQLite-vec
-- **Vector storage**: 768-dimensional embeddings for library items
-- **App data**: Content hashes, sync timestamps, embedding metadata
-- **Access pattern**: WAL mode, separate read/write connection pools
-- **Abstraction**: Behind a repository interface for potential future swap
+### SQLite-vec / SQLite Databases
+The application uses a two-file database strategy:
+- **`data/sessions.db`**: Auth/session data — encrypted tokens, CSRF, expiry. Small rows, frequent read/write. Managed by `SessionStore`.
+- **`data/library.db`**: Library item metadata — titles, genres, content hashes, and future vector embeddings (SQLite-vec). Large batch writes during sync, read-heavy during search. Managed by `LibraryStore`.
+
+Rationale: Different access patterns (sessions are small/frequent; library is large/batch), different backup and migration lifecycles. `library.db` will eventually house SQLite-vec extension data; `sessions.db` is plain SQLite. Both use WAL mode and aiosqlite.
+
+- **Vector storage**: 768-dimensional embeddings for library items (future — Spec 06)
+- **Abstraction**: Behind repository interfaces (`SessionStoreProtocol`, `LibraryStoreProtocol`) for potential future swap
 
 ### Ollama
 - **Embedding model**: `nomic-embed-text` for library indexing
@@ -131,6 +135,9 @@ sequenceDiagram
 - **Network**: Backend binds to 127.0.0.1 by default. External access via existing reverse proxy (Caddy).
 - **Privacy**: All AI inference is local. TMDb enrichment is opt-in with documented data disclosure.
 - **API hardening**: CORS restricted to frontend origin. `/docs` disabled in production. Rate limiting on chat endpoint. Security headers via middleware.
+- **Credential distinction**: Two types of Jellyfin credentials are used, with different handling:
+  - **User tokens** (per-session): Encrypted at rest in `sessions.db` using Fernet with HKDF-derived keys. Never persisted to objects, never logged. Request-scoped — passed as parameters, not stored on instances.
+  - **Infrastructure API key** (`JELLYFIN_API_KEY`): Operator-configured, server-scoped. Enables background library sync without a logged-in user session. Loaded once at startup from environment. Never logged at any level. Treat like a root password.
 
 ## Configuration
 

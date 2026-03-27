@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import httpx
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncIterator, Callable
 
 from app.jellyfin.errors import (
     JellyfinAuthError,
@@ -31,7 +31,7 @@ _APP_VERSION = "0.1.0"
 _DEVICE = "Server"
 _DEFAULT_DEVICE_ID = "ai-movie-suggester-server"
 # Fields to request from Jellyfin — matches our LibraryItem model
-_ITEM_FIELDS = "Overview,Genres,ProductionYear"
+_ITEM_FIELDS = "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,People"
 
 
 class JellyfinClient:
@@ -203,3 +203,57 @@ class JellyfinClient:
             params=params,
         )
         return self._parse_response(resp, PaginatedItems.model_validate)
+
+    async def get_all_items(
+        self,
+        token: str,
+        user_id: str,
+        *,
+        item_types: list[str] | None = None,
+        page_size: int = 200,
+    ) -> AsyncIterator[PaginatedItems]:
+        """Auto-paginate library items, yielding each page.
+
+        Calls get_items() in a loop, yielding each PaginatedItems page.
+        Stops when all items have been fetched (start_index >= total_count).
+        Propagates JellyfinAuthError and JellyfinConnectionError without
+        catching them — the caller handles partial failure.
+
+        Token is passed through to get_items() on each call, never stored.
+        """
+        if page_size <= 0:
+            msg = f"page_size must be positive, got {page_size}"
+            raise ValueError(msg)
+
+        start_index = 0
+        page_number = 0
+
+        while True:
+            page = await self.get_items(
+                token,
+                user_id,
+                item_types=item_types,
+                start_index=start_index,
+                limit=page_size,
+            )
+            page_number += 1
+            logger.debug(
+                "library fetch page=%d items_on_page=%d",
+                page_number,
+                len(page.items),
+            )
+            yield page
+
+            if not page.items:
+                logger.warning(
+                    "empty page from Jellyfin; stopping pagination "
+                    "(page=%d, start_index=%d, total_count=%d)",
+                    page_number,
+                    start_index,
+                    page.total_count,
+                )
+                break
+
+            start_index += len(page.items)
+            if start_index >= page.total_count:
+                break
