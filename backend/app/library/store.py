@@ -79,7 +79,21 @@ class LibraryStore:
 
     @staticmethod
     def _row_to_item(row: Any) -> LibraryItemRow:
-        """Deserialize a database row into a LibraryItemRow."""
+        """Deserialize a database row into a LibraryItemRow.
+
+        Column mapping (must match SELECT order in all queries):
+          0: jellyfin_id   TEXT PK
+          1: title          TEXT NOT NULL
+          2: overview       TEXT (nullable)
+          3: production_year INTEGER (nullable)
+          4: genres         TEXT (JSON array)
+          5: tags           TEXT (JSON array)
+          6: studios        TEXT (JSON array)
+          7: community_rating REAL (nullable)
+          8: people         TEXT (JSON array)
+          9: content_hash   TEXT NOT NULL
+         10: synced_at      INTEGER NOT NULL
+        """
         return LibraryItemRow(
             jellyfin_id=row[0],
             title=row[1],
@@ -94,23 +108,45 @@ class LibraryStore:
             synced_at=row[10],
         )
 
+    async def _get_hashes_for_ids(self, ids: list[str]) -> dict[str, str]:
+        """Return {jellyfin_id: content_hash} for the given IDs only."""
+        if not ids:
+            return {}
+
+        result: dict[str, str] = {}
+        for i in range(0, len(ids), _BATCH_SIZE):
+            batch = ids[i : i + _BATCH_SIZE]
+            placeholders = ",".join("?" * len(batch))
+            cursor = await self._conn.execute(
+                f"SELECT jellyfin_id, content_hash FROM library_items "
+                f"WHERE jellyfin_id IN ({placeholders})",
+                batch,
+            )
+            rows = await cursor.fetchall()
+            for row in rows:
+                result[row[0]] = row[1]
+        return result
+
     async def upsert_many(self, items: list[LibraryItemRow]) -> UpsertResult:
         """Bulk upsert library items with created/updated/unchanged tracking.
 
         Wraps the entire batch in a single transaction. Fetches existing
-        hashes first to classify each item as created, updated, or unchanged.
-        Uses INSERT ... ON CONFLICT(jellyfin_id) DO UPDATE SET ... — never
-        INSERT OR REPLACE.
+        hashes for the batch IDs to classify each item as created, updated,
+        or unchanged. Unchanged items are skipped entirely. Uses executemany()
+        for a single batch SQL call. Uses INSERT ... ON CONFLICT(jellyfin_id)
+        DO UPDATE SET ... — never INSERT OR REPLACE.
         """
         if not items:
             return UpsertResult(created=0, updated=0, unchanged=0)
 
-        # Fetch existing hashes in bulk for comparison
-        existing_hashes = await self.get_all_hashes()
+        # Fetch existing hashes only for IDs in this batch
+        batch_ids = [item.jellyfin_id for item in items]
+        existing_hashes = await self._get_hashes_for_ids(batch_ids)
 
         created = 0
         updated = 0
         unchanged = 0
+        params_list: list[tuple[object, ...]] = []
 
         for item in items:
             old_hash = existing_hashes.get(item.jellyfin_id)
@@ -120,8 +156,24 @@ class LibraryStore:
                 updated += 1
             else:
                 unchanged += 1
+                continue  # Skip unchanged items — no SQL needed
 
-            await self._conn.execute(
+            params_list.append((
+                item.jellyfin_id,
+                item.title,
+                item.overview,
+                item.production_year,
+                json.dumps(item.genres),
+                json.dumps(item.tags),
+                json.dumps(item.studios),
+                item.community_rating,
+                json.dumps(item.people),
+                item.content_hash,
+                item.synced_at,
+            ))
+
+        if params_list:
+            await self._conn.executemany(
                 """INSERT INTO library_items
                    (jellyfin_id, title, overview, production_year,
                     genres, tags, studios, community_rating,
@@ -138,19 +190,7 @@ class LibraryStore:
                     people = excluded.people,
                     content_hash = excluded.content_hash,
                     synced_at = excluded.synced_at""",
-                (
-                    item.jellyfin_id,
-                    item.title,
-                    item.overview,
-                    item.production_year,
-                    json.dumps(item.genres),
-                    json.dumps(item.tags),
-                    json.dumps(item.studios),
-                    item.community_rating,
-                    json.dumps(item.people),
-                    item.content_hash,
-                    item.synced_at,
-                ),
+                params_list,
             )
 
         await self._conn.commit()

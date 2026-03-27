@@ -6,6 +6,7 @@ Uses the existing fixture chain: jellyfin -> admin_auth_token -> test_users.
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from typing import TYPE_CHECKING
 
@@ -63,20 +64,8 @@ def _to_library_row(item: LibraryItem) -> LibraryItemRow:
         content_hash="placeholder",
         synced_at=int(time.time()),
     )
-    # Compute real hash
-    return LibraryItemRow(
-        jellyfin_id=row.jellyfin_id,
-        title=row.title,
-        overview=row.overview,
-        production_year=row.production_year,
-        genres=row.genres,
-        tags=row.tags,
-        studios=row.studios,
-        community_rating=row.community_rating,
-        people=row.people,
-        content_hash=compute_content_hash(row),
-        synced_at=row.synced_at,
-    )
+    # Compute real hash and replace placeholder
+    return dataclasses.replace(row, content_hash=compute_content_hash(row))
 
 
 @pytest.mark.integration

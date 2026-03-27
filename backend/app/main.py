@@ -104,7 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.jellyfin_client = jf_client
 
         # Create sync JellyfinClient if API key is configured
-        if settings.jellyfin_api_key:
+        if settings.jellyfin_api_key is not None:
             sync_jf_client = JellyfinClient(
                 base_url=settings.jellyfin_url,
                 http_client=http_client,

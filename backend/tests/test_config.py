@@ -258,11 +258,12 @@ def test_jellyfin_api_key_default_none() -> None:
 
 
 def test_jellyfin_api_key_valid_value() -> None:
-    """Valid JELLYFIN_API_KEY is stored in settings."""
+    """Valid JELLYFIN_API_KEY is stored as SecretStr in settings."""
     env = {**_REQUIRED_ENV, "JELLYFIN_API_KEY": "my-api-key-123"}
     with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
-    assert s.jellyfin_api_key == "my-api-key-123"
+    assert s.jellyfin_api_key is not None
+    assert s.jellyfin_api_key.get_secret_value() == "my-api-key-123"
 
 
 def test_jellyfin_api_key_empty_treated_as_none() -> None:
@@ -286,4 +287,5 @@ def test_jellyfin_api_key_whitespace_stripped() -> None:
     env = {**_REQUIRED_ENV, "JELLYFIN_API_KEY": "  key123  "}
     with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
-    assert s.jellyfin_api_key == "key123"
+    assert s.jellyfin_api_key is not None
+    assert s.jellyfin_api_key.get_secret_value() == "key123"
