@@ -158,19 +158,21 @@ class LibraryStore:
                 unchanged += 1
                 continue  # Skip unchanged items — no SQL needed
 
-            params_list.append((
-                item.jellyfin_id,
-                item.title,
-                item.overview,
-                item.production_year,
-                json.dumps(item.genres),
-                json.dumps(item.tags),
-                json.dumps(item.studios),
-                item.community_rating,
-                json.dumps(item.people),
-                item.content_hash,
-                item.synced_at,
-            ))
+            params_list.append(
+                (
+                    item.jellyfin_id,
+                    item.title,
+                    item.overview,
+                    item.production_year,
+                    json.dumps(item.genres),
+                    json.dumps(item.tags),
+                    json.dumps(item.studios),
+                    item.community_rating,
+                    json.dumps(item.people),
+                    item.content_hash,
+                    item.synced_at,
+                )
+            )
 
         if params_list:
             await self._conn.executemany(
