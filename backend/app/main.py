@@ -27,6 +27,7 @@ from app.middleware import SecurityHeadersMiddleware
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.rate_limit import create_limiter
 from app.models import EmbeddingsStatus, HealthResponse, ServiceStatus
+from app.ollama.client import OllamaEmbeddingClient
 from app.vectors.repository import SqliteVecRepository
 
 if TYPE_CHECKING:
@@ -131,6 +132,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else:
             _logger.info("background sync disabled — JELLYFIN_API_KEY not configured")
 
+        # Create separate Ollama HTTP client + embedding client
+        # Split timeouts: short connect (5s) prevents 120s hang when Ollama
+        # is unreachable; long read accommodates slow embedding inference.
+        ollama_timeout = httpx.Timeout(
+            connect=5.0,
+            read=settings.ollama_embed_timeout,
+            write=10.0,
+            pool=5.0,
+        )
+        ollama_http = httpx.AsyncClient(timeout=ollama_timeout)
+        ollama_client = OllamaEmbeddingClient(
+            base_url=settings.ollama_host,
+            http_client=ollama_http,
+            embed_model=settings.ollama_embed_model,
+            health_timeout=settings.ollama_health_timeout,
+        )
+        app.state.ollama_client = ollama_client
+
         # Wire auth service and router
         auth_service = AuthService(
             session_store=store,
@@ -149,20 +168,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         # Startup connectivity checks
         async with httpx.AsyncClient() as check_client:
-            jf, ol = await asyncio.gather(
+            jf_status, ollama_healthy = await asyncio.gather(
                 _check_service(
                     check_client,
                     f"{settings.jellyfin_url}/health",
                     _logger,
                 ),
-                _check_service(
-                    check_client,
-                    f"{settings.ollama_host}/api/tags",
-                    _logger,
-                ),
+                ollama_client.health(),
             )
-        _logger.info("startup checks: jellyfin=%s ollama=%s", jf, ol)
-        if jf == "error":
+        ol: ServiceStatus = "ok" if ollama_healthy else "error"
+        _logger.info("startup checks: jellyfin=%s ollama=%s", jf_status, ol)
+        if jf_status == "error":
             _logger.warning("jellyfin not reachable at startup")
         if ol == "error":
             _logger.warning("ollama not reachable at startup")
@@ -185,7 +201,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         yield
 
-        # Shutdown (reverse initialization order)
+        # Shutdown (LIFO order: Ollama → vec_repo → library → sessions → httpx)
         cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await cleanup_task
@@ -195,6 +211,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # TODO(Spec 07): WAL checkpoint after bulk embedding operations
         await library_store.close()
         await store.close()
+        await ollama_http.aclose()
         await http_client.aclose()
 
     application = FastAPI(
@@ -207,19 +224,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         """Service health: checks Jellyfin and Ollama connectivity."""
-        async with httpx.AsyncClient() as client:
-            jf, ol = await asyncio.gather(
+        async with httpx.AsyncClient() as check_client:
+            jf_status, ollama_healthy = await asyncio.gather(
                 _check_service(
-                    client,
+                    check_client,
                     f"{settings.jellyfin_url}/health",
                     _logger,
                 ),
-                _check_service(
-                    client,
-                    f"{settings.ollama_host}/api/tags",
-                    _logger,
-                ),
+                application.state.ollama_client.health(),
             )
+        ol_status: ServiceStatus = "ok" if ollama_healthy else "error"
         # Report real embedding count from vec_repo (if initialised)
         try:
             vec_repo = application.state.vec_repo
@@ -227,11 +241,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             total = 0
         return HealthResponse(
-            jellyfin=jf,
-            ollama=ol,
+            jellyfin=jf_status,
+            ollama=ol_status,
             embeddings=EmbeddingsStatus(
                 total=total,
-                pending=0,  # Updated by embedding pipeline (Spec 07)
+                pending=0,  # Updated by embedding pipeline
             ),
         )
 

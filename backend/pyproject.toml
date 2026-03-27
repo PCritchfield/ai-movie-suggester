@@ -39,6 +39,7 @@ strict_markers = true
 markers = [
     "integration: marks tests as requiring a live Jellyfin instance (deselect with '-m \"not integration\"')",
     "requires_sqlite_vec: marks tests that need the sqlite-vec extension",
+    "ollama_integration: marks tests as requiring a live Ollama instance (not run in standard CI)",
 ]
 
 [tool.pyright]

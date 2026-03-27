@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     ollama_chat_model: str = "llama3.1:8b"
     ollama_embed_model: str = "nomic-embed-text"
     ollama_embed_dimensions: int = 768
+    ollama_embed_timeout: int = 120
+    ollama_health_timeout: int = 5
 
     # Optional: TMDb
     tmdb_enabled: bool = False
