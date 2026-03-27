@@ -532,15 +532,15 @@ class TestGetAllItems:
     async def test_two_pages_yields_both(self, jf_client: JellyfinClient) -> None:
         """Mock get_items() returning two pages, verify iterator yields both."""
         page1_items = [
-            LibraryItem(id=f"item-{i}", name=f"Movie {i}", type="Movie")
+            LibraryItem(Id=f"item-{i}", Name=f"Movie {i}", Type="Movie")
             for i in range(200)
         ]
         page2_items = [
-            LibraryItem(id=f"item-{i}", name=f"Movie {i}", type="Movie")
+            LibraryItem(Id=f"item-{i}", Name=f"Movie {i}", Type="Movie")
             for i in range(200, 250)
         ]
-        page1 = PaginatedItems(items=page1_items, total_count=250, start_index=0)
-        page2 = PaginatedItems(items=page2_items, total_count=250, start_index=200)
+        page1 = PaginatedItems(Items=page1_items, TotalRecordCount=250, StartIndex=0)
+        page2 = PaginatedItems(Items=page2_items, TotalRecordCount=250, StartIndex=200)
 
         call_count = 0
 
@@ -573,7 +573,7 @@ class TestGetAllItems:
 
     async def test_empty_library(self, jf_client: JellyfinClient) -> None:
         """Empty library yields one page with zero items and stops."""
-        empty_page = PaginatedItems(items=[], total_count=0, start_index=0)
+        empty_page = PaginatedItems(Items=[], TotalRecordCount=0, StartIndex=0)
 
         with patch.object(jf_client, "get_items", return_value=empty_page):
             pages: list[PaginatedItems] = []
@@ -598,10 +598,10 @@ class TestGetAllItems:
     async def test_mid_pagination_error(self, jf_client: JellyfinClient) -> None:
         """JellyfinConnectionError on second page propagates after first yielded."""
         page1_items = [
-            LibraryItem(id=f"item-{i}", name=f"Movie {i}", type="Movie")
+            LibraryItem(Id=f"item-{i}", Name=f"Movie {i}", Type="Movie")
             for i in range(200)
         ]
-        page1 = PaginatedItems(items=page1_items, total_count=400, start_index=0)
+        page1 = PaginatedItems(Items=page1_items, TotalRecordCount=400, StartIndex=0)
 
         call_count = 0
 
