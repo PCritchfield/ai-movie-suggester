@@ -100,7 +100,7 @@ def build_composite_text(item: LibraryItem) -> CompositeTextResult:
             len(text),
         )
 
-    logger.debug("composite_text output=%s", text)
+    logger.debug("composite_text output=%.200s length=%d", text, len(text))
 
     return CompositeTextResult(
         text=text,

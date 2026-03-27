@@ -50,8 +50,12 @@ def make_test_client(
     """Create a TestClient with custom settings for tests needing overrides.
 
     Returns a TestClient with lifespan started (via context manager entry).
-    The caller should call ``client.close()`` or use ``with`` for cleanup,
-    but test-scoped clients are cleaned up automatically by pytest.
+
+    WARNING: Callers MUST call ``client.close()`` (or wrap in try/finally)
+    to trigger lifespan shutdown. Failing to close leaks the httpx clients
+    and session store opened during startup. The ``client`` fixture handles
+    this automatically via yield, but direct callers of this function do not
+    get automatic cleanup.
     """
     tc = TestClient(create_app(make_test_settings(**settings_overrides)))
     tc.__enter__()

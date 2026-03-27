@@ -133,7 +133,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             _logger.info("background sync disabled — JELLYFIN_API_KEY not configured")
 
         # Create separate Ollama HTTP client + embedding client
-        ollama_http = httpx.AsyncClient(timeout=settings.ollama_embed_timeout)
+        # Split timeouts: short connect (5s) prevents 120s hang when Ollama
+        # is unreachable; long read accommodates slow embedding inference.
+        ollama_timeout = httpx.Timeout(
+            connect=5.0,
+            read=settings.ollama_embed_timeout,
+            write=10.0,
+            pool=5.0,
+        )
+        ollama_http = httpx.AsyncClient(timeout=ollama_timeout)
         ollama_client = OllamaEmbeddingClient(
             base_url=settings.ollama_host,
             http_client=ollama_http,

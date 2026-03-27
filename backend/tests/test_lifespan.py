@@ -21,8 +21,11 @@ class TestLifespanOllamaWiring:
     def test_ollama_client_set_on_app_state(self) -> None:
         """After lifespan startup, app.state.ollama_client is set."""
         client = make_test_client()
-        assert hasattr(client.app.state, "ollama_client")
-        assert isinstance(client.app.state.ollama_client, OllamaEmbeddingClient)
+        try:
+            assert hasattr(client.app.state, "ollama_client")
+            assert isinstance(client.app.state.ollama_client, OllamaEmbeddingClient)
+        finally:
+            client.close()
 
 
 class TestLifespanShutdownOrder:
@@ -31,6 +34,10 @@ class TestLifespanShutdownOrder:
     def test_lifo_shutdown_order(self) -> None:
         """Ollama httpx.aclose() is called before Jellyfin httpx.aclose()."""
         close_order: list[str] = []
+        # Track long-lived clients by their timeout signature.
+        # Jellyfin: scalar timeout (e.g. 10). Ollama: httpx.Timeout object.
+        # Health-check clients are created via `async with` and auto-close —
+        # they don't go through the shutdown path, so we skip them.
 
         original_async_client = httpx.AsyncClient
 
@@ -38,9 +45,18 @@ class TestLifespanShutdownOrder:
             real_client = original_async_client(*args, **kwargs)
             original_aclose = real_client.aclose
 
-            # Determine which client this is based on timeout
-            timeout = kwargs.get("timeout")
-            label = "ollama" if timeout == 120 else "jellyfin"
+            # Identify by timeout type: Ollama uses httpx.Timeout object,
+            # Jellyfin uses a scalar int/float. Health-check clients use
+            # the default timeout (no explicit kwarg) — label them for
+            # tracking but they won't appear in shutdown since they
+            # auto-close via `async with`.
+            timeout_arg = kwargs.get("timeout")
+            if isinstance(timeout_arg, httpx.Timeout):
+                label = "ollama"
+            elif timeout_arg is not None:
+                label = "jellyfin"
+            else:
+                label = "healthcheck"
 
             async def tracked_aclose() -> None:
                 close_order.append(label)
@@ -51,16 +67,19 @@ class TestLifespanShutdownOrder:
 
         with patch("app.main.httpx.AsyncClient", side_effect=_make_tracked_client):
             test_client = make_test_client()
-            # Trigger shutdown by exiting the test client context
-            test_client.close()
+            # Trigger lifespan shutdown via __exit__ (close() alone doesn't do it)
+            test_client.__exit__(None, None, None)
+
+        # Verify both long-lived clients were closed during shutdown
+        assert "ollama" in close_order, f"ollama not found in {close_order}"
+        assert "jellyfin" in close_order, f"jellyfin not found in {close_order}"
 
         # Verify Ollama closed before Jellyfin (LIFO)
-        if "ollama" in close_order and "jellyfin" in close_order:
-            ollama_idx = close_order.index("ollama")
-            jellyfin_idx = close_order.index("jellyfin")
-            assert ollama_idx < jellyfin_idx, (
-                f"Expected LIFO order: Ollama before Jellyfin, got order: {close_order}"
-            )
+        ollama_idx = close_order.index("ollama")
+        jellyfin_idx = close_order.index("jellyfin")
+        assert ollama_idx < jellyfin_idx, (
+            f"Expected LIFO order: Ollama before Jellyfin, got order: {close_order}"
+        )
 
 
 # ---------------------------------------------------------------------------
