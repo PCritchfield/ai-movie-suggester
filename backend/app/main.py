@@ -121,6 +121,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.jellyfin_client = jf_client
 
+        # Permission service (stateless in-memory cache, no init()/close())
+        from app.permissions.service import PermissionService
+
+        permission_service = PermissionService(
+            jellyfin_client=jf_client,
+            cache_ttl_seconds=settings.permission_cache_ttl_seconds,
+        )
+        app.state.permission_service = permission_service
+
         # Create sync JellyfinClient if API key is configured
         if settings.jellyfin_api_key is not None:
             sync_jf_client = JellyfinClient(
@@ -163,6 +172,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings=settings,
             cookie_key=cookie_key,
             limiter=limiter,
+            permission_service=permission_service,
         )
         app.include_router(auth_router)
 
