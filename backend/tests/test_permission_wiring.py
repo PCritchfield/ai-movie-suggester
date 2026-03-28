@@ -1,4 +1,4 @@
-"""Tests for permission service wiring — lifespan, dependency, logout integration."""
+"""Tests for permission wiring: lifespan, dependency, logout, session destruction."""
 
 from __future__ import annotations
 
@@ -14,7 +14,10 @@ from app.auth.router import create_auth_router
 from app.auth.service import AuthService
 from app.auth.session_store import SessionStore
 from app.config import Settings
-from app.permissions.dependencies import get_permission_service
+from app.permissions.dependencies import (
+    get_permission_service,
+    handle_permission_auth_error,
+)
 from app.permissions.service import PermissionService
 from tests.conftest import (
     TEST_COLUMN_KEY,
@@ -136,3 +139,104 @@ class TestLogoutIntegration:
             resp = client.post("/api/auth/logout")
             assert resp.status_code == 200
             mock_inv.assert_not_called()
+
+
+@pytest.fixture
+def session_destruction_parts(
+    tmp_path: object, mock_jf: AsyncMock
+) -> Iterator[tuple[SessionStore, PermissionService, Settings]]:
+    """Create standalone store + permission service for session destruction tests."""
+    db_path = pathlib.Path(str(tmp_path)) / "test_sessions.db"
+
+    settings = Settings(
+        jellyfin_url="http://jellyfin-test:8096",
+        session_secret=TEST_SECRET,
+        session_secure_cookie=False,
+        log_level="debug",
+    )  # type: ignore[call-arg]
+
+    store = SessionStore(str(db_path), TEST_COLUMN_KEY)
+    perm_service = PermissionService(jellyfin_client=mock_jf, cache_ttl_seconds=300)
+
+    asyncio.get_event_loop().run_until_complete(store.init())
+    yield store, perm_service, settings
+    asyncio.get_event_loop().run_until_complete(store.close())
+
+
+class TestSessionDestruction:
+    """handle_permission_auth_error destroys session and returns 401."""
+
+    async def test_returns_401_with_session_expired(
+        self,
+        session_destruction_parts: tuple[SessionStore, PermissionService, Settings],
+    ) -> None:
+        store, perm_service, settings = session_destruction_parts
+
+        # Create a session first
+        await store.create(
+            session_id="sess-1",
+            user_id="uid-1",
+            username="alice",
+            server_name="MyJellyfin",
+            token="jf-tok-123",
+            csrf_token="csrf-1",
+            expires_at=9999999999,
+        )
+
+        resp = await handle_permission_auth_error(
+            session_id="sess-1",
+            session_store=store,
+            permission_service=perm_service,
+            user_id="uid-1",
+            settings=settings,
+        )
+
+        assert resp.status_code == 401
+        assert resp.body == b'{"detail":"Session expired"}'
+
+        # Session should be deleted
+        session = await store.get("sess-1")
+        assert session is None
+
+    async def test_cache_invalidated(
+        self,
+        session_destruction_parts: tuple[SessionStore, PermissionService, Settings],
+    ) -> None:
+        store, perm_service, settings = session_destruction_parts
+
+        await store.create(
+            session_id="sess-2",
+            user_id="uid-2",
+            username="bob",
+            server_name="MyJellyfin",
+            token="jf-tok-456",
+            csrf_token="csrf-2",
+            expires_at=9999999999,
+        )
+
+        with patch.object(perm_service, "invalidate_user_cache") as mock_inv:
+            await handle_permission_auth_error(
+                session_id="sess-2",
+                session_store=store,
+                permission_service=perm_service,
+                user_id="uid-2",
+                settings=settings,
+            )
+            mock_inv.assert_called_once_with("uid-2")
+
+    async def test_idempotent_session_already_gone(
+        self,
+        session_destruction_parts: tuple[SessionStore, PermissionService, Settings],
+    ) -> None:
+        """Calling with a nonexistent session still returns 401 without error."""
+        store, perm_service, settings = session_destruction_parts
+
+        resp = await handle_permission_auth_error(
+            session_id="nonexistent",
+            session_store=store,
+            permission_service=perm_service,
+            user_id="uid-1",
+            settings=settings,
+        )
+
+        assert resp.status_code == 401
