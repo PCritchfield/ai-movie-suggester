@@ -227,6 +227,25 @@ def test_blocklist_accepts_strong_secret() -> None:
     assert len(s.session_secret) >= 32
 
 
+# --- permission cache config ---
+
+
+def test_permission_cache_ttl_default() -> None:
+    """permission_cache_ttl_seconds defaults to 300."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.permission_cache_ttl_seconds == 300
+
+
+def test_permission_cache_ttl_env_override() -> None:
+    """PERMISSION_CACHE_TTL_SECONDS env var overrides default."""
+    env = {**_REQUIRED_ENV, "PERMISSION_CACHE_TTL_SECONDS": "60"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.permission_cache_ttl_seconds == 60
+
+
 # --- library sync config ---
 
 
