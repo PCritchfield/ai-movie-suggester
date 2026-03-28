@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+import time
+from typing import TYPE_CHECKING, Any
 
 import aiosqlite
 
 from app.library.models import LibraryItemRow, UpsertResult
+
+if TYPE_CHECKING:
+    from app.sync.models import SyncResult, SyncRunRow
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +310,166 @@ class LibraryStore:
 
     async def count(self) -> int:
         """Return total number of active (non-deleted) items in the store."""
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) FROM library_items WHERE deleted_at IS NULL"
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    # --- Sync engine methods (Spec 08, Task 2.0) ---
+
+    async def get_all_ids(self) -> set[str]:
+        """Return the set of all active (non-deleted) jellyfin_ids."""
+        cursor = await self._conn.execute(
+            "SELECT jellyfin_id FROM library_items WHERE deleted_at IS NULL"
+        )
+        rows = await cursor.fetchall()
+        return {row[0] for row in rows}
+
+    async def soft_delete_many(self, ids: list[str]) -> int:
+        """Mark items as deleted by setting deleted_at timestamp.
+
+        Chunks at _BATCH_SIZE. Returns the total number of rows affected.
+        """
+        if not ids:
+            return 0
+
+        now = int(time.time())
+        total = 0
+        for i in range(0, len(ids), _BATCH_SIZE):
+            batch = ids[i : i + _BATCH_SIZE]
+            placeholders = ",".join("?" * len(batch))
+            cursor = await self._conn.execute(
+                f"UPDATE library_items SET deleted_at = ?"
+                f" WHERE jellyfin_id IN ({placeholders})",
+                [now, *batch],
+            )
+            total += cursor.rowcount
+        await self._conn.commit()
+        return total
+
+    async def hard_delete_many(self, ids: list[str]) -> int:
+        """Permanently remove items from the store.
+
+        Chunks at _BATCH_SIZE. Returns the total number of rows deleted.
+        """
+        if not ids:
+            return 0
+
+        total = 0
+        for i in range(0, len(ids), _BATCH_SIZE):
+            batch = ids[i : i + _BATCH_SIZE]
+            placeholders = ",".join("?" * len(batch))
+            cursor = await self._conn.execute(
+                f"DELETE FROM library_items WHERE jellyfin_id IN ({placeholders})",
+                batch,
+            )
+            total += cursor.rowcount
+        await self._conn.commit()
+        return total
+
+    async def get_tombstoned_ids(self, older_than: int) -> list[str]:
+        """Return IDs of items soft-deleted before the given timestamp."""
+        cursor = await self._conn.execute(
+            "SELECT jellyfin_id FROM library_items"
+            " WHERE deleted_at IS NOT NULL AND deleted_at < ?",
+            (older_than,),
+        )
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+    async def enqueue_for_embedding(self, ids: list[str]) -> int:
+        """Insert or reset items in the embedding queue as 'pending'.
+
+        Uses ON CONFLICT to reset status, retry_count, and error_message
+        for items that are already queued. Returns the number of items
+        enqueued.
+        """
+        if not ids:
+            return 0
+
+        now = int(time.time())
+        total = 0
+        for i in range(0, len(ids), _BATCH_SIZE):
+            batch = ids[i : i + _BATCH_SIZE]
+            params = [(jid, now) for jid in batch]
+            await self._conn.executemany(
+                "INSERT INTO embedding_queue (jellyfin_id, enqueued_at, status)"
+                " VALUES (?, ?, 'pending')"
+                " ON CONFLICT(jellyfin_id) DO UPDATE SET"
+                " status='pending', enqueued_at=excluded.enqueued_at,"
+                " retry_count=0, error_message=NULL",
+                params,
+            )
+            total += len(batch)
+        await self._conn.commit()
+        return total
+
+    async def count_pending_embeddings(self) -> int:
+        """Return the number of items with 'pending' status in the queue."""
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) FROM embedding_queue WHERE status = 'pending'"
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def save_sync_run(self, run: SyncResult) -> None:
+        """Persist a SyncResult as a row in the sync_runs table."""
+        await self._conn.execute(
+            "INSERT INTO sync_runs"
+            " (started_at, completed_at, status, total_items,"
+            "  items_created, items_updated, items_deleted,"
+            "  items_unchanged, items_failed, error_message)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                run.started_at,
+                run.completed_at,
+                run.status,
+                run.total_items,
+                run.items_created,
+                run.items_updated,
+                run.items_deleted,
+                run.items_unchanged,
+                run.items_failed,
+                run.error_message,
+            ),
+        )
+        await self._conn.commit()
+
+    async def get_last_sync_run(self) -> SyncRunRow | None:
+        """Return the most recent sync run, or None if no runs exist."""
+        cursor = await self._conn.execute(
+            "SELECT id, started_at, completed_at, status, total_items,"
+            " items_created, items_updated, items_deleted,"
+            " items_unchanged, items_failed, error_message"
+            " FROM sync_runs ORDER BY started_at DESC LIMIT 1"
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return self._row_to_sync_run(row)
+
+    @staticmethod
+    def _row_to_sync_run(row: Any) -> SyncRunRow:
+        """Deserialize a database row into a SyncRunRow."""
+        from app.sync.models import SyncRunRow as _SyncRunRow
+
+        return _SyncRunRow(
+            id=row[0],
+            started_at=row[1],
+            completed_at=row[2],
+            status=row[3],
+            total_items=row[4],
+            items_created=row[5],
+            items_updated=row[6],
+            items_deleted=row[7],
+            items_unchanged=row[8],
+            items_failed=row[9],
+            error_message=row[10],
+        )
+
+    async def count_active(self) -> int:
+        """Return the number of active (non-deleted) items."""
         cursor = await self._conn.execute(
             "SELECT COUNT(*) FROM library_items WHERE deleted_at IS NULL"
         )
