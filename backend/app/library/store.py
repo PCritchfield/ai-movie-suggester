@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS library_items (
     community_rating  REAL,
     people            TEXT NOT NULL DEFAULT '[]',
     content_hash      TEXT NOT NULL,
-    synced_at         INTEGER NOT NULL
+    synced_at         INTEGER NOT NULL,
+    deleted_at        INTEGER
 )
 """
 
@@ -41,6 +42,42 @@ ON library_items(content_hash)
 _CREATE_INDEX_SYNCED = """
 CREATE INDEX IF NOT EXISTS idx_library_items_synced_at
 ON library_items(synced_at)
+"""
+
+_CREATE_INDEX_DELETED = """
+CREATE INDEX IF NOT EXISTS idx_library_items_deleted_at
+ON library_items(deleted_at)
+"""
+
+_CREATE_EMBEDDING_QUEUE = """
+CREATE TABLE IF NOT EXISTS embedding_queue (
+    jellyfin_id    TEXT PRIMARY KEY,
+    enqueued_at    INTEGER NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'pending',
+    retry_count    INTEGER NOT NULL DEFAULT 0,
+    error_message  TEXT
+)
+"""
+
+_CREATE_INDEX_EMBEDDING_QUEUE = """
+CREATE INDEX IF NOT EXISTS idx_embedding_queue_status_enqueued
+ON embedding_queue(status, enqueued_at)
+"""
+
+_CREATE_SYNC_RUNS = """
+CREATE TABLE IF NOT EXISTS sync_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at      INTEGER NOT NULL,
+    completed_at    INTEGER,
+    status          TEXT NOT NULL,
+    total_items     INTEGER NOT NULL DEFAULT 0,
+    items_created   INTEGER NOT NULL DEFAULT 0,
+    items_updated   INTEGER NOT NULL DEFAULT 0,
+    items_deleted   INTEGER NOT NULL DEFAULT 0,
+    items_unchanged INTEGER NOT NULL DEFAULT 0,
+    items_failed    INTEGER NOT NULL DEFAULT 0,
+    error_message   TEXT
+)
 """
 
 # Maximum number of IDs per SQL IN clause batch
@@ -62,6 +99,20 @@ class LibraryStore:
         await self._db.execute(_CREATE_TABLE)
         await self._db.execute(_CREATE_INDEX_HASH)
         await self._db.execute(_CREATE_INDEX_SYNCED)
+
+        # Migration: add deleted_at column if table predates Spec 08
+        try:
+            await self._db.execute(
+                "ALTER TABLE library_items ADD COLUMN deleted_at INTEGER"
+            )
+            await self._db.commit()
+        except Exception:  # noqa: BLE001
+            pass  # Column already exists — idempotent
+
+        await self._db.execute(_CREATE_INDEX_DELETED)
+        await self._db.execute(_CREATE_EMBEDDING_QUEUE)
+        await self._db.execute(_CREATE_INDEX_EMBEDDING_QUEUE)
+        await self._db.execute(_CREATE_SYNC_RUNS)
         await self._db.commit()
 
     async def close(self) -> None:
@@ -245,15 +296,18 @@ class LibraryStore:
         return results
 
     async def get_all_hashes(self) -> dict[str, str]:
-        """Return {jellyfin_id: content_hash} mapping for all items."""
+        """Return {jellyfin_id: content_hash} mapping for active (non-deleted) items."""
         cursor = await self._conn.execute(
             "SELECT jellyfin_id, content_hash FROM library_items"
+            " WHERE deleted_at IS NULL"
         )
         rows = await cursor.fetchall()
         return {row[0]: row[1] for row in rows}
 
     async def count(self) -> int:
-        """Return total number of items in the store."""
-        cursor = await self._conn.execute("SELECT COUNT(*) FROM library_items")
+        """Return total number of active (non-deleted) items in the store."""
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) FROM library_items WHERE deleted_at IS NULL"
+        )
         row = await cursor.fetchone()
         return row[0] if row else 0

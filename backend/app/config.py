@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     library_db_path: str = "data/library.db"
     library_sync_page_size: int = 200
 
+    # Sync engine
+    jellyfin_admin_user_id: str | None = None
+    sync_interval_hours: float = 6.0
+    tombstone_ttl_days: int = 7
+    wal_checkpoint_threshold_mb: float = 50.0
+
     @model_validator(mode="after")
     def _validate_jellyfin_api_key(self) -> Settings:
         """Strip whitespace from API key; treat empty/whitespace-only as None."""
