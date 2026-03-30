@@ -44,11 +44,21 @@ async def handle_permission_auth_error(
         user_id,
     )
     resp = JSONResponse(status_code=401, content={"detail": "Session expired"})
-    resp.delete_cookie(
-        key="session_id",
-        httponly=True,
-        samesite="lax",
-        secure=settings.session_secure_cookie,
-        path="/",
-    )
+    # Clear session cookie at current and legacy paths
+    for path in ("/", "/api"):
+        resp.delete_cookie(
+            key="session_id",
+            httponly=True,
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path=path,
+        )
+    # Clear CSRF cookie at current and legacy paths
+    for path in ("/", "/api"):
+        resp.delete_cookie(
+            key="csrf_token",
+            samesite="lax",
+            secure=settings.session_secure_cookie,
+            path=path,
+        )
     return resp

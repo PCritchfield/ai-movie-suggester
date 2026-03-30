@@ -100,8 +100,11 @@ async def auth_app_with_perms(
     await store.init()
 
     client = TestClient(app)
-    yield client, perm_service
-    await store.close()
+    try:
+        yield client, perm_service
+    finally:
+        client.close()
+        await store.close()
 
 
 class TestLogoutIntegration:
