@@ -171,6 +171,7 @@ class TestSyncEngineLifespan:
 
         with TestClient(app):
             route_paths = [
-                r.path for r in app.routes  # type: ignore[union-attr]
+                r.path
+                for r in app.routes  # type: ignore[union-attr]
             ]
             assert any("/api/admin/sync" in p for p in route_paths)
