@@ -210,9 +210,8 @@ class TestTriggerSync:
     def test_trigger_returns_202(self) -> None:
         """Successful trigger returns 202 with running status."""
         engine = MagicMock()
-        engine._validate_config.return_value = None
-        engine._lock = MagicMock()
-        engine._lock.locked.return_value = False
+        engine.validate_config.return_value = None
+        engine.is_running = False
         engine.run_sync = AsyncMock()
 
         _, client = self._make_admin_app(sync_engine=engine)
@@ -228,9 +227,8 @@ class TestTriggerSync:
     def test_trigger_returns_409_when_already_running(self) -> None:
         """Returns 409 when sync lock is held."""
         engine = MagicMock()
-        engine._validate_config.return_value = None
-        engine._lock = MagicMock()
-        engine._lock.locked.return_value = True
+        engine.validate_config.return_value = None
+        engine.is_running = True
 
         _, client = self._make_admin_app(sync_engine=engine)
         resp = client.post(
@@ -243,8 +241,8 @@ class TestTriggerSync:
     def test_trigger_returns_503_when_config_missing(self) -> None:
         """Returns 503 when sync config is invalid."""
         engine = MagicMock()
-        engine._validate_config.side_effect = SyncConfigError(
-            "JELLYFIN_API_KEY is required"
+        engine.validate_config.side_effect = SyncConfigError(
+            "Sync engine not configured"
         )
 
         _, client = self._make_admin_app(sync_engine=engine)
@@ -299,8 +297,8 @@ class TestSyncStatus:
         """Returns idle when no sync has ever run."""
         engine = MagicMock()
         engine.current_state = None
-        engine._library_store = AsyncMock()
-        engine._library_store.get_last_sync_run.return_value = None
+        engine.get_last_run = AsyncMock()
+        engine.get_last_run.return_value = None
 
         _, client = self._make_admin_app(sync_engine=engine)
         resp = client.get(
@@ -357,8 +355,8 @@ class TestSyncStatus:
         )
         engine = MagicMock()
         engine.current_state = None
-        engine._library_store = AsyncMock()
-        engine._library_store.get_last_sync_run.return_value = last_run
+        engine.get_last_run = AsyncMock()
+        engine.get_last_run.return_value = last_run
 
         _, client = self._make_admin_app(sync_engine=engine)
         resp = client.get(
@@ -388,8 +386,8 @@ class TestSyncStatus:
         )
         engine = MagicMock()
         engine.current_state = None
-        engine._library_store = AsyncMock()
-        engine._library_store.get_last_sync_run.return_value = last_run
+        engine.get_last_run = AsyncMock()
+        engine.get_last_run.return_value = last_run
 
         _, client = self._make_admin_app(sync_engine=engine)
         resp = client.get(

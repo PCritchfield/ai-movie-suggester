@@ -42,12 +42,12 @@ async def trigger_sync(
     # Validate config BEFORE creating the task — otherwise the error
     # is raised inside the task and never reaches the HTTP response.
     try:
-        sync_engine._validate_config()
-    except SyncConfigError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        sync_engine.validate_config()
+    except SyncConfigError:
+        raise HTTPException(status_code=503, detail="Sync not configured") from None
 
     # Check if already running (fast path)
-    if sync_engine._lock.locked():
+    if sync_engine.is_running:
         raise HTTPException(status_code=409, detail="Sync already in progress")
 
     async def _run_sync() -> None:
@@ -87,7 +87,7 @@ async def sync_status(
         )
 
     # Otherwise return the last completed run
-    last_run = await sync_engine._library_store.get_last_sync_run()
+    last_run = await sync_engine.get_last_run()
     if last_run is not None:
         return SyncStatusResponse(
             status=last_run.status,

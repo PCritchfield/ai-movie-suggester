@@ -288,16 +288,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             total = 0
 
-        # Library sync status
+        # Library sync status (gather DB calls concurrently)
         library_sync: LibrarySyncStatus | None = None
         try:
             lib_store: LibraryStore = application.state.library_store
-            last_run = await lib_store.get_last_sync_run()
+            last_run, item_count, pending_count = await asyncio.gather(
+                lib_store.get_last_sync_run(),
+                lib_store.count(),
+                lib_store.count_pending_embeddings(),
+            )
             library_sync = LibrarySyncStatus(
                 last_run_at=last_run.started_at if last_run else None,
                 last_run_status=last_run.status if last_run else None,
-                items_in_library=await lib_store.count(),
-                items_pending_embedding=await lib_store.count_pending_embeddings(),
+                items_in_library=item_count,
+                items_pending_embedding=pending_count,
             )
         except Exception:
             _logger.debug("library sync status unavailable", exc_info=True)

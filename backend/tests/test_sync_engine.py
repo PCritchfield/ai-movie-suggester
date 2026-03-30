@@ -437,7 +437,7 @@ async def test_sync_missing_api_key() -> None:
 
     engine = SyncEngine(store, client, settings)
 
-    with pytest.raises(SyncConfigError, match="JELLYFIN_API_KEY"):
+    with pytest.raises(SyncConfigError, match="not configured"):
         await engine.run_sync()
 
 
@@ -451,7 +451,7 @@ async def test_sync_missing_admin_user_id() -> None:
 
     engine = SyncEngine(store, client, settings)
 
-    with pytest.raises(SyncConfigError, match="JELLYFIN_ADMIN_USER_ID"):
+    with pytest.raises(SyncConfigError, match="not configured"):
         await engine.run_sync()
 
 

@@ -21,6 +21,7 @@ from app.sync.models import (
     SyncAlreadyRunningError,
     SyncConfigError,
     SyncResult,
+    SyncRunRow,
     SyncState,
 )
 
@@ -85,14 +86,25 @@ class SyncEngine:
         """Return the current sync state, or None if no sync is in progress."""
         return self._current_state
 
-    def _validate_config(self) -> None:
-        """Ensure required sync configuration is present."""
+    @property
+    def is_running(self) -> bool:
+        """Return True if a sync is currently in progress."""
+        return self._lock.locked()
+
+    def validate_config(self) -> None:
+        """Ensure required sync configuration is present.
+
+        Raises SyncConfigError if JELLYFIN_API_KEY or
+        JELLYFIN_ADMIN_USER_ID is not configured.
+        """
         if self._settings.jellyfin_api_key is None:
-            msg = "JELLYFIN_API_KEY is required for library sync"
-            raise SyncConfigError(msg)
+            raise SyncConfigError("Sync engine not configured")
         if self._settings.jellyfin_admin_user_id is None:
-            msg = "JELLYFIN_ADMIN_USER_ID is required for library sync"
-            raise SyncConfigError(msg)
+            raise SyncConfigError("Sync engine not configured")
+
+    async def get_last_run(self) -> SyncRunRow | None:
+        """Return the most recent sync run, or None."""
+        return await self._library_store.get_last_sync_run()
 
     @staticmethod
     def _compute_hash(text: str) -> str:
@@ -125,7 +137,7 @@ class SyncEngine:
             raise SyncAlreadyRunningError("A sync is already in progress") from None
 
         try:
-            self._validate_config()
+            self.validate_config()
 
             started_at = int(time.time())
             state = SyncState(

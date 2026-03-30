@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import BaseModel
+
+SyncStatusLiteral = Literal["running", "idle", "completed", "failed"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +76,7 @@ class SyncTriggerResponse(BaseModel):
     """Response body for POST /api/admin/sync."""
 
     message: str
-    status: str
+    status: SyncStatusLiteral
 
 
 class SyncProgressResponse(BaseModel):
@@ -93,7 +96,7 @@ class SyncLastRunResponse(BaseModel):
     id: int
     started_at: int
     completed_at: int | None = None
-    status: str
+    status: SyncStatusLiteral
     total_items: int
     items_created: int
     items_updated: int
@@ -106,7 +109,7 @@ class SyncLastRunResponse(BaseModel):
 class SyncStatusResponse(BaseModel):
     """Response body for GET /api/admin/sync/status."""
 
-    status: str
+    status: SyncStatusLiteral
     started_at: int | None = None
     progress: SyncProgressResponse | None = None
     last_run: SyncLastRunResponse | None = None
