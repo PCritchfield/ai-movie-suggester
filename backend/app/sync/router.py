@@ -26,7 +26,7 @@ _logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/sync", tags=["admin"])
 
 
-@router.post("/", status_code=202, response_model=SyncTriggerResponse)
+@router.post("", status_code=202, response_model=SyncTriggerResponse)
 async def trigger_sync(
     request: Request,
     _: SessionMeta = Depends(require_admin),  # noqa: B008

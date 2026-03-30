@@ -39,8 +39,8 @@ $ cd backend && uv run pyright --pythonversion 3.12
 
 ## Design Decisions
 
-1. **Config validation before task creation**: The trigger endpoint calls `sync_engine._validate_config()` synchronously before creating the background task. This ensures SyncConfigError reaches the HTTP response as 503, rather than being silently swallowed inside the task.
+1. **Config validation before task creation**: The trigger endpoint calls `sync_engine.validate_config()` synchronously before creating the background task. This ensures SyncConfigError reaches the HTTP response as 503, rather than being silently swallowed inside the task.
 
-2. **Lock check as fast-path**: The trigger endpoint checks `sync_engine._lock.locked()` before creating the task. This is a fast-path rejection; the actual lock acquisition in `run_sync()` handles the TOCTOU window.
+2. **Lock check as fast-path**: The trigger endpoint checks `sync_engine.is_running` before creating the task. This is a fast-path rejection; the actual lock acquisition in `run_sync()` handles the TOCTOU window.
 
 3. **require_admin fetches full session row**: The dependency retrieves the encrypted token from the session store to make a live Jellyfin API call checking `Policy.IsAdministrator`. This ensures admin status is always current, not cached.

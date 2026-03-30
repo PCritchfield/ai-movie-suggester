@@ -216,7 +216,7 @@ class TestTriggerSync:
 
         _, client = self._make_admin_app(sync_engine=engine)
         resp = client.post(
-            "/api/admin/sync/",
+            "/api/admin/sync",
             cookies={"session_id": _encrypted_cookie()},
         )
         assert resp.status_code == 202
@@ -232,7 +232,7 @@ class TestTriggerSync:
 
         _, client = self._make_admin_app(sync_engine=engine)
         resp = client.post(
-            "/api/admin/sync/",
+            "/api/admin/sync",
             cookies={"session_id": _encrypted_cookie()},
         )
         assert resp.status_code == 409
@@ -247,7 +247,7 @@ class TestTriggerSync:
 
         _, client = self._make_admin_app(sync_engine=engine)
         resp = client.post(
-            "/api/admin/sync/",
+            "/api/admin/sync",
             cookies={"session_id": _encrypted_cookie()},
         )
         assert resp.status_code == 503
@@ -264,7 +264,7 @@ class TestTriggerSync:
         app = _make_app(session_store=session_store, jf_client=jf_client)
         client = TestClient(app)
         resp = client.post(
-            "/api/admin/sync/",
+            "/api/admin/sync",
             cookies={"session_id": _encrypted_cookie()},
         )
         assert resp.status_code == 403
