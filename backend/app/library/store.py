@@ -494,5 +494,32 @@ class LibraryStore:
             error_message=row[10],
         )
 
+    async def delete_from_embedding_queue(self, ids: list[str]) -> int:
+        """Remove items from the embedding queue by jellyfin_id.
+
+        Chunks at _BATCH_SIZE. Wrapped in a single transaction for atomicity.
+        Returns the total number of rows deleted.
+        """
+        if not ids:
+            return 0
+
+        total = 0
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                placeholders = ",".join("?" * len(batch))
+                sql = (
+                    f"DELETE FROM embedding_queue WHERE jellyfin_id IN ({placeholders})"
+                )
+                cursor = await self._conn.execute(sql, batch)
+                total += cursor.rowcount
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
+        return total
+
     # count_active() is intentionally not defined — use count() instead,
     # which already filters to active (non-deleted) items.
