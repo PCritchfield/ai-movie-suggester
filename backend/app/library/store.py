@@ -110,18 +110,13 @@ class LibraryStore:
         await self._db.execute(_CREATE_INDEX_SYNCED)
 
         # Migration: add deleted_at column if table predates Spec 08
-        try:
+        cursor = await self._db.execute("PRAGMA table_info(library_items)")
+        existing_columns = {row[1] for row in await cursor.fetchall()}
+        if "deleted_at" not in existing_columns:
             await self._db.execute(
                 "ALTER TABLE library_items ADD COLUMN deleted_at INTEGER"
             )
             await self._db.commit()
-        except Exception as exc:  # noqa: BLE001
-            # SQLite raises OperationalError for "duplicate column name"
-            if "duplicate column" in str(exc).lower():
-                pass  # Column already exists — idempotent
-            else:
-                logger.error("deleted_at migration failed: %s", exc)
-                raise
 
         await self._db.execute(_CREATE_INDEX_DELETED)
         await self._db.execute(_CREATE_EMBEDDING_QUEUE)
@@ -473,7 +468,7 @@ class LibraryStore:
             "SELECT id, started_at, completed_at, status, total_items,"
             " items_created, items_updated, items_deleted,"
             " items_unchanged, items_failed, error_message"
-            " FROM sync_runs ORDER BY started_at DESC LIMIT 1"
+            " FROM sync_runs ORDER BY started_at DESC, id DESC LIMIT 1"
         )
         row = await cursor.fetchone()
         if row is None:

@@ -21,11 +21,10 @@ $ cd backend && uv run pytest --tb=short -q -m "not integration and not ollama_i
 - enqueue_for_embedding: inserts pending, conflict resets status, empty list
 - count_pending_embeddings: mixed statuses
 - save_sync_run + get_last_sync_run: round-trip, returns most recent, returns None when empty
-- count_active: excludes soft-deleted, empty store
 - get_all_hashes: excludes soft-deleted
-- count: excludes soft-deleted
+- count: excludes soft-deleted (count_active removed — count() already filters active items)
 
 ## Sub-tasks completed
-- [x] 2.1–2.6: Protocol extension with 9 new methods
-- [x] 2.7–2.15: Store implementations for all 9 methods
+- [x] 2.1–2.6: Protocol extension with 8 new methods (count_active removed — count() covers this)
+- [x] 2.7–2.15: Store implementations for all 8 methods
 - [x] 2.16–2.31: Unit tests for all methods including chunking edge cases
