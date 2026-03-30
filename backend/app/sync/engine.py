@@ -195,20 +195,30 @@ class SyncEngine:
                         await self._library_store.enqueue_for_embedding(ids_to_enqueue)
 
                     state.pages_processed += 1
+                    _logger.info(
+                        "sync page=%d new=%d changed=%d unchanged=%d failed=%d",
+                        state.pages_processed,
+                        state.items_created,
+                        state.items_updated,
+                        state.items_unchanged,
+                        state.items_failed,
+                    )
 
             except (JellyfinConnectionError, JellyfinError) as exc:
                 _logger.error(
-                    "sync_page_failed page=%d error=%s",
+                    "sync_page_failed page=%d error_type=%s",
                     state.pages_processed + 1,
-                    str(exc),
+                    type(exc).__name__,
                 )
                 status = SYNC_STATUS_FAILED
-                error_message = str(exc)
+                # Sanitize: type + docstring only, never raw URL/token
+                doc = type(exc).__doc__ or "sync failed"
+                error_message = f"{type(exc).__name__}: {doc}"
 
             except Exception as exc:
-                _logger.error("sync_unexpected_error error=%s", str(exc))
+                _logger.error("sync_unexpected_error error_type=%s", type(exc).__name__)
                 status = SYNC_STATUS_FAILED
-                error_message = str(exc)
+                error_message = f"{type(exc).__name__}: unexpected sync error"
 
             # Deletion detection (runs even on partial sync)
             deleted_ids = known_ids - seen_ids
@@ -220,7 +230,7 @@ class SyncEngine:
                 active_count = await self._library_store.count() if not last_run else 0
                 threshold_base = max(last_total, active_count)
 
-                if threshold_base == 0 or len(seen_ids) >= 0.5 * threshold_base:
+                if threshold_base > 0 and len(seen_ids) >= 0.5 * threshold_base:
                     await self._library_store.soft_delete_many(list(deleted_ids))
                     items_deleted = len(deleted_ids)
                     _logger.info("sync_soft_deleted count=%d", items_deleted)
@@ -258,7 +268,10 @@ class SyncEngine:
 
             await self._library_store.save_sync_run(result)
 
-            # Purge expired tombstones (failure does not affect sync result)
+            # Purge runs after save_sync_run intentionally — items_deleted in
+            # SyncResult tracks soft-deletes detected in THIS run, not tombstone
+            # purges (which remove items deleted in PRIOR runs). Purge failure
+            # does not affect the sync result status.
             try:
                 await self.purge_tombstones()
             except Exception:

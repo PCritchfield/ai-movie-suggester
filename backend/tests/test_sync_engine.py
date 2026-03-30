@@ -12,7 +12,12 @@ import pytest
 from app.jellyfin.errors import JellyfinConnectionError
 from app.jellyfin.models import LibraryItem, PaginatedItems
 from app.sync.engine import SyncEngine
-from app.sync.models import SyncAlreadyRunningError, SyncConfigError
+from app.sync.models import (
+    SYNC_STATUS_COMPLETED,
+    SYNC_STATUS_FAILED,
+    SyncAlreadyRunningError,
+    SyncConfigError,
+)
 
 
 def test_sync_models_importable() -> None:
@@ -226,7 +231,7 @@ async def test_sync_basic_two_pages() -> None:
     engine = SyncEngine(store, client, settings)
     result = await engine.run_sync()
 
-    assert result.status == "completed"
+    assert result.status == SYNC_STATUS_COMPLETED
     assert result.items_created == 2
     assert result.total_items == 2
     assert store.upsert_many.call_count == 2
@@ -357,7 +362,7 @@ async def test_sync_per_item_failure() -> None:
 
     assert result.items_failed == 1
     assert result.items_created == 1
-    assert result.status == "completed"
+    assert result.status == SYNC_STATUS_COMPLETED
 
 
 @pytest.mark.asyncio
@@ -380,9 +385,9 @@ async def test_sync_page_level_failure() -> None:
     engine = SyncEngine(store, client, settings)
     result = await engine.run_sync()
 
-    assert result.status == "failed"
+    assert result.status == SYNC_STATUS_FAILED
     assert result.error_message is not None
-    assert "Connection lost" in result.error_message
+    assert "JellyfinConnectionError" in result.error_message
     # Page 1 items should still have been upserted
     store.upsert_many.assert_called_once()
 
@@ -484,7 +489,7 @@ async def test_sync_wal_checkpoint() -> None:
     ):
         result = await engine.run_sync()
 
-    assert result.status == "completed"
+    assert result.status == SYNC_STATUS_COMPLETED
     store.run_wal_checkpoint.assert_called_once()
 
 
@@ -508,7 +513,7 @@ async def test_sync_saves_sync_run() -> None:
     saved_result = store.save_sync_run.call_args[0][0]
     assert saved_result.items_created == 2
     assert saved_result.total_items == 2
-    assert saved_result.status == "completed"
+    assert saved_result.status == SYNC_STATUS_COMPLETED
 
 
 # ---------------------------------------------------------------------------

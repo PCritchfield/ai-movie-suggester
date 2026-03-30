@@ -522,8 +522,12 @@ class LibraryStore:
         return total
 
     async def run_wal_checkpoint(self) -> None:
-        """Execute a WAL checkpoint to reclaim disk space."""
-        await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        """Execute a WAL checkpoint to reclaim disk space.
+
+        Uses PASSIVE mode which never blocks readers or writers — it
+        checkpoints only frames that are not in use by any reader.
+        """
+        await self._conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
 
     # count_active() is intentionally not defined — use count() instead,
     # which already filters to active (non-deleted) items.
