@@ -26,8 +26,15 @@ from app.logging_config import configure_logging
 from app.middleware import SecurityHeadersMiddleware
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.rate_limit import create_limiter
-from app.models import EmbeddingsStatus, HealthResponse, ServiceStatus
+from app.models import (
+    EmbeddingsStatus,
+    HealthResponse,
+    LibrarySyncStatus,
+    ServiceStatus,
+)
 from app.ollama.client import OllamaEmbeddingClient
+from app.sync.engine import SyncEngine
+from app.sync.router import router as sync_router
 from app.vectors.repository import SqliteVecRepository
 
 if TYPE_CHECKING:
@@ -122,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.jellyfin_client = jf_client
 
         # Create sync JellyfinClient if API key is configured
+        sync_jf_client: JellyfinClient | None = None
         if settings.jellyfin_api_key is not None:
             sync_jf_client = JellyfinClient(
                 base_url=settings.jellyfin_url,
@@ -131,6 +139,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.sync_jellyfin_client = sync_jf_client
         else:
             _logger.info("background sync disabled — JELLYFIN_API_KEY not configured")
+
+        # Create SyncEngine (uses sync client if available, else main client)
+        sync_engine = SyncEngine(
+            library_store=library_store,
+            jellyfin_client=sync_jf_client if sync_jf_client else jf_client,
+            settings=settings,
+            vector_repository=vec_repo,
+        )
+        app.state.sync_engine = sync_engine
 
         # Create separate Ollama HTTP client + embedding client
         # Split timeouts: short connect (5s) prevents 120s hang when Ollama
@@ -166,6 +183,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.include_router(auth_router)
 
+        # Mount sync admin router
+        app.include_router(sync_router)
+
         # Startup connectivity checks
         async with httpx.AsyncClient() as check_client:
             jf_status, ollama_healthy = await asyncio.gather(
@@ -199,9 +219,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         cleanup_task = asyncio.create_task(_periodic_cleanup())
 
+        # Schedule periodic library sync (if configured)
+        sync_task: asyncio.Task[None] | None = None
+        if settings.jellyfin_api_key and settings.jellyfin_admin_user_id:
+
+            async def _periodic_sync() -> None:
+                while True:
+                    await asyncio.sleep(settings.sync_interval_hours * 3600)
+                    try:
+                        await sync_engine.run_sync()
+                    except Exception:
+                        _logger.warning("scheduled sync failed", exc_info=True)
+
+            sync_task = asyncio.create_task(_periodic_sync())
+            _logger.info(
+                "scheduled sync enabled — interval=%.1fh",
+                settings.sync_interval_hours,
+            )
+        else:
+            _logger.info(
+                "scheduled sync disabled — "
+                "JELLYFIN_API_KEY or JELLYFIN_ADMIN_USER_ID not set"
+            )
+
         yield
 
-        # Shutdown (LIFO order: Ollama → vec_repo → library → sessions → httpx)
+        # Shutdown (LIFO: sync → cleanup → Ollama → vec → lib → sessions)
+        if sync_task is not None:
+            sync_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await sync_task
         cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await cleanup_task
@@ -240,6 +287,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             total = await vec_repo.count()
         except Exception:
             total = 0
+
+        # Library sync status (gather DB calls concurrently)
+        library_sync: LibrarySyncStatus | None = None
+        try:
+            lib_store: LibraryStore = application.state.library_store
+            last_run, item_count, pending_count = await asyncio.gather(
+                lib_store.get_last_sync_run(),
+                lib_store.count(),
+                lib_store.count_pending_embeddings(),
+            )
+            library_sync = LibrarySyncStatus(
+                last_run_at=last_run.started_at if last_run else None,
+                last_run_status=last_run.status if last_run else None,
+                items_in_library=item_count,
+                items_pending_embedding=pending_count,
+            )
+        except Exception:
+            _logger.debug("library sync status unavailable", exc_info=True)
+
         return HealthResponse(
             jellyfin=jf_status,
             ollama=ol_status,
@@ -247,6 +313,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 total=total,
                 pending=0,  # Updated by embedding pipeline
             ),
+            library_sync=library_sync,
         )
 
     # Middleware registration order matters — FastAPI processes middleware
