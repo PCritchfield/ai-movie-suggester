@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pydantic import BaseModel
+
 
 @dataclass(frozen=True, slots=True)
 class SyncResult:
@@ -62,3 +64,49 @@ class SyncState:
     items_updated: int
     items_unchanged: int
     items_failed: int
+
+
+# --- Pydantic API response models (Task 4.0) ---
+
+
+class SyncTriggerResponse(BaseModel):
+    """Response body for POST /api/admin/sync."""
+
+    message: str
+    status: str
+
+
+class SyncProgressResponse(BaseModel):
+    """In-flight sync progress snapshot."""
+
+    pages_processed: int
+    items_processed: int
+    items_created: int
+    items_updated: int
+    items_unchanged: int
+    items_failed: int
+
+
+class SyncLastRunResponse(BaseModel):
+    """Serialized last sync run for the status endpoint."""
+
+    id: int
+    started_at: int
+    completed_at: int | None = None
+    status: str
+    total_items: int
+    items_created: int
+    items_updated: int
+    items_deleted: int
+    items_unchanged: int
+    items_failed: int
+    error_message: str | None = None
+
+
+class SyncStatusResponse(BaseModel):
+    """Response body for GET /api/admin/sync/status."""
+
+    status: str
+    started_at: int | None = None
+    progress: SyncProgressResponse | None = None
+    last_run: SyncLastRunResponse | None = None
