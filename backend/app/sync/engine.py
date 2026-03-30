@@ -16,6 +16,8 @@ from app.jellyfin.errors import JellyfinConnectionError, JellyfinError
 from app.library.models import LibraryItemRow
 from app.ollama.text_builder import build_composite_text
 from app.sync.models import (
+    SYNC_STATUS_COMPLETED,
+    SYNC_STATUS_FAILED,
     SyncAlreadyRunningError,
     SyncConfigError,
     SyncResult,
@@ -131,7 +133,7 @@ class SyncEngine:
             self._current_state = state
 
             error_message: str | None = None
-            status = "completed"
+            status = SYNC_STATUS_COMPLETED
             items_deleted = 0
             seen_ids: set[str] = set()
             known_ids: set[str] = set()
@@ -200,12 +202,12 @@ class SyncEngine:
                     state.pages_processed + 1,
                     str(exc),
                 )
-                status = "failed"
+                status = SYNC_STATUS_FAILED
                 error_message = str(exc)
 
             except Exception as exc:
                 _logger.error("sync_unexpected_error error=%s", str(exc))
-                status = "failed"
+                status = SYNC_STATUS_FAILED
                 error_message = str(exc)
 
             # Deletion detection (runs even on partial sync)
@@ -213,8 +215,9 @@ class SyncEngine:
             if deleted_ids:
                 # Safety threshold: only tombstone if we saw >= 50% of expected items
                 last_run = await self._library_store.get_last_sync_run()
-                active_count = await self._library_store.count()
                 last_total = last_run.total_items if last_run else 0
+                # Only query active count if no previous run exists as baseline
+                active_count = await self._library_store.count() if not last_run else 0
                 threshold_base = max(last_total, active_count)
 
                 if threshold_base == 0 or len(seen_ids) >= 0.5 * threshold_base:
@@ -278,9 +281,7 @@ class SyncEngine:
                         wal_size / (1024 * 1024),
                         self._settings.wal_checkpoint_threshold_mb,
                     )
-                    await self._library_store._conn.execute(  # noqa: SLF001
-                        "PRAGMA wal_checkpoint(TRUNCATE)"
-                    )
+                    await self._library_store.run_wal_checkpoint()
         except Exception:
             _logger.warning("wal_checkpoint_failed", exc_info=True)
 

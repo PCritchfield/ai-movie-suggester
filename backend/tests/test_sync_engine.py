@@ -472,8 +472,7 @@ async def test_sync_wal_checkpoint() -> None:
     page = _make_paginated([item])
 
     store = _make_mock_store()
-    # Mock the _conn for PRAGMA call
-    store._conn = AsyncMock()
+    store.run_wal_checkpoint = AsyncMock()
     client = _make_mock_client([page])
     settings = _make_mock_settings(wal_threshold_mb=0.001)  # Very low threshold
 
@@ -486,7 +485,7 @@ async def test_sync_wal_checkpoint() -> None:
         result = await engine.run_sync()
 
     assert result.status == "completed"
-    store._conn.execute.assert_any_call("PRAGMA wal_checkpoint(TRUNCATE)")
+    store.run_wal_checkpoint.assert_called_once()
 
 
 @pytest.mark.asyncio

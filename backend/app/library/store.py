@@ -521,5 +521,9 @@ class LibraryStore:
             await self._conn.commit()
         return total
 
+    async def run_wal_checkpoint(self) -> None:
+        """Execute a WAL checkpoint to reclaim disk space."""
+        await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
     # count_active() is intentionally not defined — use count() instead,
     # which already filters to active (non-deleted) items.
