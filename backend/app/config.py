@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # Library (shared by LibraryItemStore + SqliteVecRepository)
     library_db_path: str = "data/library.db"
 
+    # Permissions
+    permission_cache_ttl_seconds: int = 300
+
     # Sessions
     session_secure_cookie: bool = True
     max_sessions_per_user: int = 5
