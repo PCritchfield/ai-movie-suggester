@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from app.sync.engine import SyncEngine
 from tests.conftest import make_test_settings
 
 
@@ -130,3 +131,46 @@ class TestLifespan:
 
         with TestClient(app):
             assert not hasattr(app.state, "sync_jellyfin_client")
+
+
+class TestSyncEngineLifespan:
+    """Verify SyncEngine wiring in lifespan."""
+
+    def test_sync_engine_on_app_state(self) -> None:
+        """app.state.sync_engine is always set after startup."""
+        from app.main import create_app
+
+        settings = make_test_settings()
+        app = create_app(settings)
+
+        with TestClient(app):
+            assert hasattr(app.state, "sync_engine")
+            assert isinstance(app.state.sync_engine, SyncEngine)
+
+    def test_sync_engine_uses_sync_client_when_api_key_set(self) -> None:
+        """SyncEngine uses the sync-specific JellyfinClient when API key set."""
+        from app.main import create_app
+
+        settings = make_test_settings(
+            jellyfin_api_key="test-api-key",
+            jellyfin_admin_user_id="admin-uid",
+        )
+        app = create_app(settings)
+
+        with TestClient(app):
+            engine = app.state.sync_engine
+            # The engine's client should be the sync-specific one
+            assert engine._jellyfin_client is app.state.sync_jellyfin_client
+
+    def test_sync_router_mounted(self) -> None:
+        """Sync admin router is mounted at /api/admin/sync."""
+        from app.main import create_app
+
+        settings = make_test_settings()
+        app = create_app(settings)
+
+        with TestClient(app):
+            route_paths = [
+                r.path for r in app.routes  # type: ignore[union-attr]
+            ]
+            assert any("/api/admin/sync" in p for p in route_paths)

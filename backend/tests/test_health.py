@@ -91,3 +91,17 @@ def test_health_embeddings_zero_until_epic2(client) -> None:
     data = response.json()
     assert data["embeddings"]["total"] == 0
     assert data["embeddings"]["pending"] == 0
+
+
+def test_health_includes_library_sync(client) -> None:
+    """Health response includes library_sync section."""
+    response = client.get("/health")
+    data = response.json()
+    assert "library_sync" in data
+    sync = data["library_sync"]
+    # Library store is available but no sync has run
+    assert sync is not None
+    assert sync["last_run_at"] is None
+    assert sync["last_run_status"] is None
+    assert isinstance(sync["items_in_library"], int)
+    assert isinstance(sync["items_pending_embedding"], int)
