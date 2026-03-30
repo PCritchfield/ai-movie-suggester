@@ -122,9 +122,7 @@ class SyncEngine:
         try:
             await asyncio.wait_for(self._lock.acquire(), timeout=1.0)
         except TimeoutError:
-            raise SyncAlreadyRunningError(
-                "A sync is already in progress"
-            ) from None
+            raise SyncAlreadyRunningError("A sync is already in progress") from None
 
         try:
             self._validate_config()
@@ -174,9 +172,7 @@ class SyncEngine:
                         seen_ids.add(item.id)
                         try:
                             composite_result = build_composite_text(item)
-                            content_hash = self._compute_hash(
-                                composite_result.text
-                            )
+                            content_hash = self._compute_hash(composite_result.text)
                             state.items_processed += 1
 
                             old_hash = existing_hashes.get(item.id)
@@ -206,14 +202,11 @@ class SyncEngine:
                     if rows_to_upsert:
                         await self._library_store.upsert_many(rows_to_upsert)
                     if ids_to_enqueue:
-                        await self._library_store.enqueue_for_embedding(
-                            ids_to_enqueue
-                        )
+                        await self._library_store.enqueue_for_embedding(ids_to_enqueue)
 
                     state.pages_processed += 1
                     _logger.info(
-                        "sync page=%d new=%d changed=%d "
-                        "unchanged=%d failed=%d",
+                        "sync page=%d new=%d changed=%d unchanged=%d failed=%d",
                         state.pages_processed,
                         state.items_created,
                         state.items_updated,
@@ -238,9 +231,7 @@ class SyncEngine:
                     type(exc).__name__,
                 )
                 status = SYNC_STATUS_FAILED
-                error_message = (
-                    f"{type(exc).__name__}: unexpected sync error"
-                )
+                error_message = f"{type(exc).__name__}: unexpected sync error"
 
             # Deletion detection (runs even on partial sync)
             deleted_ids = known_ids - seen_ids
@@ -249,24 +240,13 @@ class SyncEngine:
                 last_run = await self._library_store.get_last_sync_run()
                 last_total = last_run.total_items if last_run else 0
                 # Only query count if no previous run as baseline
-                active_count = (
-                    await self._library_store.count()
-                    if not last_run
-                    else 0
-                )
+                active_count = await self._library_store.count() if not last_run else 0
                 threshold_base = max(last_total, active_count)
 
-                if (
-                    threshold_base > 0
-                    and len(seen_ids) >= 0.5 * threshold_base
-                ):
-                    await self._library_store.soft_delete_many(
-                        list(deleted_ids)
-                    )
+                if threshold_base > 0 and len(seen_ids) >= 0.5 * threshold_base:
+                    await self._library_store.soft_delete_many(list(deleted_ids))
                     items_deleted = len(deleted_ids)
-                    _logger.info(
-                        "sync_soft_deleted count=%d", items_deleted
-                    )
+                    _logger.info("sync_soft_deleted count=%d", items_deleted)
                 else:
                     _logger.warning(
                         "sync_deletion_skipped seen=%d "
