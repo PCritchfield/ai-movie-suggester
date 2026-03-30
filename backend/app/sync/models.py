@@ -46,7 +46,7 @@ class SyncConfigError(Exception):
     """Raised when sync engine configuration is invalid or missing."""
 
 
-@dataclass
+@dataclass(slots=True)
 class SyncState:
     """Mutable accumulator for tracking progress during a sync run."""
 

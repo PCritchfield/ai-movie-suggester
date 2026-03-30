@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS sync_runs (
 )
 """
 
+_CREATE_INDEX_SYNC_RUNS_STARTED = """
+CREATE INDEX IF NOT EXISTS idx_sync_runs_started_at
+ON sync_runs(started_at)
+"""
+
 # Maximum number of IDs per SQL IN clause batch
 _BATCH_SIZE = 500
 
@@ -122,6 +127,7 @@ class LibraryStore:
         await self._db.execute(_CREATE_EMBEDDING_QUEUE)
         await self._db.execute(_CREATE_INDEX_EMBEDDING_QUEUE)
         await self._db.execute(_CREATE_SYNC_RUNS)
+        await self._db.execute(_CREATE_INDEX_SYNC_RUNS_STARTED)
         await self._db.commit()
 
     async def close(self) -> None:
@@ -401,27 +407,33 @@ class LibraryStore:
         """Insert or reset items in the embedding queue as 'pending'.
 
         Uses ON CONFLICT to reset status, retry_count, and error_message
-        for items that are already queued. Returns the number of items
-        enqueued.
+        for items that are already queued. Wrapped in a single transaction
+        for atomicity. Returns the number of IDs submitted (input count).
         """
         if not ids:
             return 0
 
         now = int(time.time())
         total = 0
-        for i in range(0, len(ids), _BATCH_SIZE):
-            batch = ids[i : i + _BATCH_SIZE]
-            params = [(jid, now) for jid in batch]
-            await self._conn.executemany(
-                "INSERT INTO embedding_queue (jellyfin_id, enqueued_at, status)"
-                " VALUES (?, ?, 'pending')"
-                " ON CONFLICT(jellyfin_id) DO UPDATE SET"
-                " status='pending', enqueued_at=excluded.enqueued_at,"
-                " retry_count=0, error_message=NULL",
-                params,
-            )
-            total += len(batch)
-        await self._conn.commit()
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                params = [(jid, now) for jid in batch]
+                await self._conn.executemany(
+                    "INSERT INTO embedding_queue (jellyfin_id, enqueued_at, status)"
+                    " VALUES (?, ?, 'pending')"
+                    " ON CONFLICT(jellyfin_id) DO UPDATE SET"
+                    " status='pending', enqueued_at=excluded.enqueued_at,"
+                    " retry_count=0, error_message=NULL",
+                    params,
+                )
+                total += len(batch)
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
         return total
 
     async def count_pending_embeddings(self) -> int:
