@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+import time
+from typing import TYPE_CHECKING, Any
 
 import aiosqlite
 
 from app.library.models import LibraryItemRow, UpsertResult
+
+if TYPE_CHECKING:
+    from app.sync.models import SyncResult, SyncRunRow
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +33,8 @@ CREATE TABLE IF NOT EXISTS library_items (
     community_rating  REAL,
     people            TEXT NOT NULL DEFAULT '[]',
     content_hash      TEXT NOT NULL,
-    synced_at         INTEGER NOT NULL
+    synced_at         INTEGER NOT NULL,
+    deleted_at        INTEGER
 )
 """
 
@@ -41,6 +46,47 @@ ON library_items(content_hash)
 _CREATE_INDEX_SYNCED = """
 CREATE INDEX IF NOT EXISTS idx_library_items_synced_at
 ON library_items(synced_at)
+"""
+
+_CREATE_INDEX_DELETED = """
+CREATE INDEX IF NOT EXISTS idx_library_items_deleted_at
+ON library_items(deleted_at)
+"""
+
+_CREATE_EMBEDDING_QUEUE = """
+CREATE TABLE IF NOT EXISTS embedding_queue (
+    jellyfin_id    TEXT PRIMARY KEY,
+    enqueued_at    INTEGER NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'pending',
+    retry_count    INTEGER NOT NULL DEFAULT 0,
+    error_message  TEXT
+)
+"""
+
+_CREATE_INDEX_EMBEDDING_QUEUE = """
+CREATE INDEX IF NOT EXISTS idx_embedding_queue_status_enqueued
+ON embedding_queue(status, enqueued_at)
+"""
+
+_CREATE_SYNC_RUNS = """
+CREATE TABLE IF NOT EXISTS sync_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at      INTEGER NOT NULL,
+    completed_at    INTEGER,
+    status          TEXT NOT NULL,
+    total_items     INTEGER NOT NULL DEFAULT 0,
+    items_created   INTEGER NOT NULL DEFAULT 0,
+    items_updated   INTEGER NOT NULL DEFAULT 0,
+    items_deleted   INTEGER NOT NULL DEFAULT 0,
+    items_unchanged INTEGER NOT NULL DEFAULT 0,
+    items_failed    INTEGER NOT NULL DEFAULT 0,
+    error_message   TEXT
+)
+"""
+
+_CREATE_INDEX_SYNC_RUNS_STARTED = """
+CREATE INDEX IF NOT EXISTS idx_sync_runs_started_at
+ON sync_runs(started_at)
 """
 
 # Maximum number of IDs per SQL IN clause batch
@@ -62,6 +108,21 @@ class LibraryStore:
         await self._db.execute(_CREATE_TABLE)
         await self._db.execute(_CREATE_INDEX_HASH)
         await self._db.execute(_CREATE_INDEX_SYNCED)
+
+        # Migration: add deleted_at column if table predates Spec 08
+        cursor = await self._db.execute("PRAGMA table_info(library_items)")
+        existing_columns = {row[1] for row in await cursor.fetchall()}
+        if "deleted_at" not in existing_columns:
+            await self._db.execute(
+                "ALTER TABLE library_items ADD COLUMN deleted_at INTEGER"
+            )
+            await self._db.commit()
+
+        await self._db.execute(_CREATE_INDEX_DELETED)
+        await self._db.execute(_CREATE_EMBEDDING_QUEUE)
+        await self._db.execute(_CREATE_INDEX_EMBEDDING_QUEUE)
+        await self._db.execute(_CREATE_SYNC_RUNS)
+        await self._db.execute(_CREATE_INDEX_SYNC_RUNS_STARTED)
         await self._db.commit()
 
     async def close(self) -> None:
@@ -245,15 +306,228 @@ class LibraryStore:
         return results
 
     async def get_all_hashes(self) -> dict[str, str]:
-        """Return {jellyfin_id: content_hash} mapping for all items."""
+        """Return {jellyfin_id: content_hash} mapping for active (non-deleted) items."""
         cursor = await self._conn.execute(
             "SELECT jellyfin_id, content_hash FROM library_items"
+            " WHERE deleted_at IS NULL"
         )
         rows = await cursor.fetchall()
         return {row[0]: row[1] for row in rows}
 
     async def count(self) -> int:
-        """Return total number of items in the store."""
-        cursor = await self._conn.execute("SELECT COUNT(*) FROM library_items")
+        """Return total number of active (non-deleted) items in the store."""
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) FROM library_items WHERE deleted_at IS NULL"
+        )
         row = await cursor.fetchone()
         return row[0] if row else 0
+
+    # --- Sync engine methods (Spec 08, Task 2.0) ---
+
+    async def get_all_ids(self) -> set[str]:
+        """Return the set of all active (non-deleted) jellyfin_ids."""
+        cursor = await self._conn.execute(
+            "SELECT jellyfin_id FROM library_items WHERE deleted_at IS NULL"
+        )
+        rows = await cursor.fetchall()
+        return {row[0] for row in rows}
+
+    async def soft_delete_many(self, ids: list[str]) -> int:
+        """Mark items as deleted by setting deleted_at timestamp.
+
+        Chunks at _BATCH_SIZE. Wrapped in a single transaction for atomicity.
+        Returns the total number of rows affected.
+        """
+        if not ids:
+            return 0
+
+        now = int(time.time())
+        total = 0
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                placeholders = ",".join("?" * len(batch))
+                cursor = await self._conn.execute(
+                    f"UPDATE library_items SET deleted_at = ?"
+                    f" WHERE jellyfin_id IN ({placeholders})",
+                    [now, *batch],
+                )
+                total += cursor.rowcount
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
+        return total
+
+    async def hard_delete_many(self, ids: list[str]) -> int:
+        """Permanently remove items from the store.
+
+        Chunks at _BATCH_SIZE. Wrapped in a single transaction for atomicity.
+        Returns the total number of rows deleted.
+        """
+        if not ids:
+            return 0
+
+        total = 0
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                placeholders = ",".join("?" * len(batch))
+                cursor = await self._conn.execute(
+                    f"DELETE FROM library_items WHERE jellyfin_id IN ({placeholders})",
+                    batch,
+                )
+                total += cursor.rowcount
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
+        return total
+
+    async def get_tombstoned_ids(self, older_than: int) -> list[str]:
+        """Return IDs of items soft-deleted before the given timestamp."""
+        cursor = await self._conn.execute(
+            "SELECT jellyfin_id FROM library_items"
+            " WHERE deleted_at IS NOT NULL AND deleted_at < ?",
+            (older_than,),
+        )
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+    async def enqueue_for_embedding(self, ids: list[str]) -> int:
+        """Insert or reset items in the embedding queue as 'pending'.
+
+        Uses ON CONFLICT to reset status, retry_count, and error_message
+        for items that are already queued. Wrapped in a single transaction
+        for atomicity. Returns the number of IDs submitted (input count).
+        """
+        if not ids:
+            return 0
+
+        now = int(time.time())
+        total = 0
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                params = [(jid, now) for jid in batch]
+                await self._conn.executemany(
+                    "INSERT INTO embedding_queue (jellyfin_id, enqueued_at, status)"
+                    " VALUES (?, ?, 'pending')"
+                    " ON CONFLICT(jellyfin_id) DO UPDATE SET"
+                    " status='pending', enqueued_at=excluded.enqueued_at,"
+                    " retry_count=0, error_message=NULL",
+                    params,
+                )
+                total += len(batch)
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
+        return total
+
+    async def count_pending_embeddings(self) -> int:
+        """Return the number of items with 'pending' status in the queue."""
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) FROM embedding_queue WHERE status = 'pending'"
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def save_sync_run(self, run: SyncResult) -> None:
+        """Persist a SyncResult as a row in the sync_runs table."""
+        await self._conn.execute(
+            "INSERT INTO sync_runs"
+            " (started_at, completed_at, status, total_items,"
+            "  items_created, items_updated, items_deleted,"
+            "  items_unchanged, items_failed, error_message)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                run.started_at,
+                run.completed_at,
+                run.status,
+                run.total_items,
+                run.items_created,
+                run.items_updated,
+                run.items_deleted,
+                run.items_unchanged,
+                run.items_failed,
+                run.error_message,
+            ),
+        )
+        await self._conn.commit()
+
+    async def get_last_sync_run(self) -> SyncRunRow | None:
+        """Return the most recent sync run, or None if no runs exist."""
+        cursor = await self._conn.execute(
+            "SELECT id, started_at, completed_at, status, total_items,"
+            " items_created, items_updated, items_deleted,"
+            " items_unchanged, items_failed, error_message"
+            " FROM sync_runs ORDER BY started_at DESC, id DESC LIMIT 1"
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return self._row_to_sync_run(row)
+
+    @staticmethod
+    def _row_to_sync_run(row: Any) -> SyncRunRow:
+        """Deserialize a database row into a SyncRunRow."""
+        from app.sync.models import SyncRunRow as _SyncRunRow
+
+        return _SyncRunRow(
+            id=row[0],
+            started_at=row[1],
+            completed_at=row[2],
+            status=row[3],
+            total_items=row[4],
+            items_created=row[5],
+            items_updated=row[6],
+            items_deleted=row[7],
+            items_unchanged=row[8],
+            items_failed=row[9],
+            error_message=row[10],
+        )
+
+    async def delete_from_embedding_queue(self, ids: list[str]) -> int:
+        """Remove items from the embedding queue by jellyfin_id.
+
+        Chunks at _BATCH_SIZE. Wrapped in a single transaction for atomicity.
+        Returns the total number of rows deleted.
+        """
+        if not ids:
+            return 0
+
+        total = 0
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                placeholders = ",".join("?" * len(batch))
+                sql = (
+                    f"DELETE FROM embedding_queue WHERE jellyfin_id IN ({placeholders})"
+                )
+                cursor = await self._conn.execute(sql, batch)
+                total += cursor.rowcount
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
+        return total
+
+    async def run_wal_checkpoint(self) -> None:
+        """Execute a WAL checkpoint to reclaim disk space.
+
+        Uses PASSIVE mode which never blocks readers or writers — it
+        checkpoints only frames that are not in use by any reader.
+        """
+        await self._conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+
+    # count_active() is intentionally not defined — use count() instead,
+    # which already filters to active (non-deleted) items.

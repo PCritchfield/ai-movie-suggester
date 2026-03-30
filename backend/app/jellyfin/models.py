@@ -27,6 +27,14 @@ class AuthResult(BaseModel):
         )
 
 
+class UserPolicy(BaseModel):
+    """Jellyfin user policy (nested inside /Users/Me response)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    is_administrator: bool = Field(default=False, alias="IsAdministrator")
+
+
 class UserInfo(BaseModel):
     """Jellyfin user info (from /Users/Me or /Users/{id})."""
 
@@ -36,6 +44,7 @@ class UserInfo(BaseModel):
     name: str = Field(alias="Name")
     server_id: str = Field(alias="ServerId")
     has_password: bool = Field(alias="HasPassword")
+    policy: UserPolicy = Field(default_factory=UserPolicy, alias="Policy")
 
 
 class LibraryItem(BaseModel):

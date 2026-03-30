@@ -308,3 +308,55 @@ def test_jellyfin_api_key_whitespace_stripped() -> None:
         s = Settings()  # type: ignore[call-arg]
     assert s.jellyfin_api_key is not None
     assert s.jellyfin_api_key.get_secret_value() == "key123"
+
+
+# --- sync engine config ---
+
+
+def test_jellyfin_admin_user_id_default_none() -> None:
+    """jellyfin_admin_user_id defaults to None when not set."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.jellyfin_admin_user_id is None
+
+
+def test_sync_interval_hours_default() -> None:
+    """sync_interval_hours defaults to 6.0."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.sync_interval_hours == 6.0
+
+
+def test_tombstone_ttl_days_default() -> None:
+    """tombstone_ttl_days defaults to 7."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.tombstone_ttl_days == 7
+
+
+def test_wal_checkpoint_threshold_mb_default() -> None:
+    """wal_checkpoint_threshold_mb defaults to 50.0."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.wal_checkpoint_threshold_mb == 50.0
+
+
+def test_sync_engine_config_from_env() -> None:
+    """All sync engine config fields loaded from environment variables."""
+    env = {
+        **_REQUIRED_ENV,
+        "JELLYFIN_ADMIN_USER_ID": "abc-123-admin",
+        "SYNC_INTERVAL_HOURS": "12.0",
+        "TOMBSTONE_TTL_DAYS": "14",
+        "WAL_CHECKPOINT_THRESHOLD_MB": "100.0",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.jellyfin_admin_user_id == "abc-123-admin"
+    assert s.sync_interval_hours == 12.0
+    assert s.tombstone_ttl_days == 14
+    assert s.wal_checkpoint_threshold_mb == 100.0
