@@ -30,7 +30,7 @@ _MAX_CACHE_ENTRIES = 500
 
 @dataclass(frozen=True, slots=True)
 class _CacheEntry:
-    permitted_ids: set[str]
+    permitted_ids: frozenset[str]
     expires_at: float
 
 
@@ -50,8 +50,11 @@ class PermissionService:
         self._cache_ttl = cache_ttl_seconds
         self._cache: dict[str, _CacheEntry] = {}
 
-    async def _fetch_permitted_ids(self, user_id: str, token: str) -> set[str]:
-        """Fetch all item IDs the user can access from Jellyfin."""
+    async def _fetch_permitted_ids(self, user_id: str, token: str) -> frozenset[str]:
+        """Fetch all item IDs the user can access from Jellyfin.
+
+        Only fetches Movie items. Returns a frozenset for immutable cache storage.
+        """
         ids: set[str] = set()
         async for page in self._jf_client.get_all_items(
             token=token, user_id=user_id, item_types=["Movie"]
@@ -59,7 +62,7 @@ class PermissionService:
             for item in page.items:
                 ids.add(item.id)
         logger.debug("permission_fetch user_id=%s items=%d", user_id, len(ids))
-        return ids
+        return frozenset(ids)
 
     async def filter_permitted(
         self, user_id: str, token: str, candidate_ids: list[str]

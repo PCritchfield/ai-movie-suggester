@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import pathlib
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
@@ -27,7 +26,7 @@ from tests.conftest import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import AsyncIterator
     from unittest.mock import AsyncMock
 
 import pytest
@@ -59,9 +58,9 @@ class TestDependency:
 
 
 @pytest.fixture
-def auth_app_with_perms(
+async def auth_app_with_perms(
     tmp_path: object, mock_jf: AsyncMock
-) -> Iterator[tuple[TestClient, PermissionService]]:
+) -> AsyncIterator[tuple[TestClient, PermissionService]]:
     """Minimal test app with auth routes + permission service (no CSRF)."""
     db_path = pathlib.Path(str(tmp_path)) / "test_sessions.db"
 
@@ -98,11 +97,11 @@ def auth_app_with_perms(
     app.state.jellyfin_client = jf_client
     app.state.permission_service = perm_service
 
-    asyncio.get_event_loop().run_until_complete(store.init())
+    await store.init()
 
     client = TestClient(app)
     yield client, perm_service
-    asyncio.get_event_loop().run_until_complete(store.close())
+    await store.close()
 
 
 class TestLogoutIntegration:
@@ -142,9 +141,9 @@ class TestLogoutIntegration:
 
 
 @pytest.fixture
-def session_destruction_parts(
+async def session_destruction_parts(
     tmp_path: object, mock_jf: AsyncMock
-) -> Iterator[tuple[SessionStore, PermissionService, Settings]]:
+) -> AsyncIterator[tuple[SessionStore, PermissionService, Settings]]:
     """Create standalone store + permission service for session destruction tests."""
     db_path = pathlib.Path(str(tmp_path)) / "test_sessions.db"
 
@@ -158,9 +157,9 @@ def session_destruction_parts(
     store = SessionStore(str(db_path), TEST_COLUMN_KEY)
     perm_service = PermissionService(jellyfin_client=mock_jf, cache_ttl_seconds=300)
 
-    asyncio.get_event_loop().run_until_complete(store.init())
+    await store.init()
     yield store, perm_service, settings
-    asyncio.get_event_loop().run_until_complete(store.close())
+    await store.close()
 
 
 class TestSessionDestruction:
