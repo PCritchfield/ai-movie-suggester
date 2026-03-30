@@ -110,8 +110,13 @@ class LibraryStore:
                 "ALTER TABLE library_items ADD COLUMN deleted_at INTEGER"
             )
             await self._db.commit()
-        except Exception:  # noqa: BLE001
-            pass  # Column already exists — idempotent
+        except Exception as exc:  # noqa: BLE001
+            # SQLite raises OperationalError for "duplicate column name"
+            if "duplicate column" in str(exc).lower():
+                pass  # Column already exists — idempotent
+            else:
+                logger.error("deleted_at migration failed: %s", exc)
+                raise
 
         await self._db.execute(_CREATE_INDEX_DELETED)
         await self._db.execute(_CREATE_EMBEDDING_QUEUE)
@@ -329,43 +334,57 @@ class LibraryStore:
     async def soft_delete_many(self, ids: list[str]) -> int:
         """Mark items as deleted by setting deleted_at timestamp.
 
-        Chunks at _BATCH_SIZE. Returns the total number of rows affected.
+        Chunks at _BATCH_SIZE. Wrapped in a single transaction for atomicity.
+        Returns the total number of rows affected.
         """
         if not ids:
             return 0
 
         now = int(time.time())
         total = 0
-        for i in range(0, len(ids), _BATCH_SIZE):
-            batch = ids[i : i + _BATCH_SIZE]
-            placeholders = ",".join("?" * len(batch))
-            cursor = await self._conn.execute(
-                f"UPDATE library_items SET deleted_at = ?"
-                f" WHERE jellyfin_id IN ({placeholders})",
-                [now, *batch],
-            )
-            total += cursor.rowcount
-        await self._conn.commit()
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                placeholders = ",".join("?" * len(batch))
+                cursor = await self._conn.execute(
+                    f"UPDATE library_items SET deleted_at = ?"
+                    f" WHERE jellyfin_id IN ({placeholders})",
+                    [now, *batch],
+                )
+                total += cursor.rowcount
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
         return total
 
     async def hard_delete_many(self, ids: list[str]) -> int:
         """Permanently remove items from the store.
 
-        Chunks at _BATCH_SIZE. Returns the total number of rows deleted.
+        Chunks at _BATCH_SIZE. Wrapped in a single transaction for atomicity.
+        Returns the total number of rows deleted.
         """
         if not ids:
             return 0
 
         total = 0
-        for i in range(0, len(ids), _BATCH_SIZE):
-            batch = ids[i : i + _BATCH_SIZE]
-            placeholders = ",".join("?" * len(batch))
-            cursor = await self._conn.execute(
-                f"DELETE FROM library_items WHERE jellyfin_id IN ({placeholders})",
-                batch,
-            )
-            total += cursor.rowcount
-        await self._conn.commit()
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                placeholders = ",".join("?" * len(batch))
+                cursor = await self._conn.execute(
+                    f"DELETE FROM library_items WHERE jellyfin_id IN ({placeholders})",
+                    batch,
+                )
+                total += cursor.rowcount
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
         return total
 
     async def get_tombstoned_ids(self, older_than: int) -> list[str]:
@@ -468,10 +487,5 @@ class LibraryStore:
             error_message=row[10],
         )
 
-    async def count_active(self) -> int:
-        """Return the number of active (non-deleted) items."""
-        cursor = await self._conn.execute(
-            "SELECT COUNT(*) FROM library_items WHERE deleted_at IS NULL"
-        )
-        row = await cursor.fetchone()
-        return row[0] if row else 0
+    # count_active() is intentionally not defined — use count() instead,
+    # which already filters to active (non-deleted) items.

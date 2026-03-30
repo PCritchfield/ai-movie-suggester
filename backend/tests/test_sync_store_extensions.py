@@ -417,24 +417,6 @@ async def test_get_last_sync_run_returns_none_when_empty(
     assert last is None
 
 
-# --- count_active tests ---
-
-
-@pytest.mark.asyncio
-async def test_count_active_excludes_soft_deleted(store: LibraryStore) -> None:
-    """count_active excludes soft-deleted items."""
-    items = [_make_item(f"id-{i}") for i in range(5)]
-    await store.upsert_many(items)
-    await store.soft_delete_many(["id-0", "id-1"])
-    assert await store.count_active() == 3
-
-
-@pytest.mark.asyncio
-async def test_count_active_empty_store(store: LibraryStore) -> None:
-    """count_active returns 0 for empty store."""
-    assert await store.count_active() == 0
-
-
 # --- get_all_hashes filters soft-deleted (Task 1.0 update) ---
 
 
