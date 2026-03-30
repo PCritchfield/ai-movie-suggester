@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import tempfile
+import unittest.mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -537,22 +538,27 @@ async def test_purge_expired_tombstones() -> None:
 
     assert count == 2
 
-    # Verify deletion order via call ordering
-    calls = []
-    vector_repo.delete_many.assert_called_once_with(["jf-del-1", "jf-del-2"])
-    calls.append("vector_delete")
+    # Verify deletion order: vectors -> queue -> library
+    # Use a shared mock manager to track call sequence
+    manager = MagicMock()
+    manager.attach_mock(vector_repo.delete_many, "vec_delete")
+    manager.attach_mock(store.delete_from_embedding_queue, "queue_delete")
+    manager.attach_mock(store.hard_delete_many, "lib_delete")
 
-    store.delete_from_embedding_queue.assert_called_once_with(["jf-del-1", "jf-del-2"])
-    calls.append("queue_delete")
+    # Re-run to capture ordering on the manager
+    store.get_tombstoned_ids.return_value = ["jf-del-1", "jf-del-2"]
+    store.hard_delete_many.return_value = 2
+    await engine.purge_tombstones()
 
-    store.hard_delete_many.assert_called_once_with(["jf-del-1", "jf-del-2"])
-    calls.append("library_delete")
-
-    # Verify all three deletion steps were called
-    # (order enforced by sequential awaits in purge_tombstones)
-    assert vector_repo.delete_many.called
-    assert store.delete_from_embedding_queue.called
-    assert store.hard_delete_many.called
+    expected_ids = ["jf-del-1", "jf-del-2"]
+    manager.assert_has_calls(
+        [
+            unittest.mock.call.vec_delete(expected_ids),
+            unittest.mock.call.queue_delete(expected_ids),
+            unittest.mock.call.lib_delete(expected_ids),
+        ],
+        any_order=False,
+    )
 
 
 @pytest.mark.asyncio

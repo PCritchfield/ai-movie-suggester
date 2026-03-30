@@ -41,7 +41,7 @@ tests/test_sync_engine.py::test_sync_saves_sync_run PASSED
 
 ### WAL checkpoint
 - Triggered when WAL file exceeds configured threshold
-- Uses PRAGMA wal_checkpoint(TRUNCATE)
+- Uses PRAGMA wal_checkpoint(PASSIVE)
 
 ### Content hashing
 - Uses `build_composite_text(item).text` as input (not `compute_content_hash()`)

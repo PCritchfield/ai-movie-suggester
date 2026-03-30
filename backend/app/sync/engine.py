@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from app.jellyfin.errors import JellyfinConnectionError, JellyfinError
 from app.library.models import LibraryItemRow
-from app.ollama.text_builder import build_composite_text
+from app.library.text_builder import build_composite_text
 from app.sync.models import (
     SYNC_STATUS_COMPLETED,
     SYNC_STATUS_FAILED,
@@ -114,10 +114,19 @@ class SyncEngine:
         Raises SyncAlreadyRunningError if another sync is in progress.
         Raises SyncConfigError if required config is missing.
         """
+        # Fast-path rejection if lock is already held
         if self._lock.locked():
             raise SyncAlreadyRunningError("A sync is already in progress")
 
-        async with self._lock:
+        # Acquire with a tiny timeout to close the TOCTOU window
+        try:
+            await asyncio.wait_for(self._lock.acquire(), timeout=1.0)
+        except TimeoutError:
+            raise SyncAlreadyRunningError(
+                "A sync is already in progress"
+            ) from None
+
+        try:
             self._validate_config()
 
             started_at = int(time.time())
@@ -159,10 +168,15 @@ class SyncEngine:
                     ids_to_enqueue: list[str] = []
 
                     for item in page.items:
+                        # Track as seen regardless of processing success —
+                        # an item present in Jellyfin should not be tombstoned
+                        # just because build_composite_text failed on it
+                        seen_ids.add(item.id)
                         try:
                             composite_result = build_composite_text(item)
-                            content_hash = self._compute_hash(composite_result.text)
-                            seen_ids.add(item.id)
+                            content_hash = self._compute_hash(
+                                composite_result.text
+                            )
                             state.items_processed += 1
 
                             old_hash = existing_hashes.get(item.id)
@@ -192,11 +206,14 @@ class SyncEngine:
                     if rows_to_upsert:
                         await self._library_store.upsert_many(rows_to_upsert)
                     if ids_to_enqueue:
-                        await self._library_store.enqueue_for_embedding(ids_to_enqueue)
+                        await self._library_store.enqueue_for_embedding(
+                            ids_to_enqueue
+                        )
 
                     state.pages_processed += 1
                     _logger.info(
-                        "sync page=%d new=%d changed=%d unchanged=%d failed=%d",
+                        "sync page=%d new=%d changed=%d "
+                        "unchanged=%d failed=%d",
                         state.pages_processed,
                         state.items_created,
                         state.items_updated,
@@ -216,27 +233,44 @@ class SyncEngine:
                 error_message = f"{type(exc).__name__}: {doc}"
 
             except Exception as exc:
-                _logger.error("sync_unexpected_error error_type=%s", type(exc).__name__)
+                _logger.error(
+                    "sync_unexpected_error error_type=%s",
+                    type(exc).__name__,
+                )
                 status = SYNC_STATUS_FAILED
-                error_message = f"{type(exc).__name__}: unexpected sync error"
+                error_message = (
+                    f"{type(exc).__name__}: unexpected sync error"
+                )
 
             # Deletion detection (runs even on partial sync)
             deleted_ids = known_ids - seen_ids
             if deleted_ids:
-                # Safety threshold: only tombstone if we saw >= 50% of expected items
+                # Safety threshold: only tombstone if we saw >= 50%
                 last_run = await self._library_store.get_last_sync_run()
                 last_total = last_run.total_items if last_run else 0
-                # Only query active count if no previous run exists as baseline
-                active_count = await self._library_store.count() if not last_run else 0
+                # Only query count if no previous run as baseline
+                active_count = (
+                    await self._library_store.count()
+                    if not last_run
+                    else 0
+                )
                 threshold_base = max(last_total, active_count)
 
-                if threshold_base > 0 and len(seen_ids) >= 0.5 * threshold_base:
-                    await self._library_store.soft_delete_many(list(deleted_ids))
+                if (
+                    threshold_base > 0
+                    and len(seen_ids) >= 0.5 * threshold_base
+                ):
+                    await self._library_store.soft_delete_many(
+                        list(deleted_ids)
+                    )
                     items_deleted = len(deleted_ids)
-                    _logger.info("sync_soft_deleted count=%d", items_deleted)
+                    _logger.info(
+                        "sync_soft_deleted count=%d", items_deleted
+                    )
                 else:
                     _logger.warning(
-                        "sync_deletion_skipped seen=%d threshold_base=%d "
+                        "sync_deletion_skipped seen=%d "
+                        "threshold_base=%d "
                         "(below 50%% safety threshold)",
                         len(seen_ids),
                         threshold_base,
@@ -268,20 +302,21 @@ class SyncEngine:
 
             await self._library_store.save_sync_run(result)
 
-            # Purge runs after save_sync_run intentionally — items_deleted in
-            # SyncResult tracks soft-deletes detected in THIS run, not tombstone
-            # purges (which remove items deleted in PRIOR runs). Purge failure
-            # does not affect the sync result status.
+            # Purge runs after save_sync_run intentionally —
+            # items_deleted in SyncResult tracks soft-deletes detected
+            # in THIS run, not tombstone purges from prior runs.
             try:
                 await self.purge_tombstones()
             except Exception:
                 _logger.warning("purge_tombstones_failed", exc_info=True)
 
-            self._current_state = None
             return result
+        finally:
+            self._current_state = None
+            self._lock.release()
 
     async def _maybe_wal_checkpoint(self) -> None:
-        """Run a WAL checkpoint if the database file exceeds the threshold."""
+        """Run a WAL checkpoint if the WAL sidecar file exceeds the threshold."""
         try:
             db_path = self._settings.library_db_path
             threshold_bytes = self._settings.wal_checkpoint_threshold_mb * 1024 * 1024
