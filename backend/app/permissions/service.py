@@ -23,6 +23,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of user permission sets to keep in memory.
+# When exceeded, the oldest entries (by expiry time) are evicted.
+_MAX_CACHE_ENTRIES = 500
+
 
 @dataclass(frozen=True, slots=True)
 class _CacheEntry:
@@ -35,7 +39,8 @@ class PermissionService:
 
     Fetches the full set of item IDs a user can access, caches them
     for ``cache_ttl_seconds``, and provides order-preserving filtering
-    of candidate item IDs.
+    of candidate item IDs. Cache is bounded to ``_MAX_CACHE_ENTRIES``
+    to prevent unbounded memory growth on multi-user instances.
     """
 
     def __init__(
@@ -89,8 +94,20 @@ class PermissionService:
                 permitted_ids=permitted,
                 expires_at=time.monotonic() + self._cache_ttl,
             )
+            self._evict_if_full()
 
         return [cid for cid in candidate_ids if cid in permitted]
+
+    def _evict_if_full(self) -> None:
+        """Evict the oldest cache entries if cache exceeds max size."""
+        if len(self._cache) <= _MAX_CACHE_ENTRIES:
+            return
+        # Sort by expiry (soonest-expiring first) and remove excess
+        entries = sorted(self._cache.items(), key=lambda kv: kv[1].expires_at)
+        to_remove = len(self._cache) - _MAX_CACHE_ENTRIES
+        for uid, _ in entries[:to_remove]:
+            del self._cache[uid]
+        logger.debug("permission_cache_evicted count=%d", to_remove)
 
     def invalidate_user_cache(self, user_id: str) -> None:
         """Remove cached permissions for a user. Safe no-op if not cached."""
