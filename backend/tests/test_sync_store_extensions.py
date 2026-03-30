@@ -191,6 +191,7 @@ async def test_hard_delete_many_removes_rows(store: LibraryStore) -> None:
     # Should only have id-1 left
     cursor = await store._conn.execute("SELECT COUNT(*) FROM library_items")
     row = await cursor.fetchone()
+    assert row is not None
     assert row[0] == 1
 
 
@@ -218,6 +219,7 @@ async def test_hard_delete_many_chunking(store: LibraryStore) -> None:
 
     cursor = await store._conn.execute("SELECT COUNT(*) FROM library_items")
     row = await cursor.fetchone()
+    assert row is not None
     assert row[0] == 0
 
 
@@ -302,6 +304,7 @@ async def test_enqueue_for_embedding_conflict_resets_status(
         " WHERE jellyfin_id = 'id-1'"
     )
     row = await cursor.fetchone()
+    assert row is not None
     assert row[0] == "pending"
     assert row[1] == 0
     assert row[2] is None
