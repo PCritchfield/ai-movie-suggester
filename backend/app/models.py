@@ -15,6 +15,8 @@ ServiceStatus = Literal["ok", "error"]
 class EmbeddingsStatus(BaseModel):
     total: int = 0
     pending: int = 0
+    failed: int = 0
+    worker_status: str = "idle"
 
 
 class LibrarySyncStatus(BaseModel):

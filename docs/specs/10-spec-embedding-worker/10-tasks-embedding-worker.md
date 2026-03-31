@@ -274,7 +274,7 @@ Implement the startup version check that detects stale embeddings when `TEMPLATE
 
 ---
 
-### [ ] 5.0 Observability Endpoints and Lifespan Wiring
+### [x] 5.0 Observability Endpoints and Lifespan Wiring
 
 Wire the embedding worker into the FastAPI application. Update the health endpoint, add the admin status endpoint, and connect the worker to the lifespan with correct startup/shutdown ordering.
 
@@ -290,22 +290,22 @@ Wire the embedding worker into the FastAPI application. Update the health endpoi
 #### 5.0 Tasks
 
 **Response models**
-- [ ] 5.1 Update `EmbeddingsStatus` in `backend/app/models.py`: add `failed: int = 0` and `worker_status: str = "idle"` fields. Existing callers that construct `EmbeddingsStatus(total=N, pending=0)` continue to work because new fields have defaults.
-- [ ] 5.2 Create `backend/app/embedding/models.py` with Pydantic response models:
+- [x] 5.1 Update `EmbeddingsStatus` in `backend/app/models.py`: add `failed: int = 0` and `worker_status: str = "idle"` fields. Existing callers that construct `EmbeddingsStatus(total=N, pending=0)` continue to work because new fields have defaults.
+- [x] 5.2 Create `backend/app/embedding/models.py` with Pydantic response models:
   - `EmbeddingFailedItem(jellyfin_id: str, error_message: str | None, retry_count: int, last_attempted_at: int | None)`
   - `EmbeddingStatusResponse(status: str, pending: int, processing: int, failed: int, total_vectors: int, last_batch_at: int | None, last_error: str | None, batch_size: int, failed_items: list[EmbeddingFailedItem])`
 
 **Admin router**
-- [ ] 5.3 Create `backend/app/embedding/router.py` with `APIRouter(prefix="/api/admin/embedding", tags=["admin"])`. Add `GET /status` endpoint using `Depends(require_admin)` (import from `app.sync.dependencies`). Read worker state from `request.app.state.embedding_worker`, queue counts from `request.app.state.library_store.get_queue_counts()`, failed items from `request.app.state.library_store.get_failed_items()`, total vectors from `request.app.state.vec_repo.count()`. Return `EmbeddingStatusResponse`.
+- [x] 5.3 Create `backend/app/embedding/router.py` with `APIRouter(prefix="/api/admin/embedding", tags=["admin"])`. Add `GET /status` endpoint using `Depends(require_admin)` (import from `app.sync.dependencies`). Read worker state from `request.app.state.embedding_worker`, queue counts from `request.app.state.library_store.get_queue_counts()`, failed items from `request.app.state.library_store.get_failed_items()`, total vectors from `request.app.state.vec_repo.count()`. Return `EmbeddingStatusResponse`.
 
 **Health endpoint update**
-- [ ] 5.4 Update the `/health` endpoint in `main.py` to:
+- [x] 5.4 Update the `/health` endpoint in `main.py` to:
   - Read queue counts via `lib_store.get_queue_counts()` (add to the existing `asyncio.gather` on line ~305)
   - Read `worker_status` from `app.state.embedding_worker.status` (with a try/except fallback to "idle" if worker not initialized)
   - Replace the hardcoded `pending=0` on line ~324 with real counts: `EmbeddingsStatus(total=total, pending=queue_counts["pending"], failed=queue_counts["failed"], worker_status=worker_status)`
 
 **Lifespan wiring**
-- [ ] 5.5 In `main.py` lifespan, after the sync engine creation (~line 159), add:
+- [x] 5.5 In `main.py` lifespan, after the sync engine creation (~line 159), add:
   1. Create `embedding_event = asyncio.Event()`
   2. Create `EmbeddingWorker(library_store, vec_repo, ollama_client, settings, embedding_event)`
   3. Call `await embedding_worker.startup()` (runs `reset_stale_processing` + `check_template_version`)
@@ -313,11 +313,11 @@ Wire the embedding worker into the FastAPI application. Update the health endpoi
   5. Create the worker background task: `embedding_task = asyncio.create_task(embedding_worker.run())`
   6. Log: `_logger.info("embedding worker started — interval=%ds batch_size=%d", settings.embedding_worker_interval_seconds, settings.embedding_batch_size)`
 
-- [ ] 5.6 Modify `SyncEngine.run_sync()` in `sync/engine.py`: accept an optional `embedding_event: asyncio.Event | None = None` parameter (or store on `__init__`). After `save_sync_run(result)` on line ~295, call `if self._embedding_event: self._embedding_event.set()`. This is the trigger that wakes the worker after sync completes. Update SyncEngine `__init__` to accept and store the event.
+- [x] 5.6 Modify `SyncEngine.run_sync()` in `sync/engine.py`: accept an optional `embedding_event: asyncio.Event | None = None` parameter (or store on `__init__`). After `save_sync_run(result)` on line ~295, call `if self._embedding_event: self._embedding_event.set()`. This is the trigger that wakes the worker after sync completes. Update SyncEngine `__init__` to accept and store the event.
 
-- [ ] 5.7 Update the SyncEngine creation in `main.py` lifespan to pass the `embedding_event` to `SyncEngine.__init__`.
+- [x] 5.7 Update the SyncEngine creation in `main.py` lifespan to pass the `embedding_event` to `SyncEngine.__init__`.
 
-- [ ] 5.8 Update shutdown ordering in `main.py` lifespan (after yield). Add embedding task cancellation BEFORE sync task cancellation (LIFO — embedding depends on sync):
+- [x] 5.8 Update shutdown ordering in `main.py` lifespan (after yield). Add embedding task cancellation BEFORE sync task cancellation (LIFO — embedding depends on sync):
   ```
   # Shutdown order: embedding → sync → cleanup → ollama → vec → lib → sessions
   if embedding_task is not None:
@@ -326,10 +326,10 @@ Wire the embedding worker into the FastAPI application. Update the health endpoi
           await embedding_task
   ```
 
-- [ ] 5.9 Mount the embedding admin router in the lifespan: `app.include_router(embedding_router)` alongside the existing `app.include_router(sync_router)`.
+- [x] 5.9 Mount the embedding admin router in the lifespan: `app.include_router(embedding_router)` alongside the existing `app.include_router(sync_router)`.
 
 **Environment documentation**
-- [ ] 5.10 Update `.env.example` with all new embedding worker settings, with comments:
+- [x] 5.10 Update `.env.example` with all new embedding worker settings, with comments:
   ```
   # Embedding Worker
   # EMBEDDING_BATCH_SIZE=10          # Items per processing cycle (1-50)
@@ -339,10 +339,10 @@ Wire the embedding worker into the FastAPI application. Update the health endpoi
   ```
 
 **Tests**
-- [ ] 5.11 Create `backend/tests/test_health_embeddings.py`. Use the test client pattern from `conftest.py`. Mock `LibraryStore.get_queue_counts()` to return known values. Verify `/health` response includes: `embeddings.pending`, `embeddings.failed`, `embeddings.total`, `embeddings.worker_status`.
-- [ ] 5.12 Create `backend/tests/test_embedding_admin.py`. Follow the pattern in existing sync admin tests. Write tests for:
+- [x] 5.11 Create `backend/tests/test_health_embeddings.py`. Use the test client pattern from `conftest.py`. Mock `LibraryStore.get_queue_counts()` to return known values. Verify `/health` response includes: `embeddings.pending`, `embeddings.failed`, `embeddings.total`, `embeddings.worker_status`.
+- [x] 5.12 Create `backend/tests/test_embedding_admin.py`. Follow the pattern in existing sync admin tests. Write tests for:
   - `GET /api/admin/embedding/status` with admin session → 200 with correct response shape
   - `GET /api/admin/embedding/status` without session → 401
   - `GET /api/admin/embedding/status` with non-admin session → 403
   - Response includes `pending`, `processing`, `failed` counts, `status`, `last_batch_at`, `failed_items` list
-- [ ] 5.13 Write a lifespan test verifying: worker task is created, worker startup is called (reset + template version check), worker task is cancelled on shutdown. This can be a focused test or added to existing lifespan tests if they exist.
+- [x] 5.13 Write a lifespan test verifying: worker task is created, worker startup is called (reset + template version check), worker task is cancelled on shutdown. This can be a focused test or added to existing lifespan tests if they exist.

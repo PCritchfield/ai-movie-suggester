@@ -20,6 +20,8 @@ from app.auth.router import create_auth_router
 from app.auth.service import AuthService, cleanup_expired_sessions
 from app.auth.session_store import SessionStore
 from app.config import Settings
+from app.embedding.router import router as embedding_router
+from app.embedding.worker import EmbeddingWorker
 from app.jellyfin.client import JellyfinClient
 from app.library.store import LibraryStore
 from app.logging_config import configure_logging
@@ -149,15 +151,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else:
             _logger.info("background sync disabled — JELLYFIN_API_KEY not configured")
 
-        # Create SyncEngine (uses sync client if available, else main client)
-        sync_engine = SyncEngine(
-            library_store=library_store,
-            jellyfin_client=sync_jf_client if sync_jf_client else jf_client,
-            settings=settings,
-            vector_repository=vec_repo,
-        )
-        app.state.sync_engine = sync_engine
-
         # Create separate Ollama HTTP client + embedding client
         # Split timeouts: short connect (5s) prevents 120s hang when Ollama
         # is unreachable; long read accommodates slow embedding inference.
@@ -176,6 +169,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.ollama_client = ollama_client
 
+        # Create embedding event (shared between SyncEngine and EmbeddingWorker)
+        embedding_event = asyncio.Event()
+
+        # Create SyncEngine (uses sync client if available, else main client)
+        sync_engine = SyncEngine(
+            library_store=library_store,
+            jellyfin_client=sync_jf_client if sync_jf_client else jf_client,
+            settings=settings,
+            vector_repository=vec_repo,
+            embedding_event=embedding_event,
+        )
+        app.state.sync_engine = sync_engine
+
         # Wire auth service and router
         auth_service = AuthService(
             session_store=store,
@@ -193,8 +199,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.include_router(auth_router)
 
-        # Mount sync admin router
+        # Mount admin routers
         app.include_router(sync_router)
+        app.include_router(embedding_router)
+
+        # Store settings on app.state for routers that need them
+        app.state.settings = settings
 
         # Startup connectivity checks
         async with httpx.AsyncClient() as check_client:
@@ -252,9 +262,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "JELLYFIN_API_KEY or JELLYFIN_ADMIN_USER_ID not set"
             )
 
+        # Create and start embedding worker
+        embedding_worker = EmbeddingWorker(
+            library_store=library_store,
+            vec_repo=vec_repo,
+            ollama_client=ollama_client,
+            settings=settings,
+            sync_event=embedding_event,
+        )
+        await embedding_worker.startup()
+        app.state.embedding_worker = embedding_worker
+
+        embedding_task: asyncio.Task[None] | None = asyncio.create_task(
+            embedding_worker.run()
+        )
+        _logger.info(
+            "embedding worker started — interval=%ds batch_size=%d",
+            settings.embedding_worker_interval_seconds,
+            settings.embedding_batch_size,
+        )
+
         yield
 
-        # Shutdown (LIFO: sync → cleanup → Ollama → vec → lib → sessions)
+        # Shutdown (LIFO: embedding → sync → cleanup → Ollama → vec → lib → sessions)
+        if embedding_task is not None:
+            embedding_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await embedding_task
         if sync_task is not None:
             sync_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -298,14 +332,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             total = 0
 
+        # Worker status (safe fallback if worker not yet created)
+        try:
+            worker_status = application.state.embedding_worker.status
+        except AttributeError:
+            worker_status = "idle"
+
         # Library sync status (gather DB calls concurrently)
         library_sync: LibrarySyncStatus | None = None
+        queue_counts: dict[str, int] = {"pending": 0, "processing": 0, "failed": 0}
         try:
             lib_store: LibraryStore = application.state.library_store
-            last_run, item_count, pending_count = await asyncio.gather(
-                lib_store.get_last_sync_run(),
-                lib_store.count(),
-                lib_store.count_pending_embeddings(),
+            last_run, item_count, pending_count, queue_counts = (
+                await asyncio.gather(
+                    lib_store.get_last_sync_run(),
+                    lib_store.count(),
+                    lib_store.count_pending_embeddings(),
+                    lib_store.get_queue_counts(),
+                )
             )
             library_sync = LibrarySyncStatus(
                 last_run_at=last_run.started_at if last_run else None,
@@ -321,7 +365,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ollama=ol_status,
             embeddings=EmbeddingsStatus(
                 total=total,
-                pending=0,  # Updated by embedding pipeline
+                pending=queue_counts.get("pending", 0),
+                failed=queue_counts.get("failed", 0),
+                worker_status=worker_status,
             ),
             library_sync=library_sync,
         )
