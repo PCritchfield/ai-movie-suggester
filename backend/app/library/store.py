@@ -105,6 +105,7 @@ class LibraryStore:
         self._db = await aiosqlite.connect(self._db_path)
         await self._db.execute("PRAGMA journal_mode=WAL")
         await self._db.execute("PRAGMA foreign_keys = ON")
+        await self._db.execute("PRAGMA busy_timeout=5000")
         await self._db.execute(_CREATE_TABLE)
         await self._db.execute(_CREATE_INDEX_HASH)
         await self._db.execute(_CREATE_INDEX_SYNCED)
@@ -121,6 +122,15 @@ class LibraryStore:
         await self._db.execute(_CREATE_INDEX_DELETED)
         await self._db.execute(_CREATE_EMBEDDING_QUEUE)
         await self._db.execute(_CREATE_INDEX_EMBEDDING_QUEUE)
+
+        # Migration: add last_attempted_at column if table predates Spec 10
+        eq_cursor = await self._db.execute("PRAGMA table_info(embedding_queue)")
+        eq_columns = {row[1] for row in await eq_cursor.fetchall()}
+        if "last_attempted_at" not in eq_columns:
+            await self._db.execute(
+                "ALTER TABLE embedding_queue ADD COLUMN last_attempted_at INTEGER"
+            )
+            await self._db.commit()
         await self._db.execute(_CREATE_SYNC_RUNS)
         await self._db.execute(_CREATE_INDEX_SYNC_RUNS_STARTED)
         await self._db.commit()
@@ -420,7 +430,8 @@ class LibraryStore:
                     " VALUES (?, ?, 'pending')"
                     " ON CONFLICT(jellyfin_id) DO UPDATE SET"
                     " status='pending', enqueued_at=excluded.enqueued_at,"
-                    " retry_count=0, error_message=NULL",
+                    " retry_count=0, error_message=NULL,"
+                    " last_attempted_at=NULL",
                     params,
                 )
                 total += len(batch)
@@ -520,6 +531,151 @@ class LibraryStore:
         else:
             await self._conn.commit()
         return total
+
+    # --- Embedding worker methods (Spec 10, Task 1.0) ---
+
+    async def get_retryable_items(
+        self, cooldown_seconds: int, max_retries: int, batch_size: int
+    ) -> list[tuple[str, int]]:
+        """Return (jellyfin_id, retry_count) pairs eligible for embedding.
+
+        Selects items that are 'pending' with retry_count <= max_retries
+        and whose last_attempted_at is either NULL or older than the
+        cooldown window. Ordered by enqueued_at ASC, limited to batch_size.
+        """
+        now = int(time.time())
+        cutoff = now - cooldown_seconds
+        cursor = await self._conn.execute(
+            "SELECT jellyfin_id, retry_count FROM embedding_queue"
+            " WHERE status = 'pending'"
+            " AND (last_attempted_at IS NULL OR last_attempted_at < ?)"
+            " AND retry_count <= ?"
+            " ORDER BY enqueued_at ASC"
+            " LIMIT ?",
+            (cutoff, max_retries, batch_size),
+        )
+        rows = await cursor.fetchall()
+        return [(row[0], row[1]) for row in rows]
+
+    async def claim_batch(self, ids: list[str]) -> int:
+        """Atomically transition pending queue items to 'processing'.
+
+        Returns the number of rows actually transitioned. Items not in
+        'pending' status are silently skipped.
+        """
+        if not ids:
+            return 0
+
+        now = int(time.time())
+        placeholders = ",".join("?" * len(ids))
+        cursor = await self._conn.execute(
+            f"UPDATE embedding_queue SET status='processing', last_attempted_at=?"
+            f" WHERE jellyfin_id IN ({placeholders}) AND status='pending'",
+            [now, *ids],
+        )
+        await self._conn.commit()
+        return cursor.rowcount
+
+    async def mark_embedded(self, jellyfin_id: str) -> None:
+        """Remove a successfully embedded item from the queue."""
+        await self._conn.execute(
+            "DELETE FROM embedding_queue WHERE jellyfin_id = ?",
+            (jellyfin_id,),
+        )
+        await self._conn.commit()
+
+    async def mark_embedded_many(self, ids: list[str]) -> int:
+        """Batch-delete successfully embedded items from the queue.
+
+        Chunks at _BATCH_SIZE. Wrapped in a single transaction for atomicity.
+        Returns the total number of rows deleted.
+        """
+        if not ids:
+            return 0
+
+        total = 0
+        await self._conn.execute("BEGIN")
+        try:
+            for i in range(0, len(ids), _BATCH_SIZE):
+                batch = ids[i : i + _BATCH_SIZE]
+                placeholders = ",".join("?" * len(batch))
+                cursor = await self._conn.execute(
+                    f"DELETE FROM embedding_queue"
+                    f" WHERE jellyfin_id IN ({placeholders})",
+                    batch,
+                )
+                total += cursor.rowcount
+        except Exception:
+            await self._conn.rollback()
+            raise
+        else:
+            await self._conn.commit()
+        return total
+
+    async def mark_attempt(self, jellyfin_id: str, error_message: str) -> None:
+        """Record a failed embedding attempt — increment retry, stay pending."""
+        now = int(time.time())
+        await self._conn.execute(
+            "UPDATE embedding_queue SET status='pending',"
+            " retry_count=retry_count+1, error_message=?,"
+            " last_attempted_at=?"
+            " WHERE jellyfin_id=?",
+            (error_message, now, jellyfin_id),
+        )
+        await self._conn.commit()
+
+    async def mark_failed_permanent(self, jellyfin_id: str, reason: str) -> None:
+        """Mark an item as permanently failed — no further retries."""
+        now = int(time.time())
+        await self._conn.execute(
+            "UPDATE embedding_queue SET status='failed',"
+            " error_message=?, last_attempted_at=?"
+            " WHERE jellyfin_id=?",
+            (reason, now, jellyfin_id),
+        )
+        await self._conn.commit()
+
+    async def reset_stale_processing(self) -> int:
+        """Reset all 'processing' items back to 'pending' for crash recovery.
+
+        Called at startup to reclaim items that were mid-flight when the
+        process was interrupted. Returns the number of rows reset.
+        """
+        cursor = await self._conn.execute(
+            "UPDATE embedding_queue SET status='pending'"
+            " WHERE status='processing'"
+        )
+        await self._conn.commit()
+        return cursor.rowcount
+
+    async def get_failed_items(self) -> list[dict[str, Any]]:
+        """Return details for all permanently failed queue items."""
+        cursor = await self._conn.execute(
+            "SELECT jellyfin_id, error_message, retry_count, last_attempted_at"
+            " FROM embedding_queue WHERE status='failed'"
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "jellyfin_id": row[0],
+                "error_message": row[1],
+                "retry_count": row[2],
+                "last_attempted_at": row[3],
+            }
+            for row in rows
+        ]
+
+    async def get_queue_counts(self) -> dict[str, int]:
+        """Return {pending, processing, failed} counts from the embedding queue."""
+        cursor = await self._conn.execute(
+            "SELECT status, COUNT(*) FROM embedding_queue GROUP BY status"
+        )
+        rows = await cursor.fetchall()
+        counts: dict[str, int] = {"pending": 0, "processing": 0, "failed": 0}
+        for row in rows:
+            if row[0] in counts:
+                counts[row[0]] = row[1]
+        return counts
 
     async def run_wal_checkpoint(self) -> None:
         """Execute a WAL checkpoint to reclaim disk space.

@@ -345,6 +345,63 @@ def test_wal_checkpoint_threshold_mb_default() -> None:
     assert s.wal_checkpoint_threshold_mb == 50.0
 
 
+# --- embedding worker config ---
+
+
+def test_embedding_batch_size_default() -> None:
+    """embedding_batch_size defaults to 10."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.embedding_batch_size == 10
+
+
+def test_embedding_worker_interval_seconds_default() -> None:
+    """embedding_worker_interval_seconds defaults to 300."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.embedding_worker_interval_seconds == 300
+
+
+def test_embedding_max_retries_default() -> None:
+    """embedding_max_retries defaults to 3."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.embedding_max_retries == 3
+
+
+def test_embedding_cooldown_seconds_default() -> None:
+    """embedding_cooldown_seconds defaults to 300."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.embedding_cooldown_seconds == 300
+
+
+def test_embedding_batch_size_env_override() -> None:
+    """EMBEDDING_BATCH_SIZE env var overrides default."""
+    env = {**_REQUIRED_ENV, "EMBEDDING_BATCH_SIZE": "25"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.embedding_batch_size == 25
+
+
+def test_embedding_batch_size_rejects_zero() -> None:
+    """embedding_batch_size must be >= 1."""
+    env = {**_REQUIRED_ENV, "EMBEDDING_BATCH_SIZE": "0"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_embedding_batch_size_rejects_over_50() -> None:
+    """embedding_batch_size must be <= 50."""
+    env = {**_REQUIRED_ENV, "EMBEDDING_BATCH_SIZE": "51"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
 def test_sync_engine_config_from_env() -> None:
     """All sync engine config fields loaded from environment variables."""
     env = {
