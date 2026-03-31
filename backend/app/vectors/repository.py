@@ -346,6 +346,30 @@ class SqliteVecRepository:
             raise KeyError(msg)
         await self._writer.commit()
 
+    async def get_template_version(self) -> int | None:
+        """Read the stored template version from _vec_meta.
+
+        Returns the version as an int, or None if no template_version
+        has been stored yet (first run / pre-Spec-10 database).
+        """
+        cursor = await self._reader.execute(
+            "SELECT value FROM _vec_meta WHERE key = ?",
+            ("template_version",),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return int(row[0])
+
+    async def set_template_version(self, version: int) -> None:
+        """Store (or update) the template version in _vec_meta."""
+        await self._writer.execute(
+            "INSERT INTO _vec_meta (key, value) VALUES ('template_version', ?)"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(version),),
+        )
+        await self._writer.commit()
+
     async def close(self) -> None:
         """Close both connections. Safe to call multiple times."""
         if self._writer_db:

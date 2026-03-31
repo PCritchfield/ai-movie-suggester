@@ -170,7 +170,7 @@ Extend `OllamaEmbeddingClient` with `embed_batch()` and `SqliteVecRepository` wi
 
 ---
 
-### [ ] 3.0 Embedding Worker Core with Retry Policy
+### [x] 3.0 Embedding Worker Core with Retry Policy
 
 Build the `EmbeddingWorker` class that combines the processing loop and error handling. The worker: checks Ollama health → claims a batch → builds composite text → calls `embed_batch()` → stores vectors via `upsert_many()` → deletes from queue on success. Error classification splits failures into transient (retry with cooldown) and permanent (fail immediately). Batch failures fall back to individual item processing.
 
@@ -184,13 +184,13 @@ Build the `EmbeddingWorker` class that combines the processing loop and error ha
 #### 3.0 Tasks
 
 **Package scaffolding**
-- [ ] 3.1 Create `backend/app/embedding/__init__.py` with `from app.embedding.worker import EmbeddingWorker` re-export and `__all__ = ["EmbeddingWorker"]`
+- [x] 3.1 Create `backend/app/embedding/__init__.py` with `from app.embedding.worker import EmbeddingWorker` re-export and `__all__ = ["EmbeddingWorker"]`
 
 **EmbeddingWorker class**
-- [ ] 3.2 Create `backend/app/embedding/worker.py`. Define `EmbeddingWorker` class with `__init__` accepting: `library_store: LibraryStore`, `vec_repo: SqliteVecRepository`, `ollama_client: OllamaEmbeddingClient`, `settings: Settings`, `sync_event: asyncio.Event`. Store as private attributes. Create `asyncio.Lock` as `_lock`. Initialize state tracking: `_status: str = "idle"`, `_last_batch_at: int | None = None`, `_last_error: str | None = None`.
+- [x] 3.2 Create `backend/app/embedding/worker.py`. Define `EmbeddingWorker` class with `__init__` accepting: `library_store: LibraryStore`, `vec_repo: SqliteVecRepository`, `ollama_client: OllamaEmbeddingClient`, `settings: Settings`, `sync_event: asyncio.Event`. Store as private attributes. Create `asyncio.Lock` as `_lock`. Initialize state tracking: `_status: str = "idle"`, `_last_batch_at: int | None = None`, `_last_error: str | None = None`.
 
 **Processing cycle**
-- [ ] 3.3 Implement `async def process_cycle(self) -> None` — the single-cycle method:
+- [x] 3.3 Implement `async def process_cycle(self) -> None` — the single-cycle method:
   1. Health check: call `self._ollama_client.health()`. If unhealthy, log warning and return early. Do NOT modify any queue states.
   2. Fetch retryable items: call `self._library_store.get_retryable_items(cooldown, max_retries, batch_size)`. If empty, return.
   3. Claim batch: call `self._library_store.claim_batch(ids)`. If 0 claimed, return.
@@ -199,20 +199,20 @@ Build the `EmbeddingWorker` class that combines the processing loop and error ha
   6. On batch failure: fall back to individual processing (sub-task 3.5).
   7. Update `_last_batch_at` timestamp. Update `_status`.
 
-- [ ] 3.4 Implement individual item processing within `process_cycle`: for each item in the claimed batch, call `ollama_client.embed(text)` individually. On success: `vec_repo.upsert(id, vector, hash)` then `library_store.mark_embedded(id)`. On error: classify and handle per sub-task 3.5.
+- [x] 3.4 Implement individual item processing within `process_cycle`: for each item in the claimed batch, call `ollama_client.embed(text)` individually. On success: `vec_repo.upsert(id, vector, hash)` then `library_store.mark_embedded(id)`. On error: classify and handle per sub-task 3.5.
 
 **Error classification**
-- [ ] 3.5 Implement error classification in the individual item processing path:
+- [x] 3.5 Implement error classification in the individual item processing path:
   - `OllamaModelError` → call `mark_failed_permanent(id, "OllamaModelError: model not found — run 'ollama pull nomic-embed-text'")`. This is a permanent error.
   - `OllamaTimeoutError`, `OllamaConnectionError`, `OllamaError` → transient. Check if `retry_count >= max_retries`: if yes, call `mark_failed_permanent(id, sanitized_message)`; if no, call `mark_attempt(id, sanitized_message)`.
   - Unexpected `Exception` → treat as transient, sanitize with `f"{type(exc).__name__}: {type(exc).__doc__ or 'embedding failed'}"`. Never `str(exc)`.
   - Log each error with structured key=value pairs. Never log raw Ollama response bodies.
 
 **Batch fallback**
-- [ ] 3.6 Implement batch fallback in `process_cycle`: when `embed_batch()` raises any exception, log the batch failure, then process each item individually via the path in 3.4. This isolates which specific items are failing.
+- [x] 3.6 Implement batch fallback in `process_cycle`: when `embed_batch()` raises any exception, log the batch failure, then process each item individually via the path in 3.4. This isolates which specific items are failing.
 
 **Run loop**
-- [ ] 3.7 Implement `async def run(self) -> None` — the long-running asyncio loop:
+- [x] 3.7 Implement `async def run(self) -> None` — the long-running asyncio loop:
   1. Log worker startup.
   2. Loop forever:
      a. Wait for either `sync_event` to be set OR `asyncio.sleep(interval)` — use `asyncio.wait()` with `return_when=FIRST_COMPLETED` on wrapped awaitables.
@@ -223,10 +223,10 @@ Build the `EmbeddingWorker` class that combines the processing loop and error ha
      f. Catch all other exceptions — log, set `_last_error`, continue loop.
 
 **Startup reset**
-- [ ] 3.8 Implement `async def startup(self) -> None` — called once in lifespan before the run loop task is created. Calls `self._library_store.reset_stale_processing()` and logs the count of items reset.
+- [x] 3.8 Implement `async def startup(self) -> None` — called once in lifespan before the run loop task is created. Calls `self._library_store.reset_stale_processing()` and logs the count of items reset.
 
 **Tests**
-- [ ] 3.9 Create `backend/tests/test_embedding_worker.py`. Mock all dependencies (`LibraryStore`, `SqliteVecRepository`, `OllamaEmbeddingClient`) using `AsyncMock`. Write tests for:
+- [x] 3.9 Create `backend/tests/test_embedding_worker.py`. Mock all dependencies (`LibraryStore`, `SqliteVecRepository`, `OllamaEmbeddingClient`) using `AsyncMock`. Write tests for:
   - **Happy path**: `process_cycle` with 3 pending items → claims, embeds batch, upserts vectors, deletes from queue
   - **Ollama unhealthy**: `health()` returns False → cycle skipped, no queue modifications
   - **Empty queue**: `get_retryable_items` returns `[]` → cycle returns early
@@ -240,7 +240,7 @@ Build the `EmbeddingWorker` class that combines the processing loop and error ha
 
 ---
 
-### [ ] 4.0 Template Version Detection
+### [x] 4.0 Template Version Detection
 
 Implement the startup version check that detects stale embeddings when `TEMPLATE_VERSION` changes. On worker initialization, read `template_version` from `_vec_meta`. If stored < current, re-enqueue all non-tombstoned items and update the meta value.
 
@@ -252,19 +252,19 @@ Implement the startup version check that detects stale embeddings when `TEMPLATE
 #### 4.0 Tasks
 
 **SqliteVecRepository methods**
-- [ ] 4.1 Add `async def get_template_version(self) -> int | None` to `SqliteVecRepository`. Query `SELECT value FROM _vec_meta WHERE key = 'template_version'`. Return `int(value)` if found, `None` if absent.
-- [ ] 4.2 Add `async def set_template_version(self, version: int) -> None` to `SqliteVecRepository`. Use `INSERT INTO _vec_meta (key, value) VALUES ('template_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`. Commit.
+- [x] 4.1 Add `async def get_template_version(self) -> int | None` to `SqliteVecRepository`. Query `SELECT value FROM _vec_meta WHERE key = 'template_version'`. Return `int(value)` if found, `None` if absent.
+- [x] 4.2 Add `async def set_template_version(self, version: int) -> None` to `SqliteVecRepository`. Use `INSERT INTO _vec_meta (key, value) VALUES ('template_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`. Commit.
 
 **Worker integration**
-- [ ] 4.3 Add `async def check_template_version(self) -> None` to `EmbeddingWorker`. Logic:
+- [x] 4.3 Add `async def check_template_version(self) -> None` to `EmbeddingWorker`. Logic:
   1. Read stored version via `vec_repo.get_template_version()`. Treat `None` as 0.
   2. Import `TEMPLATE_VERSION` from `app.library.text_builder`.
   3. If stored >= current: log "template version current" and return (handles both match and downgrade).
   4. If stored < current: log "template version stale", get all non-tombstoned item IDs from `library_store.get_all_ids()`, call `library_store.enqueue_for_embedding(list(ids))`, call `vec_repo.set_template_version(TEMPLATE_VERSION)`. Log count of items re-enqueued.
-- [ ] 4.4 Update `EmbeddingWorker.startup()` (from 3.8) to call `check_template_version()` after `reset_stale_processing()`.
+- [x] 4.4 Update `EmbeddingWorker.startup()` (from 3.8) to call `check_template_version()` after `reset_stale_processing()`.
 
 **Tests**
-- [ ] 4.5 Create `backend/tests/test_template_version.py`. Use mocked `SqliteVecRepository` and `LibraryStore`. Write tests for:
+- [x] 4.5 Create `backend/tests/test_template_version.py`. Use mocked `SqliteVecRepository` and `LibraryStore`. Write tests for:
   - Absent version (returns None) → `enqueue_for_embedding` called with all IDs, `set_template_version` called with current version
   - Matching version (stored == current) → no enqueue, no meta update
   - Stale version (stored < current) → full enqueue + meta update
