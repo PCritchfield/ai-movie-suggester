@@ -587,30 +587,10 @@ class LibraryStore:
     async def mark_embedded_many(self, ids: list[str]) -> int:
         """Batch-delete successfully embedded items from the queue.
 
-        Chunks at _BATCH_SIZE. Wrapped in a single transaction for atomicity.
-        Returns the total number of rows deleted.
+        Delegates to ``delete_from_embedding_queue`` — same semantics,
+        different name for the caller's domain vocabulary.
         """
-        if not ids:
-            return 0
-
-        total = 0
-        await self._conn.execute("BEGIN")
-        try:
-            for i in range(0, len(ids), _BATCH_SIZE):
-                batch = ids[i : i + _BATCH_SIZE]
-                placeholders = ",".join("?" * len(batch))
-                cursor = await self._conn.execute(
-                    f"DELETE FROM embedding_queue"
-                    f" WHERE jellyfin_id IN ({placeholders})",
-                    batch,
-                )
-                total += cursor.rowcount
-        except Exception:
-            await self._conn.rollback()
-            raise
-        else:
-            await self._conn.commit()
-        return total
+        return await self.delete_from_embedding_queue(ids)
 
     async def mark_attempt(self, jellyfin_id: str, error_message: str) -> None:
         """Record a failed embedding attempt — increment retry, stay pending."""

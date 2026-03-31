@@ -16,6 +16,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from app.library.text_builder import build_sections
 from app.ollama.errors import (
     OllamaConnectionError,
     OllamaError,
@@ -85,22 +86,45 @@ class EmbeddingWorker:
     def _build_text(item: LibraryItemRow) -> str:
         """Build composite text for embedding from a LibraryItemRow.
 
-        Mirrors the template logic in app.ollama.text_builder but works
-        with LibraryItemRow instead of LibraryItem. Sections with missing
-        data are omitted entirely.
+        Delegates to the shared ``build_sections`` core so template
+        logic stays in one place — changes propagate automatically.
         """
-        sections: list[str] = [f"Title: {item.title}."]
+        return build_sections(
+            title=item.title,
+            overview=item.overview,
+            genres=item.genres,
+            production_year=item.production_year,
+        )
 
-        if item.overview and item.overview.strip():
-            sections.append(item.overview.strip())
+    # ------------------------------------------------------------------
+    # Error handling helpers
+    # ------------------------------------------------------------------
 
-        if item.genres:
-            sections.append("Genres: " + ", ".join(item.genres) + ".")
+    async def _handle_retryable(
+        self, jellyfin_id: str, retry_count: int, exc: BaseException
+    ) -> None:
+        """Handle a transient or unexpected error for a single item.
 
-        if item.production_year is not None:
-            sections.append(f"Year: {item.production_year}.")
-
-        return " ".join(sections)
+        Sanitizes the error message (never ``str(exc)``), then either
+        marks the item as permanently failed (retries exhausted) or
+        records the attempt for a later retry.
+        """
+        max_retries = self._settings.embedding_max_retries
+        msg = f"{type(exc).__name__}: {type(exc).__doc__ or 'embedding failed'}"
+        if retry_count >= max_retries:
+            await self._library_store.mark_failed_permanent(jellyfin_id, msg)
+            logger.error(
+                "embedding_retries_exhausted jellyfin_id=%s"
+                " retry_count=%d reason=%s",
+                jellyfin_id, retry_count, msg,
+            )
+        else:
+            await self._library_store.mark_attempt(jellyfin_id, msg)
+            logger.warning(
+                "embedding_transient_failure jellyfin_id=%s"
+                " retry_count=%d reason=%s",
+                jellyfin_id, retry_count, msg,
+            )
 
     # ------------------------------------------------------------------
     # Individual item processing (fallback path)
@@ -114,7 +138,6 @@ class EmbeddingWorker:
         content_hash: str,
     ) -> None:
         """Embed and store a single item with error classification."""
-        max_retries = self._settings.embedding_max_retries
         try:
             result = await self._ollama_client.embed(text)
             await self._vec_repo.upsert(
@@ -141,68 +164,17 @@ class EmbeddingWorker:
                 reason,
             )
         except (OllamaTimeoutError, OllamaConnectionError, OllamaError) as exc:
-            # Transient — retry or exhaust
-            msg = f"{type(exc).__name__}: {type(exc).__doc__ or 'embedding failed'}"
-            if retry_count >= max_retries:
-                await self._library_store.mark_failed_permanent(
-                    jellyfin_id, msg
-                )
-                logger.error(
-                    "embedding_max_retries_exceeded jellyfin_id=%s"
-                    " retry_count=%d reason=%s",
-                    jellyfin_id,
-                    retry_count,
-                    msg,
-                )
-            else:
-                await self._library_store.mark_attempt(jellyfin_id, msg)
-                logger.warning(
-                    "embedding_transient_failure jellyfin_id=%s"
-                    " retry_count=%d reason=%s",
-                    jellyfin_id,
-                    retry_count,
-                    msg,
-                )
+            await self._handle_retryable(jellyfin_id, retry_count, exc)
         except Exception as exc:
-            # Unexpected — sanitize, never str(exc)
-            msg = (
-                f"{type(exc).__name__}:"
-                f" {type(exc).__doc__ or 'embedding failed'}"
-            )
-            if retry_count >= max_retries:
-                await self._library_store.mark_failed_permanent(
-                    jellyfin_id, msg
-                )
-                logger.error(
-                    "embedding_unexpected_permanent jellyfin_id=%s"
-                    " retry_count=%d reason=%s",
-                    jellyfin_id,
-                    retry_count,
-                    msg,
-                )
-            else:
-                await self._library_store.mark_attempt(jellyfin_id, msg)
-                logger.warning(
-                    "embedding_unexpected_transient jellyfin_id=%s"
-                    " retry_count=%d reason=%s",
-                    jellyfin_id,
-                    retry_count,
-                    msg,
-                )
+            await self._handle_retryable(jellyfin_id, retry_count, exc)
 
     # ------------------------------------------------------------------
     # Main processing cycle
     # ------------------------------------------------------------------
 
     async def process_cycle(self) -> None:
-        """Run one embedding cycle: health check, fetch, embed, store."""
-        # 1. Health check
-        healthy = await self._ollama_client.health()
-        if not healthy:
-            logger.warning("embedding_cycle_skip reason=ollama_unhealthy")
-            return
-
-        # 2. Fetch retryable items
+        """Run one embedding cycle: fetch queue, health check, embed, store."""
+        # 1. Fetch retryable items (cheap DB query — check before Ollama)
         batch_size = self._settings.embedding_batch_size
         cooldown = self._settings.embedding_cooldown_seconds
         max_retries = self._settings.embedding_max_retries
@@ -212,6 +184,12 @@ class EmbeddingWorker:
         )
         if not items:
             logger.debug("embedding_cycle_skip reason=empty_queue")
+            return
+
+        # 2. Health check (only when there's work to do)
+        healthy = await self._ollama_client.health()
+        if not healthy:
+            logger.warning("embedding_cycle_skip reason=ollama_unhealthy")
             return
 
         # 3. Claim batch
@@ -226,8 +204,10 @@ class EmbeddingWorker:
         # Build a mapping of id -> (retry_count, text, content_hash)
         item_data: dict[str, tuple[int, str, str]] = {}
         retry_map = dict(items)
+        rows = await self._library_store.get_many(ids)
+        rows_by_id = {row.jellyfin_id: row for row in rows}
         for jid in ids:
-            row = await self._library_store.get(jid)
+            row = rows_by_id.get(jid)
             if row is None:
                 logger.warning(
                     "embedding_item_missing jellyfin_id=%s", jid

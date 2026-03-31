@@ -343,19 +343,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         queue_counts: dict[str, int] = {"pending": 0, "processing": 0, "failed": 0}
         try:
             lib_store: LibraryStore = application.state.library_store
-            last_run, item_count, pending_count, queue_counts = (
-                await asyncio.gather(
-                    lib_store.get_last_sync_run(),
-                    lib_store.count(),
-                    lib_store.count_pending_embeddings(),
-                    lib_store.get_queue_counts(),
-                )
+            last_run, item_count, queue_counts = await asyncio.gather(
+                lib_store.get_last_sync_run(),
+                lib_store.count(),
+                lib_store.get_queue_counts(),
             )
             library_sync = LibrarySyncStatus(
                 last_run_at=last_run.started_at if last_run else None,
                 last_run_status=last_run.status if last_run else None,
                 items_in_library=item_count,
-                items_pending_embedding=pending_count,
+                items_pending_embedding=queue_counts.get("pending", 0),
             )
         except Exception:
             _logger.debug("library sync status unavailable", exc_info=True)

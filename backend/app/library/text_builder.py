@@ -8,6 +8,12 @@ from app.ollama.text_builder import (
     TEMPLATE_VERSION,
     CompositeTextResult,
     build_composite_text,
+    build_sections,
 )
 
-__all__ = ["TEMPLATE_VERSION", "CompositeTextResult", "build_composite_text"]
+__all__ = [
+    "TEMPLATE_VERSION",
+    "CompositeTextResult",
+    "build_composite_text",
+    "build_sections",
+]

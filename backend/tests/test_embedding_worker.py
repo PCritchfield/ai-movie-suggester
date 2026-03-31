@@ -194,7 +194,7 @@ class TestProcessCycleHappyPath:
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 3
-        mock_library_store.get.side_effect = rows
+        mock_library_store.get_many.return_value = rows
         mock_ollama.embed_batch.return_value = [
             _make_embedding_result(seed=i * 0.1) for i in range(3)
         ]
@@ -225,11 +225,12 @@ class TestProcessCycleEarlyExit:
         mock_ollama: AsyncMock,
     ) -> None:
         """Ollama unhealthy -> cycle skipped, no queue modifications."""
+        mock_library_store.get_retryable_items.return_value = [("jf-001", 0)]
         mock_ollama.health.return_value = False
 
         await worker.process_cycle()
 
-        mock_library_store.get_retryable_items.assert_not_awaited()
+        mock_library_store.get_retryable_items.assert_awaited_once()
         mock_library_store.claim_batch.assert_not_awaited()
 
     async def test_empty_queue_returns_early(
@@ -285,7 +286,7 @@ class TestBatchFallback:
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 2
-        mock_library_store.get.side_effect = rows
+        mock_library_store.get_many.return_value = rows
         mock_ollama.embed_batch.side_effect = OllamaError("batch failed")
         mock_ollama.embed.return_value = _make_embedding_result()
 
@@ -321,7 +322,7 @@ class TestErrorClassification:
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 1
-        mock_library_store.get.return_value = row
+        mock_library_store.get_many.return_value = [row]
         mock_ollama.embed_batch.side_effect = OllamaError("batch fail")
         mock_ollama.embed.side_effect = OllamaTimeoutError("timed out")
 
@@ -347,7 +348,7 @@ class TestErrorClassification:
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 1
-        mock_library_store.get.return_value = row
+        mock_library_store.get_many.return_value = [row]
         mock_ollama.embed_batch.side_effect = OllamaError("batch fail")
         mock_ollama.embed.side_effect = OllamaModelError("model not found")
 
@@ -374,7 +375,7 @@ class TestErrorClassification:
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 1
-        mock_library_store.get.return_value = row
+        mock_library_store.get_many.return_value = [row]
         mock_ollama.embed_batch.side_effect = OllamaError("batch fail")
         mock_ollama.embed.side_effect = OllamaConnectionError("conn lost")
 
@@ -400,7 +401,7 @@ class TestErrorClassification:
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 1
-        mock_library_store.get.return_value = row
+        mock_library_store.get_many.return_value = [row]
         mock_ollama.embed_batch.side_effect = OllamaError("batch fail")
         mock_ollama.embed.side_effect = ValueError("secret path /foo/bar")
 
@@ -427,7 +428,7 @@ class TestErrorClassification:
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 1
-        mock_library_store.get.return_value = row
+        mock_library_store.get_many.return_value = [row]
         mock_ollama.embed_batch.side_effect = OllamaError("batch fail")
         mock_ollama.embed.side_effect = OllamaConnectionError("cannot reach")
 
@@ -555,8 +556,8 @@ class TestRunLoop:
         sync_event.set()
         await asyncio.sleep(0.05)
 
-        # It should have called health at least once
-        assert mock_ollama.health.await_count >= 1
+        # It should have checked the queue at least once
+        assert mock_library_store.get_retryable_items.await_count >= 1
 
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -570,7 +571,7 @@ class TestRunLoop:
         sync_event: asyncio.Event,
     ) -> None:
         """run() catches unexpected exceptions in process_cycle and continues."""
-        mock_ollama.health.side_effect = RuntimeError("boom")
+        mock_library_store.get_retryable_items.side_effect = RuntimeError("boom")
 
         task = asyncio.create_task(worker.run())
         sync_event.set()
@@ -599,16 +600,15 @@ class TestMissingItem:
         mock_vec_repo: AsyncMock,
         mock_ollama: AsyncMock,
     ) -> None:
-        """If library_store.get() returns None, the item is skipped."""
+        """If get_many() returns fewer rows than claimed, missing items are skipped."""
         items = [("jf-001", 0), ("jf-002", 0)]
 
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 2
-        # First returns None (deleted between claim and fetch),
-        # second returns a real row
+        # get_many returns only jf-002 (jf-001 deleted between claim and fetch)
         row2 = _make_row(jellyfin_id="jf-002", content_hash="h2")
-        mock_library_store.get.side_effect = [None, row2]
+        mock_library_store.get_many.return_value = [row2]
         mock_ollama.embed_batch.return_value = [_make_embedding_result()]
         mock_library_store.mark_embedded_many.return_value = 1
 
