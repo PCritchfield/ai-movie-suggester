@@ -622,8 +622,7 @@ class LibraryStore:
         process was interrupted. Returns the number of rows reset.
         """
         cursor = await self._conn.execute(
-            "UPDATE embedding_queue SET status='pending'"
-            " WHERE status='processing'"
+            "UPDATE embedding_queue SET status='pending' WHERE status='processing'"
         )
         await self._conn.commit()
         return cursor.rowcount

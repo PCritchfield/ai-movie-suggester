@@ -114,16 +114,18 @@ class EmbeddingWorker:
         if retry_count >= max_retries:
             await self._library_store.mark_failed_permanent(jellyfin_id, msg)
             logger.error(
-                "embedding_retries_exhausted jellyfin_id=%s"
-                " retry_count=%d reason=%s",
-                jellyfin_id, retry_count, msg,
+                "embedding_retries_exhausted jellyfin_id=%s retry_count=%d reason=%s",
+                jellyfin_id,
+                retry_count,
+                msg,
             )
         else:
             await self._library_store.mark_attempt(jellyfin_id, msg)
             logger.warning(
-                "embedding_transient_failure jellyfin_id=%s"
-                " retry_count=%d reason=%s",
-                jellyfin_id, retry_count, msg,
+                "embedding_transient_failure jellyfin_id=%s retry_count=%d reason=%s",
+                jellyfin_id,
+                retry_count,
+                msg,
             )
 
     # ------------------------------------------------------------------
@@ -140,9 +142,7 @@ class EmbeddingWorker:
         """Embed and store a single item with error classification."""
         try:
             result = await self._ollama_client.embed(text)
-            await self._vec_repo.upsert(
-                jellyfin_id, result.vector, content_hash
-            )
+            await self._vec_repo.upsert(jellyfin_id, result.vector, content_hash)
             await self._library_store.mark_embedded(jellyfin_id)
             logger.info(
                 "embedding_success jellyfin_id=%s dims=%d",
@@ -152,13 +152,8 @@ class EmbeddingWorker:
         except OllamaModelError:
             # Permanent — model not found, no point retrying
             model = self._settings.ollama_embed_model
-            reason = (
-                "OllamaModelError: model not found"
-                f" — run 'ollama pull {model}'"
-            )
-            await self._library_store.mark_failed_permanent(
-                jellyfin_id, reason
-            )
+            reason = f"OllamaModelError: model not found — run 'ollama pull {model}'"
+            await self._library_store.mark_failed_permanent(jellyfin_id, reason)
             logger.error(
                 "embedding_permanent_failure jellyfin_id=%s reason=%s",
                 jellyfin_id,
@@ -211,9 +206,7 @@ class EmbeddingWorker:
         for jid in ids:
             row = rows_by_id.get(jid)
             if row is None:
-                logger.warning(
-                    "embedding_item_missing jellyfin_id=%s", jid
-                )
+                logger.warning("embedding_item_missing jellyfin_id=%s", jid)
                 missing_ids.append(jid)
                 continue
             text = self._build_text(row)
@@ -230,9 +223,7 @@ class EmbeddingWorker:
         # 4. Try batch embedding first
         texts = [text for _, text, _ in item_data.values()]
         ordered_ids = list(item_data.keys())
-        content_hashes = [
-            item_data[jid][2] for jid in ordered_ids
-        ]
+        content_hashes = [item_data[jid][2] for jid in ordered_ids]
 
         try:
             results = await self._ollama_client.embed_batch(texts)
@@ -243,9 +234,7 @@ class EmbeddingWorker:
             ]
             await self._vec_repo.upsert_many(upsert_tuples)
             await self._library_store.mark_embedded_many(ordered_ids)
-            logger.info(
-                "embedding_batch_success count=%d", len(results)
-            )
+            logger.info("embedding_batch_success count=%d", len(results))
         except Exception:
             # 5. Batch failed — fall back to individual processing
             logger.warning(
@@ -254,9 +243,7 @@ class EmbeddingWorker:
             )
             for jid in ordered_ids:
                 retry_count, text, content_hash = item_data[jid]
-                await self._process_item(
-                    jid, retry_count, text, content_hash
-                )
+                await self._process_item(jid, retry_count, text, content_hash)
 
         self._last_batch_at = int(time.time())
 
@@ -289,17 +276,14 @@ class EmbeddingWorker:
             return
 
         logger.info(
-            "template_version_stale stored=%s current=%d — "
-            "re-enqueuing all items",
+            "template_version_stale stored=%s current=%d — re-enqueuing all items",
             stored,
             TEMPLATE_VERSION,
         )
 
         all_ids = await self._library_store.get_all_ids()
         if all_ids:
-            count = await self._library_store.enqueue_for_embedding(
-                list(all_ids)
-            )
+            count = await self._library_store.enqueue_for_embedding(list(all_ids))
             logger.info("template_version_re_enqueued count=%d", count)
 
         await self._vec_repo.set_template_version(TEMPLATE_VERSION)
@@ -327,9 +311,7 @@ class EmbeddingWorker:
     async def run(self) -> None:
         """Long-running loop: wake on sync_event or interval, process."""
         interval = self._settings.embedding_worker_interval_seconds
-        logger.info(
-            "embedding_worker_start interval_seconds=%d", interval
-        )
+        logger.info("embedding_worker_start interval_seconds=%d", interval)
 
         while True:
             # Wait for either sync_event or interval timeout
@@ -349,9 +331,7 @@ class EmbeddingWorker:
 
             # Try to acquire lock (non-blocking)
             if self._lock.locked():
-                logger.debug(
-                    "embedding_cycle_skip reason=already_processing"
-                )
+                logger.debug("embedding_cycle_skip reason=already_processing")
                 continue
 
             async with self._lock:

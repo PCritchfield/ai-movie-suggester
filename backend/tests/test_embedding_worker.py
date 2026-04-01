@@ -164,9 +164,7 @@ class TestBuildText:
         assert "Year:" not in text
 
     def test_title_only(self) -> None:
-        row = _make_row(
-            overview=None, genres=[], production_year=None
-        )
+        row = _make_row(overview=None, genres=[], production_year=None)
         text = EmbeddingWorker._build_text(row)
         assert text == "Title: Galaxy Quest."
 
@@ -502,9 +500,7 @@ class TestStartup:
 
 
 class TestStatusTracking:
-    def test_initial_status_is_idle(
-        self, worker: EmbeddingWorker
-    ) -> None:
+    def test_initial_status_is_idle(self, worker: EmbeddingWorker) -> None:
         assert worker.status == "idle"
         assert worker.last_batch_at is None
         assert worker.last_error is None

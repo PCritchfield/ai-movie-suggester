@@ -52,9 +52,7 @@ class TestCheckTemplateVersion:
 
         worker = _make_worker(library_store=lib_store, vec_repo=vec_repo)
 
-        with patch(
-            "app.library.text_builder.TEMPLATE_VERSION", 1
-        ):
+        with patch("app.library.text_builder.TEMPLATE_VERSION", 1):
             await worker.check_template_version()
 
         lib_store.get_all_ids.assert_awaited_once()
@@ -73,9 +71,7 @@ class TestCheckTemplateVersion:
         lib_store = AsyncMock(spec=LibraryStore)
         worker = _make_worker(library_store=lib_store, vec_repo=vec_repo)
 
-        with patch(
-            "app.library.text_builder.TEMPLATE_VERSION", 1
-        ):
+        with patch("app.library.text_builder.TEMPLATE_VERSION", 1):
             await worker.check_template_version()
 
         lib_store.enqueue_for_embedding.assert_not_awaited()
@@ -92,9 +88,7 @@ class TestCheckTemplateVersion:
 
         worker = _make_worker(library_store=lib_store, vec_repo=vec_repo)
 
-        with patch(
-            "app.library.text_builder.TEMPLATE_VERSION", 2
-        ):
+        with patch("app.library.text_builder.TEMPLATE_VERSION", 2):
             await worker.check_template_version()
 
         lib_store.get_all_ids.assert_awaited_once()
@@ -113,9 +107,7 @@ class TestCheckTemplateVersion:
         lib_store = AsyncMock(spec=LibraryStore)
         worker = _make_worker(library_store=lib_store, vec_repo=vec_repo)
 
-        with patch(
-            "app.library.text_builder.TEMPLATE_VERSION", 3
-        ):
+        with patch("app.library.text_builder.TEMPLATE_VERSION", 3):
             await worker.check_template_version()
 
         lib_store.enqueue_for_embedding.assert_not_awaited()
@@ -129,9 +121,7 @@ class TestCheckTemplateVersion:
         lib_store = AsyncMock(spec=LibraryStore)
         worker = _make_worker(library_store=lib_store, vec_repo=vec_repo)
 
-        with patch(
-            "app.library.text_builder.TEMPLATE_VERSION", 2
-        ):
+        with patch("app.library.text_builder.TEMPLATE_VERSION", 2):
             await worker.check_template_version()
             await worker.check_template_version()
 
@@ -148,9 +138,7 @@ class TestCheckTemplateVersion:
 
         worker = _make_worker(library_store=lib_store, vec_repo=vec_repo)
 
-        with patch(
-            "app.library.text_builder.TEMPLATE_VERSION", 1
-        ):
+        with patch("app.library.text_builder.TEMPLATE_VERSION", 1):
             await worker.check_template_version()
 
         lib_store.enqueue_for_embedding.assert_not_awaited()

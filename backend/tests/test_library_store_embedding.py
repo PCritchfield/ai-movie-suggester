@@ -58,9 +58,7 @@ async def store(tmp_path: object) -> AsyncIterator[LibraryStore]:
     await s.close()
 
 
-async def _seed_items_and_enqueue(
-    store: LibraryStore, ids: list[str]
-) -> None:
+async def _seed_items_and_enqueue(store: LibraryStore, ids: list[str]) -> None:
     """Insert library items and enqueue them for embedding."""
     items = [_make_item(jellyfin_id=jid, content_hash=f"hash-{jid}") for jid in ids]
     await store.upsert_many(items)
@@ -80,9 +78,7 @@ class TestBusyTimeout:
 class TestLastAttemptedAtMigration:
     """Verify last_attempted_at column exists in embedding_queue."""
 
-    async def test_last_attempted_at_column_exists(
-        self, store: LibraryStore
-    ) -> None:
+    async def test_last_attempted_at_column_exists(self, store: LibraryStore) -> None:
         cursor = await store._conn.execute("PRAGMA table_info(embedding_queue)")
         columns = {row[1] for row in await cursor.fetchall()}
         assert "last_attempted_at" in columns
@@ -167,9 +163,7 @@ class TestGetRetryableItems:
         assert len(result) == 1
         assert result[0] == ("jf-1", 1)
 
-    async def test_skips_items_exceeding_max_retries(
-        self, store: LibraryStore
-    ) -> None:
+    async def test_skips_items_exceeding_max_retries(self, store: LibraryStore) -> None:
         await _seed_items_and_enqueue(store, ["jf-1", "jf-2"])
 
         # Set jf-1 retry_count above max_retries
@@ -197,9 +191,7 @@ class TestGetRetryableItems:
 class TestClaimBatch:
     """claim_batch() status transitions."""
 
-    async def test_transitions_pending_to_processing(
-        self, store: LibraryStore
-    ) -> None:
+    async def test_transitions_pending_to_processing(self, store: LibraryStore) -> None:
         await _seed_items_and_enqueue(store, ["jf-1", "jf-2"])
         claimed = await store.claim_batch(["jf-1", "jf-2"])
         assert claimed == 2
@@ -267,9 +259,7 @@ class TestMarkEmbeddedMany:
 class TestMarkAttempt:
     """mark_attempt() retry tracking."""
 
-    async def test_increments_retry_and_sets_error(
-        self, store: LibraryStore
-    ) -> None:
+    async def test_increments_retry_and_sets_error(self, store: LibraryStore) -> None:
         await _seed_items_and_enqueue(store, ["jf-1"])
         await store.mark_attempt("jf-1", "timeout connecting to Ollama")
 
@@ -393,9 +383,7 @@ class TestGetQueueCounts:
     """get_queue_counts() aggregation."""
 
     async def test_correct_breakdown(self, store: LibraryStore) -> None:
-        await _seed_items_and_enqueue(
-            store, ["jf-1", "jf-2", "jf-3", "jf-4", "jf-5"]
-        )
+        await _seed_items_and_enqueue(store, ["jf-1", "jf-2", "jf-3", "jf-4", "jf-5"])
         # jf-1, jf-2 → processing
         await store.claim_batch(["jf-1", "jf-2"])
         # jf-3 → failed

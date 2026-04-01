@@ -49,8 +49,7 @@ class TestUpsertManyBasic:
     ) -> None:
         """Batch upsert of 5 items: all stored, count() returns 5."""
         items = [
-            (f"item-{i}", _make_embedding(float(i)), f"hash-{i}")
-            for i in range(5)
+            (f"item-{i}", _make_embedding(float(i)), f"hash-{i}") for i in range(5)
         ]
         await vec_repo.upsert_many(items)
         assert await vec_repo.count() == 5
@@ -111,9 +110,7 @@ class TestUpsertManyBasic:
 class TestUpsertManyEdgeCases:
     """Edge cases for upsert_many()."""
 
-    async def test_empty_input_is_noop(
-        self, vec_repo: SqliteVecRepository
-    ) -> None:
+    async def test_empty_input_is_noop(self, vec_repo: SqliteVecRepository) -> None:
         """Empty input returns immediately without error."""
         await vec_repo.upsert_many([])
         assert await vec_repo.count() == 0
@@ -158,8 +155,7 @@ class TestUpsertManyEdgeCases:
     ) -> None:
         """All items from upsert_many have embedding_status = COMPLETE."""
         items = [
-            (f"status-{i}", _make_embedding(float(i)), f"hash-{i}")
-            for i in range(3)
+            (f"status-{i}", _make_embedding(float(i)), f"hash-{i}") for i in range(3)
         ]
         await vec_repo.upsert_many(items)
 

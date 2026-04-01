@@ -196,9 +196,7 @@ class SqliteVecRepository:
             await self._writer.rollback()
             raise
 
-    async def upsert_many(
-        self, items: list[tuple[str, list[float], str]]
-    ) -> None:
+    async def upsert_many(self, items: list[tuple[str, list[float], str]]) -> None:
         """Batch insert or update vectors (DELETE + INSERT per item).
 
         Each tuple is ``(jellyfin_id, embedding, content_hash)``.
