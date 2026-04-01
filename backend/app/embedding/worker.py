@@ -151,9 +151,10 @@ class EmbeddingWorker:
             )
         except OllamaModelError:
             # Permanent — model not found, no point retrying
+            model = self._settings.ollama_embed_model
             reason = (
                 "OllamaModelError: model not found"
-                " — run 'ollama pull nomic-embed-text'"
+                f" — run 'ollama pull {model}'"
             )
             await self._library_store.mark_failed_permanent(
                 jellyfin_id, reason
@@ -206,15 +207,22 @@ class EmbeddingWorker:
         retry_map = dict(items)
         rows = await self._library_store.get_many(ids)
         rows_by_id = {row.jellyfin_id: row for row in rows}
+        missing_ids: list[str] = []
         for jid in ids:
             row = rows_by_id.get(jid)
             if row is None:
                 logger.warning(
                     "embedding_item_missing jellyfin_id=%s", jid
                 )
+                missing_ids.append(jid)
                 continue
             text = self._build_text(row)
             item_data[jid] = (retry_map[jid], text, row.content_hash)
+
+        # Clean up queue rows for IDs whose library rows no longer exist —
+        # they were claimed (status='processing') but have nothing to embed.
+        if missing_ids:
+            await self._library_store.mark_embedded_many(missing_ids)
 
         if not item_data:
             return

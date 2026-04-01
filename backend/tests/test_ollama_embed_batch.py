@@ -165,15 +165,15 @@ class TestEmbedBatchEdgeCases:
         with pytest.raises(OllamaError, match="returned 1 embeddings for 3 inputs"):
             await ollama_client.embed_batch(["a", "b", "c"])
 
-    async def test_dimension_mismatch_in_batch_raises(
+    async def test_mixed_dimensions_in_batch_preserved(
         self, ollama_client: OllamaEmbeddingClient, mock_http: AsyncMock
     ) -> None:
-        """Per-vector dimension validation catches mismatched dimensions.
+        """embed_batch preserves per-vector dimensions without enforcing uniformity.
 
-        EmbeddingResult's model_validator ensures len(vector) == dimensions.
-        A vector with inconsistent length will fail validation.
+        Each EmbeddingResult records its own len(vector) as dimensions.
+        The caller (worker) is responsible for checking expected dimensions.
         """
-        # One good 768-dim vector and one bad 3-dim vector
+        # One 768-dim vector and one 3-dim vector — both valid individually
         mock_http.post.return_value = httpx.Response(
             200,
             json={

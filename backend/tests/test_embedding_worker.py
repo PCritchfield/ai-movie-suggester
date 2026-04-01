@@ -358,7 +358,7 @@ class TestErrorClassification:
         args = mock_library_store.mark_failed_permanent.call_args
         assert args[0][0] == "jf-001"
         assert "OllamaModelError" in args[0][1]
-        assert "ollama pull" in args[0][1]
+        assert "ollama pull nomic-embed-text" in args[0][1]
         mock_library_store.mark_attempt.assert_not_awaited()
 
     async def test_max_retries_exceeded_marks_permanent(
@@ -449,19 +449,28 @@ class TestLockBehavior:
         worker: EmbeddingWorker,
         mock_library_store: AsyncMock,
         mock_ollama: AsyncMock,
+        sync_event: asyncio.Event,
     ) -> None:
         """When the lock is already held, the run loop skips the cycle."""
-        # Pre-acquire the lock
+        # Pre-acquire the lock to simulate an in-flight cycle
         await worker._lock.acquire()
 
+        mock_library_store.get_retryable_items.return_value = [("jf-001", 0)]
         mock_ollama.health.return_value = True
-        mock_library_store.get_retryable_items.return_value = []
 
-        # Verify that the lock is indeed locked
-        assert worker._lock.locked()
+        # Start the run loop — it should see the lock and skip
+        task = asyncio.create_task(worker.run())
+        sync_event.set()
+        await asyncio.sleep(0.05)
 
-        # Release so test cleanup is clean
+        # Queue methods should NOT have been called because lock was held
+        mock_library_store.get_retryable_items.assert_not_awaited()
+
+        # Clean up
         worker._lock.release()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
 
 
 # ---------------------------------------------------------------------------
@@ -593,14 +602,15 @@ class TestRunLoop:
 
 
 class TestMissingItem:
-    async def test_missing_row_is_skipped(
+    async def test_missing_row_is_skipped_and_cleaned_up(
         self,
         worker: EmbeddingWorker,
         mock_library_store: AsyncMock,
         mock_vec_repo: AsyncMock,
         mock_ollama: AsyncMock,
     ) -> None:
-        """If get_many() returns fewer rows than claimed, missing items are skipped."""
+        """If get_many() returns fewer rows than claimed, missing items are
+        removed from the queue and the remaining items are still embedded."""
         items = [("jf-001", 0), ("jf-002", 0)]
 
         mock_ollama.health.return_value = True
@@ -614,7 +624,15 @@ class TestMissingItem:
 
         await worker.process_cycle()
 
-        # Only 1 item should be in the batch (jf-002)
+        # Missing IDs cleaned up from queue; mark_embedded_many called
+        # twice: once for missing IDs, once for batch success
+        calls = mock_library_store.mark_embedded_many.call_args_list
+        # First call: cleanup missing IDs
+        assert calls[0][0][0] == ["jf-001"]
+        # Second call: successful batch
+        assert calls[1][0][0] == ["jf-002"]
+
+        # Only 1 item should be in the embed batch (jf-002)
         mock_ollama.embed_batch.assert_awaited_once()
         texts_arg = mock_ollama.embed_batch.call_args[0][0]
         assert len(texts_arg) == 1
