@@ -73,11 +73,13 @@ class SyncEngine:
         jellyfin_client: JellyfinClient,
         settings: Settings,
         vector_repository: SqliteVecRepository | None = None,
+        embedding_event: asyncio.Event | None = None,
     ) -> None:
         self._library_store = library_store
         self._jellyfin_client = jellyfin_client
         self._settings = settings
         self._vector_repo = vector_repository
+        self._embedding_event = embedding_event
         self._lock = asyncio.Lock()
         self._current_state: SyncState | None = None
 
@@ -293,6 +295,10 @@ class SyncEngine:
             )
 
             await self._library_store.save_sync_run(result)
+
+            # Wake embedding worker after sync completes
+            if self._embedding_event:
+                self._embedding_event.set()
 
             # Purge runs after save_sync_run intentionally —
             # items_deleted in SyncResult tracks soft-deletes detected

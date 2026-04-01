@@ -95,6 +95,20 @@ class Settings(BaseSettings):
     tombstone_ttl_days: int = 7
     wal_checkpoint_threshold_mb: float = 50.0
 
+    # Embedding worker
+    embedding_batch_size: int = 10
+    embedding_worker_interval_seconds: int = 300
+    embedding_max_retries: int = 3
+    embedding_cooldown_seconds: int = 300
+
+    @model_validator(mode="after")
+    def _validate_embedding_batch_size(self) -> Settings:
+        """Reject embedding_batch_size outside the 1–50 range."""
+        if self.embedding_batch_size < 1 or self.embedding_batch_size > 50:
+            msg = "EMBEDDING_BATCH_SIZE must be between 1 and 50"
+            raise ValueError(msg)
+        return self
+
     @model_validator(mode="after")
     def _validate_jellyfin_api_key(self) -> Settings:
         """Strip whitespace from API key; treat empty/whitespace-only as None."""

@@ -63,6 +63,36 @@ def _build_year_section(production_year: int | None) -> str | None:
     return None
 
 
+def build_sections(
+    title: str,
+    overview: str | None,
+    genres: list[str],
+    production_year: int | None,
+) -> str:
+    """Assemble composite text from raw field values.
+
+    Shared core used by both ``build_composite_text`` (for LibraryItem)
+    and the embedding worker (for LibraryItemRow).  Changes here
+    automatically propagate to both callers — bump ``TEMPLATE_VERSION``
+    when the template structure changes.
+    """
+    sections: list[str] = [_build_title_section(title)]
+
+    ov = _build_overview_section(overview)
+    if ov is not None:
+        sections.append(ov)
+
+    g = _build_genres_section(genres)
+    if g is not None:
+        sections.append(g)
+
+    y = _build_year_section(production_year)
+    if y is not None:
+        sections.append(y)
+
+    return " ".join(sections)
+
+
 def build_composite_text(item: LibraryItem) -> CompositeTextResult:
     """Build a composite text string from a LibraryItem for embedding.
 
@@ -77,21 +107,12 @@ def build_composite_text(item: LibraryItem) -> CompositeTextResult:
         A CompositeTextResult with the built text, template version,
         and embedding source.
     """
-    sections: list[str] = [_build_title_section(item.name)]
-
-    overview = _build_overview_section(item.overview)
-    if overview is not None:
-        sections.append(overview)
-
-    genres = _build_genres_section(item.genres)
-    if genres is not None:
-        sections.append(genres)
-
-    year = _build_year_section(item.production_year)
-    if year is not None:
-        sections.append(year)
-
-    text = " ".join(sections)
+    text = build_sections(
+        title=item.name,
+        overview=item.overview,
+        genres=item.genres,
+        production_year=item.production_year,
+    )
 
     if len(text) > _LENGTH_WARNING_THRESHOLD:
         logger.warning(

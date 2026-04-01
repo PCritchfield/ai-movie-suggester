@@ -196,6 +196,39 @@ class SqliteVecRepository:
             await self._writer.rollback()
             raise
 
+    async def upsert_many(self, items: list[tuple[str, list[float], str]]) -> None:
+        """Batch insert or update vectors (DELETE + INSERT per item).
+
+        Each tuple is ``(jellyfin_id, embedding, content_hash)``.
+        All operations are wrapped in a single explicit transaction —
+        if any item fails, the entire batch is rolled back.
+
+        Empty input is a no-op (no transaction opened).
+        """
+        if not items:
+            return
+
+        now = int(time.time())
+        try:
+            await self._writer.execute("BEGIN")
+            for jellyfin_id, embedding, content_hash in items:
+                serialized = _serialize_f32(embedding)
+                await self._writer.execute(
+                    "DELETE FROM item_vectors WHERE jellyfin_id = ?",
+                    (jellyfin_id,),
+                )
+                await self._writer.execute(
+                    "INSERT INTO item_vectors "
+                    "(jellyfin_id, embedding, content_hash,"
+                    " embedded_at, embedding_status) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (jellyfin_id, serialized, content_hash, now, COMPLETE),
+                )
+            await self._writer.commit()
+        except Exception:
+            await self._writer.rollback()
+            raise
+
     async def get(self, jellyfin_id: str) -> VectorRecord | None:
         """Retrieve a single record's metadata (not the embedding)."""
         cursor = await self._reader.execute(
@@ -309,6 +342,30 @@ class SqliteVecRepository:
         if cursor.rowcount == 0:
             msg = f"No vector record for jellyfin_id={jellyfin_id}"
             raise KeyError(msg)
+        await self._writer.commit()
+
+    async def get_template_version(self) -> int | None:
+        """Read the stored template version from _vec_meta.
+
+        Returns the version as an int, or None if no template_version
+        has been stored yet (first run / pre-Spec-10 database).
+        """
+        cursor = await self._reader.execute(
+            "SELECT value FROM _vec_meta WHERE key = ?",
+            ("template_version",),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return int(row[0])
+
+    async def set_template_version(self, version: int) -> None:
+        """Store (or update) the template version in _vec_meta."""
+        await self._writer.execute(
+            "INSERT INTO _vec_meta (key, value) VALUES ('template_version', ?)"
+            " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(version),),
+        )
         await self._writer.commit()
 
     async def close(self) -> None:

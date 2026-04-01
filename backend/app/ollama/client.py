@@ -111,6 +111,79 @@ class OllamaEmbeddingClient:
             model=self._embed_model,
         )
 
+    async def embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
+        """Generate embedding vectors for a batch of texts in one request.
+
+        POSTs to ``{base_url}/api/embed`` with ``"input": texts`` (a list).
+        Ollama returns ``{"embeddings": [[vec1], [vec2], ...]}`` which is
+        mapped positionally to the input texts.
+
+        Returns an empty list immediately if *texts* is empty (no HTTP call).
+
+        Raises:
+            OllamaTimeoutError: Ollama did not respond in time.
+            OllamaConnectionError: Ollama is unreachable.
+            OllamaModelError: The requested model is not available (404).
+            OllamaError: Any other non-2xx response, or vector count mismatch.
+        """
+        if not texts:
+            return []
+
+        logger.debug("ollama_embed_batch count=%d", len(texts))
+
+        t0 = time.perf_counter()
+        try:
+            resp = await self._client.post(
+                f"{self._base_url}/api/embed",
+                json={"model": self._embed_model, "input": texts},
+            )
+        except httpx.TimeoutException as exc:
+            raise OllamaTimeoutError(
+                f"Ollama embedding request timed out at {self._base_url}"
+            ) from exc
+        except httpx.TransportError as exc:
+            raise OllamaConnectionError(
+                f"Cannot reach Ollama at {self._base_url}"
+            ) from exc
+
+        if resp.status_code == 404:
+            raise OllamaModelError(f"Model '{self._embed_model}' not found on Ollama")
+
+        if resp.status_code >= 400:
+            raise OllamaError(f"Unexpected response from Ollama: {resp.status_code}")
+
+        try:
+            data = resp.json()
+            vectors = data["embeddings"]
+        except Exception as exc:
+            raise OllamaError(
+                "Invalid response shape from Ollama embedding API"
+            ) from exc
+
+        if len(vectors) != len(texts):
+            raise OllamaError(
+                f"Ollama returned {len(vectors)} embeddings for {len(texts)} inputs"
+            )
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        results: list[EmbeddingResult] = []
+        for vector in vectors:
+            results.append(
+                EmbeddingResult(
+                    vector=vector,
+                    dimensions=len(vector),
+                    model=self._embed_model,
+                )
+            )
+
+        logger.info(
+            "ollama_embed_batch count=%d elapsed_ms=%.0f",
+            len(results),
+            elapsed_ms,
+        )
+
+        return results
+
     async def health(self) -> bool:
         """Check if Ollama is reachable.
 
