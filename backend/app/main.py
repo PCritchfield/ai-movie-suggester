@@ -114,12 +114,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         try:
             await vec_repo.init()
-        except RuntimeError:
+        except Exception:
             _logger.critical(
                 "vec_repo init failed — extension or dimension mismatch",
                 exc_info=True,
             )
-            await vec_repo.close()
+            # init() already closes connections on failure; just log and re-raise
             raise
         app.state.vec_repo = vec_repo
 
@@ -333,7 +333,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except AttributeError:
             total = 0
         except Exception:
-            _logger.debug("vec_repo count failed", exc_info=True)
+            _logger.warning("vec_repo count failed", exc_info=True)
             total = 0
 
         # Worker status (safe fallback if worker not yet created)
