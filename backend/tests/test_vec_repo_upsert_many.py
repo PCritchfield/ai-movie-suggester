@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import time
 from typing import TYPE_CHECKING
 
@@ -164,22 +163,18 @@ class TestUpsertManyEdgeCases:
             assert status == COMPLETE
 
 
-class TestUpsertManyRollback:
-    """Transaction rollback behaviour for upsert_many()."""
+class TestUpsertManyValidation:
+    """Dimension validation and no-partial-write behaviour for upsert_many()."""
 
-    async def test_mid_batch_failure_rolls_back_entire_transaction(
+    async def test_wrong_dimensions_rejected_before_transaction(
         self, vec_repo: SqliteVecRepository
     ) -> None:
-        """Mid-batch failure rolls back — count stays at pre-upsert level."""
+        """Wrong-dimension vector raises ValueError before any DB writes."""
         # Pre-populate with one known good item
         await vec_repo.upsert("pre-existing", _make_embedding(0.5), "hash-pre")
         assert await vec_repo.count() == 1
 
-        # Create a batch where the third item has corrupt vector data.
-        # _serialize_f32 expects a list of floats; passing wrong-dimension
-        # data to the vec0 table will cause a SQL error.
         good_embedding = _make_embedding(1.0)
-        # A vector with wrong dimensions will fail on INSERT into vec0
         wrong_dims_embedding = [1.0, 2.0]  # _DIMS is 4, so 2 is wrong
 
         items = [
@@ -188,13 +183,10 @@ class TestUpsertManyRollback:
             ("batch-bad", wrong_dims_embedding, "hash-bad"),
         ]
 
-        with pytest.raises(sqlite3.OperationalError):
+        with pytest.raises(ValueError, match="dimension mismatch"):
             await vec_repo.upsert_many(items)
 
-        # The entire batch should have been rolled back.
-        # Only the pre-existing item should remain.
+        # Nothing written — pre-existing item still the only one
         assert await vec_repo.count() == 1
         assert await vec_repo.get("pre-existing") is not None
         assert await vec_repo.get("batch-ok-1") is None
-        assert await vec_repo.get("batch-ok-2") is None
-        assert await vec_repo.get("batch-bad") is None
