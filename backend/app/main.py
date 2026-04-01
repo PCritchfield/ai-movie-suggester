@@ -114,12 +114,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         try:
             await vec_repo.init()
+        except asyncio.CancelledError:
+            raise
         except Exception:
             _logger.critical(
                 "vec_repo init failed — extension or dimension mismatch",
                 exc_info=True,
             )
-            # init() already closes connections on failure; just log and re-raise
             raise
         app.state.vec_repo = vec_repo
 

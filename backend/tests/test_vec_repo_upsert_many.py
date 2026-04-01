@@ -163,8 +163,8 @@ class TestUpsertManyEdgeCases:
             assert status == COMPLETE
 
 
-class TestUpsertManyRollback:
-    """Transaction rollback behaviour for upsert_many()."""
+class TestUpsertManyValidation:
+    """Dimension validation and no-partial-write behaviour for upsert_many()."""
 
     async def test_wrong_dimensions_rejected_before_transaction(
         self, vec_repo: SqliteVecRepository
