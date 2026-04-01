@@ -119,6 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "vec_repo init failed — extension or dimension mismatch",
                 exc_info=True,
             )
+            await vec_repo.close()
             raise
         app.state.vec_repo = vec_repo
 
@@ -329,7 +330,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             vec_repo = application.state.vec_repo
             total = await vec_repo.count()
+        except AttributeError:
+            total = 0
         except Exception:
+            _logger.debug("vec_repo count failed", exc_info=True)
             total = 0
 
         # Worker status (safe fallback if worker not yet created)

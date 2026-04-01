@@ -100,34 +100,44 @@ class SqliteVecRepository:
         await conn.execute("PRAGMA busy_timeout=5000")
 
     async def init(self) -> None:
-        """Open connections, load vec0, create schema, validate metadata."""
-        # Open writer connection
-        self._writer_db = await aiosqlite.connect(self._db_path)
-        await self._setup_connection(self._writer)
+        """Open connections, load vec0, create schema, validate metadata.
 
-        # Open reader connection
-        self._reader_db = await aiosqlite.connect(self._db_path)
-        await self._setup_connection(self._reader)
+        If any step after opening connections fails (extension load,
+        metadata validation, table creation), partially-opened connections
+        are closed before re-raising so callers don't leak resources.
+        """
+        try:
+            # Open writer connection
+            self._writer_db = await aiosqlite.connect(self._db_path)
+            await self._setup_connection(self._writer)
 
-        # Create _vec_meta table
-        await self._writer.execute(_CREATE_VEC_META)
-        await self._writer.commit()
+            # Open reader connection
+            self._reader_db = await aiosqlite.connect(self._db_path)
+            await self._setup_connection(self._reader)
 
-        # Validate or store model/dimension metadata
-        await self._validate_or_store_meta()
+            # Create _vec_meta table
+            await self._writer.execute(_CREATE_VEC_META)
+            await self._writer.commit()
 
-        # Create vec0 virtual table for vectors
-        create_vec_table = (
-            "CREATE VIRTUAL TABLE IF NOT EXISTS item_vectors USING vec0("
-            "    jellyfin_id TEXT PRIMARY KEY,"
-            f"    embedding float[{self._expected_dimensions}] distance_metric=cosine,"
-            "    content_hash TEXT,"
-            "    embedded_at INTEGER,"
-            "    embedding_status TEXT"
-            ")"
-        )
-        await self._writer.execute(create_vec_table)
-        await self._writer.commit()
+            # Validate or store model/dimension metadata
+            await self._validate_or_store_meta()
+
+            # Create vec0 virtual table for vectors
+            create_vec_table = (
+                "CREATE VIRTUAL TABLE IF NOT EXISTS item_vectors USING vec0("
+                "    jellyfin_id TEXT PRIMARY KEY,"
+                f"    embedding float[{self._expected_dimensions}]"
+                " distance_metric=cosine,"
+                "    content_hash TEXT,"
+                "    embedded_at INTEGER,"
+                "    embedding_status TEXT"
+                ")"
+            )
+            await self._writer.execute(create_vec_table)
+            await self._writer.commit()
+        except Exception:
+            await self.close()
+            raise
 
     async def _validate_or_store_meta(self) -> None:
         """Check _vec_meta for model/dimensions; store on first run."""
@@ -170,6 +180,15 @@ class SqliteVecRepository:
             )
             raise RuntimeError(msg)
 
+    def _check_dims(self, embedding: list[float]) -> None:
+        """Raise ValueError if embedding length doesn't match expected dimensions."""
+        if len(embedding) != self._expected_dimensions:
+            msg = (
+                f"Embedding dimension mismatch: got {len(embedding)},"
+                f" expected {self._expected_dimensions}"
+            )
+            raise ValueError(msg)
+
     async def upsert(
         self, jellyfin_id: str, embedding: list[float], content_hash: str
     ) -> None:
@@ -178,6 +197,7 @@ class SqliteVecRepository:
         Wrapped in an explicit transaction so a crash between DELETE and
         INSERT rolls back cleanly — no data loss.
         """
+        self._check_dims(embedding)
         serialized = _serialize_f32(embedding)
         try:
             await self._writer.execute("BEGIN")
@@ -209,6 +229,8 @@ class SqliteVecRepository:
             return
 
         now = int(time.time())
+        for _, embedding, _ in items:
+            self._check_dims(embedding)
         try:
             await self._writer.execute("BEGIN")
             for jellyfin_id, embedding, content_hash in items:
@@ -290,6 +312,7 @@ class SqliteVecRepository:
         self, query_embedding: list[float], limit: int = 20
     ) -> list[SearchResult]:
         """Cosine similarity search, returning top-N results."""
+        self._check_dims(query_embedding)
         serialized = _serialize_f32(query_embedding)
         cursor = await self._reader.execute(
             "SELECT jellyfin_id, distance, content_hash "
