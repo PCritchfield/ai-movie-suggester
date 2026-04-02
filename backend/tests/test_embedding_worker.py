@@ -133,11 +133,17 @@ class TestBuildText:
         row = _make_row()
         text = EmbeddingWorker._build_text(row)
         assert text == (
-            "Title: Galaxy Quest."
+            "search_document: Title: Galaxy Quest."
             " A comedy about sci-fi actors in space."
             " Genres: Comedy, Sci-Fi."
             " Year: 1999."
         )
+
+    def test_prepends_search_document_prefix(self) -> None:
+        """The search_document: prefix is required by nomic-embed-text."""
+        row = _make_row()
+        text = EmbeddingWorker._build_text(row)
+        assert text.startswith("search_document: ")
 
     def test_missing_overview(self) -> None:
         row = _make_row(overview=None)
@@ -166,7 +172,7 @@ class TestBuildText:
     def test_title_only(self) -> None:
         row = _make_row(overview=None, genres=[], production_year=None)
         text = EmbeddingWorker._build_text(row)
-        assert text == "Title: Galaxy Quest."
+        assert text == "search_document: Title: Galaxy Quest."
 
 
 # ---------------------------------------------------------------------------

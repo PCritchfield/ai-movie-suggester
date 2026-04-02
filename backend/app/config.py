@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     embedding_max_retries: int = 3
     embedding_cooldown_seconds: int = 300
 
+    # Search
+    search_overfetch_multiplier: Annotated[int, Field(ge=1, le=10)] = 3
+    search_rate_limit: int = 10
+
     @model_validator(mode="after")
     def _validate_embedding_batch_size(self) -> Settings:
         """Reject embedding_batch_size outside the 1–50 range."""

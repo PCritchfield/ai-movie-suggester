@@ -147,6 +147,26 @@ class SessionStore:
             expires_at=row[4],
         )
 
+    async def get_token(self, session_id: str) -> str | None:
+        """Return the decrypted Jellyfin token for a session, or None.
+
+        Returns ``None`` if the session does not exist or has expired.
+        Unlike ``get()``, this never constructs a full ``SessionRow`` —
+        only the encrypted token and expiry are fetched.
+        """
+        now = int(time.time())
+        cursor = await self._conn.execute(
+            "SELECT token_enc, expires_at FROM sessions WHERE session_id = ?",
+            (session_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        token_enc, expires_at = row
+        if expires_at < now:
+            return None
+        return fernet_decrypt(self._column_key, token_enc)
+
     async def delete(self, session_id: str) -> None:
         """Delete a session by ID."""
         await self._conn.execute(

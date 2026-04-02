@@ -29,10 +29,15 @@ class VectorRecord:
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
-    """A single result from a cosine-similarity search."""
+    """A single result from a cosine-similarity search.
+
+    ``score`` is a similarity score (higher = better) computed as
+    ``1 - cosine_distance``.  Typical range for nomic-embed-text
+    is 0.3–0.7.
+    """
 
     jellyfin_id: str
-    distance: float
+    score: float
     content_hash: str
 
 
