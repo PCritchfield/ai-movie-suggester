@@ -44,23 +44,24 @@ def _make_service(
     library: AsyncMock | None = None,
     overfetch: int = 3,
 ) -> SearchService:
-    ollama = ollama or AsyncMock()
-    vec_repo = vec_repo or AsyncMock()
-    permissions = permissions or AsyncMock()
-    library = library or AsyncMock()
+    """Build a SearchService with mocked dependencies.
 
-    # Sensible defaults
-    if not ollama.embed.return_value:
+    Pass pre-configured mocks to override defaults.  Mocks created
+    here have safe, non-interfering defaults.
+    """
+    if ollama is None:
+        ollama = AsyncMock()
         ollama.embed.return_value = _make_embedding_result()
-    if not vec_repo.count.return_value:
+    if vec_repo is None:
+        vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
-    if not vec_repo.search.return_value:
         vec_repo.search.return_value = []
-    if not permissions.filter_permitted.return_value:
+    if permissions is None:
+        permissions = AsyncMock()
         permissions.filter_permitted.return_value = []
-    if not library.get_many.return_value:
+    if library is None:
+        library = AsyncMock()
         library.get_many.return_value = []
-    if not library.get_queue_counts.return_value:
         library.get_queue_counts.return_value = {
             "pending": 0,
             "processing": 0,
@@ -194,3 +195,131 @@ class TestSearchTruncatesToLimit:
         result = await service.search("test", limit=3, user_id="u1", token="tok")
 
         assert len(result.results) <= 3
+
+
+class TestSearchNoEmbeddingsStatus:
+    async def test_returns_no_embeddings_and_empty_results(self) -> None:
+        ollama = AsyncMock()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 0  # no embeddings
+
+        library = AsyncMock()
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(ollama=ollama, vec_repo=vec_repo, library=library)
+        result = await service.search("test", limit=10, user_id="u1", token="tok")
+
+        assert result.status == "no_embeddings"
+        assert result.results == []
+        assert result.total_candidates == 0
+        assert result.filtered_count == 0
+        # Ollama should NOT have been called
+        ollama.embed.assert_not_awaited()
+
+
+class TestSearchPartialEmbeddingsStatus:
+    async def test_returns_partial_when_queue_has_pending(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 50  # some embeddings exist
+        vec_repo.search.return_value = [_make_search_result("m1")]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_queue_counts.return_value = {
+            "pending": 5,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        result = await service.search("test", limit=10, user_id="u1", token="tok")
+
+        assert result.status == "partial_embeddings"
+        assert len(result.results) == 1  # results still returned
+
+
+class TestSearchOkStatus:
+    async def test_returns_ok_when_fully_embedded(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [_make_search_result("m1")]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        result = await service.search("test", limit=10, user_id="u1", token="tok")
+
+        assert result.status == "ok"
+
+
+class TestSearchResponseMetadata:
+    async def test_response_includes_metadata_fields(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            _make_search_result("m1", 0.9),
+            _make_search_result("m2", 0.8),
+            _make_search_result("m3", 0.7),
+        ]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1", "m3"]  # m2 filtered
+
+        library = AsyncMock()
+        library.get_many.return_value = [
+            _make_library_item("m1"),
+            _make_library_item("m3"),
+        ]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        result = await service.search("test", limit=10, user_id="u1", token="tok")
+
+        assert result.total_candidates == 3
+        assert result.filtered_count == 1
+        assert isinstance(result.query_time_ms, int)
+        assert result.query_time_ms >= 0

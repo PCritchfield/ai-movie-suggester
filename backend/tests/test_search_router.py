@@ -244,6 +244,49 @@ class TestSearchInvalidQuery:
         assert resp.status_code == 422
 
 
+class TestSearchResponseMetadata:
+    def test_response_includes_metadata(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.search.return_value = [
+            _make_search_result("m1", 0.9),
+            _make_search_result("m2", 0.8),
+        ]
+        vec_repo.count.return_value = 10
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1"]  # m2 filtered
+
+        library = AsyncMock()
+        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        session_store = AsyncMock()
+        session_store.get_token.return_value = "jf-token"
+
+        _, client = _make_search_app(
+            session_store=session_store,
+            ollama_client=ollama,
+            vec_repo=vec_repo,
+            permission_service=permissions,
+            library_store=library,
+        )
+
+        resp = client.post("/api/search", json={"query": "test"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_candidates"] == 2
+        assert data["filtered_count"] == 1
+        assert isinstance(data["query_time_ms"], int)
+        assert data["query_time_ms"] >= 0
+
+
 class TestSearchOllamaDown:
     def test_ollama_connection_error_returns_503(self) -> None:
         ollama = AsyncMock()
