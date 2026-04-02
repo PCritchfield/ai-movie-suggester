@@ -23,6 +23,7 @@ from app.ollama.errors import (
     OllamaModelError,
     OllamaTimeoutError,
 )
+from app.search.models import DOCUMENT_PREFIX
 
 if TYPE_CHECKING:
     from app.config import Settings
@@ -94,7 +95,7 @@ class EmbeddingWorker:
         applied here (the embedding call-site), NOT inside
         ``build_sections()``, which remains a shared utility.
         """
-        return "search_document: " + build_sections(
+        return DOCUMENT_PREFIX + build_sections(
             title=item.title,
             overview=item.overview,
             genres=item.genres,

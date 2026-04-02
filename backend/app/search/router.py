@@ -10,7 +10,6 @@ from slowapi import Limiter  # noqa: TC002
 
 from app.auth.dependencies import get_current_session
 from app.search.models import SearchRequest, SearchResponse, SearchUnavailableError
-from app.search.service import SearchService
 
 if TYPE_CHECKING:
     from app.auth.models import SessionMeta
@@ -52,20 +51,12 @@ def create_search_router(
         Embeds the query, searches the vector DB, filters by user
         permissions, and returns enriched metadata.
         """
-        # Retrieve the user's Jellyfin token (with expiry check)
         session_store = request.app.state.session_store
         token = await session_store.get_token(session.session_id)
         if token is None:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        # Build service from app.state dependencies
-        service = SearchService(
-            ollama_client=request.app.state.ollama_client,
-            vec_repo=request.app.state.vec_repo,
-            permission_service=request.app.state.permission_service,
-            library_store=request.app.state.library_store,
-            overfetch_multiplier=settings.search_overfetch_multiplier,
-        )
+        service = request.app.state.search_service
 
         try:
             return await service.search(

@@ -16,6 +16,7 @@ from app.library.models import LibraryItemRow
 from app.ollama.errors import OllamaConnectionError
 from app.ollama.models import EmbeddingResult
 from app.search.router import create_search_router
+from app.search.service import SearchService
 from app.vectors.models import SearchResult
 from tests.conftest import TEST_SECRET, make_test_settings
 
@@ -77,15 +78,27 @@ def _make_search_app(
     settings: Any = None,
 ) -> tuple[FastAPI, TestClient]:
     settings = settings or make_test_settings()
+    _ollama = ollama_client or AsyncMock()
+    _vec_repo = vec_repo or AsyncMock()
+    _permissions = permission_service or AsyncMock()
+    _library = library_store or AsyncMock()
+
     app = FastAPI()
     app.state.cookie_key = _COOKIE_KEY
     app.state.session_store = session_store or AsyncMock()
-    app.state.ollama_client = ollama_client or AsyncMock()
-    app.state.vec_repo = vec_repo or AsyncMock()
-    app.state.permission_service = permission_service or AsyncMock()
-    app.state.library_store = library_store or AsyncMock()
+    app.state.ollama_client = _ollama
+    app.state.vec_repo = _vec_repo
+    app.state.permission_service = _permissions
+    app.state.library_store = _library
     app.state.settings = settings
     app.state.limiter = None  # disable rate limiting in tests
+    app.state.search_service = SearchService(
+        ollama_client=_ollama,
+        vec_repo=_vec_repo,
+        permission_service=_permissions,
+        library_store=_library,
+        overfetch_multiplier=settings.search_overfetch_multiplier,
+    )
 
     search_router = create_search_router(settings=settings, limiter=None)
     app.include_router(search_router)

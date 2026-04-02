@@ -8,8 +8,10 @@ from typing import TYPE_CHECKING
 
 from app.ollama.errors import OllamaConnectionError, OllamaError, OllamaTimeoutError
 from app.search.models import (
+    QUERY_PREFIX,
     SearchResponse,
     SearchResultItem,
+    SearchStatus,
     SearchUnavailableError,
 )
 
@@ -20,8 +22,6 @@ if TYPE_CHECKING:
     from app.vectors.repository import SqliteVecRepository
 
 logger = logging.getLogger(__name__)
-
-_QUERY_PREFIX = "search_query: "
 
 
 class SearchService:
@@ -67,22 +67,19 @@ class SearchService:
         """
         t0 = time.perf_counter()
 
-        # 1. Determine library status
         status = await self._determine_status()
-        if status == "no_embeddings":
+        if status == SearchStatus.NO_EMBEDDINGS:
             elapsed_ms = int((time.perf_counter() - t0) * 1000)
             return SearchResponse(
-                status="no_embeddings",
+                status=SearchStatus.NO_EMBEDDINGS,
                 results=[],
                 total_candidates=0,
                 filtered_count=0,
                 query_time_ms=elapsed_ms,
             )
 
-        # 2. Embed the query
-        prefixed_query = _QUERY_PREFIX + query
         try:
-            embedding_result = await self._ollama.embed(prefixed_query)
+            embedding_result = await self._ollama.embed(QUERY_PREFIX + query)
         except (OllamaTimeoutError, OllamaConnectionError) as exc:
             raise SearchUnavailableError(
                 "Embedding service is unavailable"
@@ -92,31 +89,25 @@ class SearchService:
                 "Embedding service returned an error"
             ) from exc
 
-        # 3. Vector search (over-fetch to compensate for permission filtering)
+        # Over-fetch to compensate for items removed by permission filtering
         fetch_limit = limit * self._overfetch
         candidates = await self._vec_repo.search(
             embedding_result.vector, limit=fetch_limit
         )
         total_candidates = len(candidates)
 
-        # 4. Permission filtering
         candidate_ids = [c.jellyfin_id for c in candidates]
         permitted_ids = await self._permissions.filter_permitted(
             user_id, token, candidate_ids
         )
         filtered_count = total_candidates - len(permitted_ids)
-
-        # 5. Truncate to requested limit
         permitted_ids = permitted_ids[:limit]
 
-        # 6. Build score lookup from candidates
         score_map = {c.jellyfin_id: c.score for c in candidates}
 
-        # 7. Enrich with metadata
         items = await self._library.get_many(permitted_ids)
         item_map = {item.jellyfin_id: item for item in items}
 
-        # 8. Build results preserving permission-filtered order
         results: list[SearchResultItem] = []
         for jid in permitted_ids:
             item = item_map.get(jid)
@@ -153,16 +144,14 @@ class SearchService:
             query_time_ms=elapsed_ms,
         )
 
-    async def _determine_status(
-        self,
-    ) -> str:
-        """Check embedding completeness and return status string."""
+    async def _determine_status(self) -> SearchStatus:
+        """Check embedding completeness and return status."""
         vec_count = await self._vec_repo.count()
         if vec_count == 0:
-            return "no_embeddings"
+            return SearchStatus.NO_EMBEDDINGS
 
         queue_counts = await self._library.get_queue_counts()
         if queue_counts.get("pending", 0) > 0 or queue_counts.get("processing", 0) > 0:
-            return "partial_embeddings"
+            return SearchStatus.PARTIAL_EMBEDDINGS
 
-        return "ok"
+        return SearchStatus.OK

@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
+
+# --- Embedding prefix constants (nomic-embed-text asymmetric retrieval) ---
+
+DOCUMENT_PREFIX = "search_document: "
+"""Prepended to library item text at the embedding call-site in the worker."""
+
+QUERY_PREFIX = "search_query: "
+"""Prepended to user query text before embedding in the search service."""
+
+
+# --- Status enum ---
+
+
+class SearchStatus(StrEnum):
+    """Embedding completeness status returned with every search response."""
+
+    OK = "ok"
+    NO_EMBEDDINGS = "no_embeddings"
+    PARTIAL_EMBEDDINGS = "partial_embeddings"
+
+
+# --- Request / response models ---
 
 
 class SearchRequest(BaseModel):
@@ -29,7 +51,7 @@ class SearchResultItem(BaseModel):
 class SearchResponse(BaseModel):
     """Full search response with results and metadata."""
 
-    status: Literal["ok", "no_embeddings", "partial_embeddings"]
+    status: SearchStatus
     results: list[SearchResultItem]
     total_candidates: int
     filtered_count: int
