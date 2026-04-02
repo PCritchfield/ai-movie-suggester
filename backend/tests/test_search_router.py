@@ -20,7 +20,7 @@ from app.search.service import SearchService
 from app.vectors.models import SearchResult
 from tests.conftest import TEST_SECRET, make_test_settings
 
-_COOKIE_KEY, _COLUMN_KEY = derive_keys(TEST_SECRET)
+_COOKIE_KEY, _ = derive_keys(TEST_SECRET)
 _SESSION_ID = "test-session-id-search"
 _USER_ID = "uid-search-1"
 _NOW = int(time.time())

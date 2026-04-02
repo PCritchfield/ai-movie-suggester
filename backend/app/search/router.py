@@ -34,8 +34,8 @@ def create_search_router(
         "/search",
         response_model=SearchResponse,
         responses={
-            400: {"description": "Invalid query or limit"},
             401: {"description": "Not authenticated"},
+            422: {"description": "Validation error"},
             429: {"description": "Rate limit exceeded"},
             503: {"description": "Embedding service unavailable"},
         },

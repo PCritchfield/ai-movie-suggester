@@ -330,7 +330,7 @@ class SqliteVecRepository:
         return [
             SearchResult(
                 jellyfin_id=row[0],
-                score=1.0 - row[1],
+                score=max(0.0, min(1.0, 1.0 - row[1])),
                 content_hash=row[2],
             )
             for row in rows
