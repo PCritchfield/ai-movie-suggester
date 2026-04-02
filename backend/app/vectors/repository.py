@@ -311,7 +311,12 @@ class SqliteVecRepository:
     async def search(
         self, query_embedding: list[float], limit: int = 20
     ) -> list[SearchResult]:
-        """Cosine similarity search, returning top-N results."""
+        """Cosine similarity search, returning top-N results.
+
+        Returns results ordered by similarity (highest first).
+        The ``score`` field is ``1 - cosine_distance`` so that
+        higher values indicate greater similarity.
+        """
         self._check_dims(query_embedding)
         serialized = _serialize_f32(query_embedding)
         cursor = await self._reader.execute(
@@ -325,7 +330,7 @@ class SqliteVecRepository:
         return [
             SearchResult(
                 jellyfin_id=row[0],
-                distance=row[1],
+                score=1.0 - row[1],
                 content_hash=row[2],
             )
             for row in rows

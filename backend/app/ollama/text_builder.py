@@ -22,9 +22,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_VERSION: int = 1
+TEMPLATE_VERSION: int = 2
 """Template version constant. Bumping this signals that all embeddings
-built with an older version are stale and should be regenerated."""
+built with an older version are stale and should be regenerated.
+
+Version history:
+  1 — Initial template (plain composite text, no prefix).
+  2 — Added ``search_document:`` prefix at the embedding call-site
+      for nomic-embed-text asymmetric retrieval (Spec 11).
+"""
 
 _LENGTH_WARNING_THRESHOLD = 6000
 

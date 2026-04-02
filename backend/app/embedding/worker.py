@@ -88,8 +88,13 @@ class EmbeddingWorker:
 
         Delegates to the shared ``build_sections`` core so template
         logic stays in one place — changes propagate automatically.
+
+        Prepends the ``search_document:`` prefix required by
+        nomic-embed-text for asymmetric retrieval.  The prefix is
+        applied here (the embedding call-site), NOT inside
+        ``build_sections()``, which remains a shared utility.
         """
-        return build_sections(
+        return "search_document: " + build_sections(
             title=item.title,
             overview=item.overview,
             genres=item.genres,

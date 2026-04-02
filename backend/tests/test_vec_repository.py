@@ -301,8 +301,8 @@ class TestSearch:
         assert len(results) == 3
         assert results[0].jellyfin_id == "close"
         assert results[-1].jellyfin_id == "far"
-        # Distances should be ascending
-        assert results[0].distance <= results[1].distance <= results[2].distance
+        # Scores should be descending (higher = more similar)
+        assert results[0].score >= results[1].score >= results[2].score
 
     async def test_search_respects_limit(self, vec_repo: SqliteVecRepository) -> None:
         """search() returns at most `limit` results."""
@@ -313,6 +313,21 @@ class TestSearch:
 
         results = await vec_repo.search(_make_embedding(0.5), limit=2)
         assert len(results) == 2
+
+    async def test_search_score_is_similarity(
+        self, vec_repo: SqliteVecRepository
+    ) -> None:
+        """search() returns score as 1 - distance (higher = better, in [0, 1])."""
+        # Identical vector should have score close to 1.0
+        vec = [1.0, 0.0, 0.0, 0.0]
+        await vec_repo.upsert("identical", vec, "h1")
+
+        results = await vec_repo.search(vec, limit=1)
+        assert len(results) == 1
+        assert isinstance(results[0].score, float)
+        assert 0.0 <= results[0].score <= 1.0
+        # Identical vectors have distance ~0, so score ~1.0
+        assert results[0].score > 0.99
 
     async def test_search_empty_table(self, vec_repo: SqliteVecRepository) -> None:
         """search() returns empty list when no vectors are stored."""
