@@ -98,6 +98,38 @@ class TestGetMetadata:
         assert await store.get_metadata("nope") is None
 
 
+class TestGetToken:
+    """get_token returns decrypted token with expiry check."""
+
+    async def test_returns_decrypted_token(self, store: SessionStore) -> None:
+        await store.create(
+            session_id="sid-tok",
+            user_id="uid-1",
+            username="alice",
+            server_name="MyJellyfin",
+            token="jf-secret-token",
+            csrf_token="csrf-123",
+            expires_at=_now() + 3600,
+        )
+        token = await store.get_token("sid-tok")
+        assert token == "jf-secret-token"
+
+    async def test_returns_none_for_expired(self, store: SessionStore) -> None:
+        await store.create(
+            session_id="sid-exp",
+            user_id="uid-1",
+            username="alice",
+            server_name="MyJellyfin",
+            token="expired-token",
+            csrf_token="csrf-123",
+            expires_at=_now() - 100,
+        )
+        assert await store.get_token("sid-exp") is None
+
+    async def test_returns_none_for_missing(self, store: SessionStore) -> None:
+        assert await store.get_token("nonexistent") is None
+
+
 class TestCountAndOldest:
     """count_by_user and oldest_by_user."""
 

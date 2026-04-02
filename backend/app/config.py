@@ -101,6 +101,19 @@ class Settings(BaseSettings):
     embedding_max_retries: int = 3
     embedding_cooldown_seconds: int = 300
 
+    # Search
+    search_overfetch_multiplier: int = 3
+    search_rate_limit: int = 10
+
+    @model_validator(mode="after")
+    def _validate_search_overfetch_multiplier(self) -> Settings:
+        """Reject search_overfetch_multiplier outside the 1–10 range."""
+        val = self.search_overfetch_multiplier
+        if val < 1 or val > 10:
+            msg = "SEARCH_OVERFETCH_MULTIPLIER must be between 1 and 10"
+            raise ValueError(msg)
+        return self
+
     @model_validator(mode="after")
     def _validate_embedding_batch_size(self) -> Settings:
         """Reject embedding_batch_size outside the 1–50 range."""

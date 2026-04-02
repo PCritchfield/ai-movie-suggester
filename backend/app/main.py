@@ -35,6 +35,7 @@ from app.models import (
     ServiceStatus,
 )
 from app.ollama.client import OllamaEmbeddingClient
+from app.search.router import create_search_router
 from app.sync.engine import SyncEngine
 from app.sync.router import router as sync_router
 from app.vectors.repository import SqliteVecRepository
@@ -204,6 +205,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Mount admin routers
         app.include_router(sync_router)
         app.include_router(embedding_router)
+
+        # Mount search router
+        search_router = create_search_router(
+            settings=settings,
+            limiter=limiter,
+        )
+        app.include_router(search_router)
 
         # Store settings on app.state for routers that need them
         app.state.settings = settings
