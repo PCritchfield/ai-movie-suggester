@@ -81,13 +81,9 @@ class SearchService:
         try:
             embedding_result = await self._ollama.embed(QUERY_PREFIX + query)
         except (OllamaTimeoutError, OllamaConnectionError) as exc:
-            raise SearchUnavailableError(
-                "Embedding service is unavailable"
-            ) from exc
+            raise SearchUnavailableError("Embedding service is unavailable") from exc
         except OllamaError as exc:
-            raise SearchUnavailableError(
-                "Embedding service returned an error"
-            ) from exc
+            raise SearchUnavailableError("Embedding service returned an error") from exc
 
         # Over-fetch to compensate for items removed by permission filtering
         fetch_limit = limit * self._overfetch

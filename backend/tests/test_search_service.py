@@ -178,7 +178,8 @@ class TestSearchTruncatesToLimit:
 
         library = AsyncMock()
         library.get_many.return_value = [
-            _make_library_item(f"m{i}") for i in range(3)  # only 3 requested
+            _make_library_item(f"m{i}")
+            for i in range(3)  # only 3 requested
         ]
         library.get_queue_counts.return_value = {
             "pending": 0,
