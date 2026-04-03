@@ -140,7 +140,7 @@ class TestChatRateLimit:
         chat_router = create_chat_router(settings=settings, limiter=limiter)
         app.include_router(chat_router)
 
-        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
         async def _mock_session() -> SessionMeta:
             return _make_session_meta()
