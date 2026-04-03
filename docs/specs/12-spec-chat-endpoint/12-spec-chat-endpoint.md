@@ -67,12 +67,13 @@ The endpoint separates structured recommendation data (movie cards) from convers
 - The system shall apply rate limiting using the existing `chat_rate_limit` setting (default 10 req/min) via slowapi.
 - The system shall use the router factory pattern: `create_chat_router(settings, limiter) -> APIRouter`, consistent with `create_search_router()` in `backend/app/search/router.py`.
 - The system shall call `SearchService.search(query=message, limit=10, user_id, token)` to retrieve recommendations.
-- The system shall return pre-stream HTTP errors for: 401 (not authenticated), 429 (rate limit exceeded), 400 (validation error -- empty message or message > 1000 chars), 503 (Ollama unavailable). The 503 check shall call both `SearchService.search()` (which catches embedding Ollama failures) and `OllamaChatClient.health()` before opening the SSE stream. If either fails, return 503 without streaming.
-- The system shall return `text/event-stream` content type on success and stream SSE events with the following taxonomy:
-  - `{"type": "metadata", "version": 1, "recommendations": [...SearchResultItem], "search_status": "ok|no_embeddings|partial_embeddings"}` -- sent FIRST, before any text.
+- The system shall return pre-stream HTTP errors for: 401 (not authenticated), 429 (rate limit exceeded), 422 (validation error -- empty message or message > 1000 chars per FastAPI/Pydantic convention).
+- **Implementation note (post-review):** The original spec called for a pre-stream HTTP 503 via `OllamaChatClient.health()`. During code review this was replaced with a uniform SSE error event contract — all failures (including search unavailable and Ollama down) are surfaced as SSE error events from `ChatService.stream()`, keeping the response type consistently `text/event-stream`. The router is a thin pass-through; the service owns all error handling.
+- The system shall return `text/event-stream` content type and stream SSE events with the following taxonomy:
+  - `{"type": "metadata", "version": 1, "recommendations": [...SearchResultItem], "search_status": "ok|no_embeddings|partial_embeddings"}` -- sent first on success (skipped if search is unavailable).
   - `{"type": "text", "content": "token chunk"}` -- one per token/chunk from the LLM.
   - `{"type": "done"}` -- sent after the LLM finishes generating.
-  - `{"type": "error", "code": "ollama_unavailable|generation_timeout|stream_interrupted", "message": "user-facing string"}` -- sent on mid-stream failure.
+  - `{"type": "error", "code": "search_unavailable|ollama_unavailable|generation_timeout|stream_interrupted", "message": "user-facing string"}` -- sent on failure (may be first event if search fails, or after metadata/text on mid-stream failure).
 - The `metadata` event shall include the full list of `SearchResultItem` objects from the search pipeline. Recommendations come from search, NOT parsed from LLM output.
 - The `metadata` event shall include `search_status` reflecting embedding completeness (`ok`, `no_embeddings`, `partial_embeddings`) from the `SearchResponse.status` field.
 - The system shall enforce a generation timeout of 120 seconds. If the LLM does not complete within 120 seconds, the system shall send an SSE error event with `code: "generation_timeout"` and close the stream.
