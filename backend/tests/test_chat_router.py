@@ -289,3 +289,118 @@ class TestChatStreamsSSE:
         error_events = [e for e in parsed if e["type"] == "error"]
         assert len(error_events) == 1
         assert error_events[0]["code"] == "ollama_unavailable"
+
+    def test_chat_endpoint_generation_timeout(self) -> None:
+        """SSE error event with generation_timeout code."""
+        events_to_yield = [
+            {
+                "type": "metadata",
+                "version": 1,
+                "recommendations": [],
+                "search_status": "ok",
+            },
+            {"type": "text", "content": "Starting..."},
+            {
+                "type": "error",
+                "code": "generation_timeout",
+                "message": (
+                    "The response took too long to generate. "
+                    "Your recommendations are shown above."
+                ),
+            },
+        ]
+
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+        service = _make_stream_mock(events_to_yield)
+
+        _, client = _make_chat_app(
+            session_store=session_store,
+            chat_service=service,
+        )
+
+        resp = client.post("/api/chat", json={"message": "test"})
+        parsed = _parse_sse_events(resp.text)
+        error_events = [e for e in parsed if e["type"] == "error"]
+        assert len(error_events) == 1
+        assert error_events[0]["code"] == "generation_timeout"
+
+    def test_chat_endpoint_partial_embeddings(self) -> None:
+        """Metadata event has search_status partial_embeddings."""
+        events_to_yield = [
+            {
+                "type": "metadata",
+                "version": 1,
+                "recommendations": [
+                    {
+                        "jellyfin_id": "jf-001",
+                        "title": "Galaxy Quest",
+                        "overview": "A comedy.",
+                        "genres": ["Comedy"],
+                        "year": 1999,
+                        "score": 0.8,
+                        "poster_url": "/Items/jf-001/Images/Primary",
+                    }
+                ],
+                "search_status": "partial_embeddings",
+            },
+            {"type": "text", "content": "Try Galaxy Quest!"},
+            {"type": "done"},
+        ]
+
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+        service = _make_stream_mock(events_to_yield)
+
+        _, client = _make_chat_app(
+            session_store=session_store,
+            chat_service=service,
+        )
+
+        resp = client.post("/api/chat", json={"message": "funny"})
+        parsed = _parse_sse_events(resp.text)
+        assert parsed[0]["search_status"] == "partial_embeddings"
+        text_events = [e for e in parsed if e["type"] == "text"]
+        assert len(text_events) >= 1
+
+    def test_chat_endpoint_stream_event_format(self) -> None:
+        """All SSE events are valid JSON with expected type field."""
+        events_to_yield = [
+            {
+                "type": "metadata",
+                "version": 1,
+                "recommendations": [],
+                "search_status": "ok",
+            },
+            {"type": "text", "content": "Hello"},
+            {"type": "done"},
+        ]
+
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+        service = _make_stream_mock(events_to_yield)
+
+        _, client = _make_chat_app(
+            session_store=session_store,
+            chat_service=service,
+        )
+
+        resp = client.post("/api/chat", json={"message": "test"})
+        parsed = _parse_sse_events(resp.text)
+
+        # Every event has a "type" key
+        for event in parsed:
+            assert "type" in event
+
+        # Metadata event has version: 1
+        assert parsed[0]["version"] == 1
+
+        # Text events have content key
+        text_events = [e for e in parsed if e["type"] == "text"]
+        for te in text_events:
+            assert "content" in te
+
+        # Done event has only "type" key
+        done_events = [e for e in parsed if e["type"] == "done"]
+        assert len(done_events) == 1
+        assert set(done_events[0].keys()) == {"type"}

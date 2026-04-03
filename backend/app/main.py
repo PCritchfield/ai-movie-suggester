@@ -223,6 +223,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.include_router(search_router)
 
+        # Create chat client, service, pause event, and mount router
+        from app.chat.router import create_chat_router
+        from app.chat.service import ChatService
+        from app.ollama.chat_client import OllamaChatClient
+
+        chat_ollama_timeout = httpx.Timeout(
+            connect=5.0, read=300.0, write=10.0, pool=5.0
+        )
+        chat_ollama_http = httpx.AsyncClient(timeout=chat_ollama_timeout)
+        ollama_chat_client = OllamaChatClient(
+            base_url=settings.ollama_host,
+            http_client=chat_ollama_http,
+            chat_model=settings.ollama_chat_model,
+        )
+        app.state.ollama_chat_client = ollama_chat_client
+
+        embedding_pause_event = asyncio.Event()
+        embedding_pause_event.set()
+        app.state.embedding_pause_event = embedding_pause_event
+
+        chat_service = ChatService(
+            search_service=search_service,
+            chat_client=ollama_chat_client,
+            pause_event=embedding_pause_event,
+            settings=settings,
+        )
+        app.state.chat_service = chat_service
+
+        chat_router = create_chat_router(
+            settings=settings,
+            limiter=limiter,
+        )
+        app.include_router(chat_router)
+
         # Store settings on app.state for routers that need them
         app.state.settings = settings
 
@@ -289,6 +323,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ollama_client=ollama_client,
             settings=settings,
             sync_event=embedding_event,
+            pause_event=embedding_pause_event,
         )
         await embedding_worker.startup()
         app.state.embedding_worker = embedding_worker
@@ -322,6 +357,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # TODO(Spec 07): WAL checkpoint after bulk embedding operations
         await library_store.close()
         await store.close()
+        await chat_ollama_http.aclose()
         await ollama_http.aclose()
         await http_client.aclose()
 
