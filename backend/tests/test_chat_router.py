@@ -19,7 +19,6 @@ from tests.conftest import TEST_SECRET, make_test_settings
 _COOKIE_KEY, _ = derive_keys(TEST_SECRET)
 _SESSION_ID = "test-session-id-chat"
 _USER_ID = "uid-chat-1"
-_NOW = int(time.time())
 
 
 def _make_session_meta() -> SessionMeta:
@@ -28,7 +27,7 @@ def _make_session_meta() -> SessionMeta:
         user_id=_USER_ID,
         username="chatter",
         server_name="TestJellyfin",
-        expires_at=_NOW + 3600,
+        expires_at=int(time.time()) + 3600,
     )
 
 

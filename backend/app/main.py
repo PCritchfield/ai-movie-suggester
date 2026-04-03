@@ -223,7 +223,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.include_router(search_router)
 
-        # Create chat client, service, pause event, and mount router
+        # Create chat client, service, pause event, and mount router.
+        # NOTE: embedding_pause_event is created here (before the async
+        # lifespan block) because EmbeddingWorker receives it during
+        # startup below. Both consumers must share the same instance.
         from app.chat.router import create_chat_router
         from app.chat.service import ChatService
         from app.ollama.chat_client import OllamaChatClient

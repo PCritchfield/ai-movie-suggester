@@ -33,6 +33,14 @@ class ChatService:
     - text events (LLM tokens)
     - done event (stream complete)
     - error event (on failure)
+
+    Concurrency note: ``pause_event`` is a binary ``asyncio.Event`` shared
+    with ``EmbeddingWorker``.  Under concurrent chat requests the
+    clear/set calls can race (request B's ``clear()`` vs request A's
+    ``finally: set()``).  The per-IP rate limiter (default 10 req/min)
+    makes true concurrency unlikely on consumer hardware.  If concurrent
+    chat becomes common, replace the event with a reference counter or
+    ``asyncio.Semaphore``.
     """
 
     def __init__(
@@ -129,6 +137,7 @@ class ChatService:
                 ),
             }
         except Exception:
+            # exc_info logged here — ensure no exception embeds user query content
             logger.exception("chat_stream_interrupted")
             yield {
                 "type": SSEEventType.ERROR,

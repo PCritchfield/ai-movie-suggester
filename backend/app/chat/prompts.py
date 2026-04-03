@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 
 # ---------------------------------------------------------------------------
 # System prompt constants
+#
+# Security note: The anti-injection instruction below is a soft LLM-level
+# control, not a technical barrier. A sufficiently adversarial movie title
+# or overview in the Jellyfin library could bypass it. This is acceptable
+# for a personal/family server deployment. See Spec 12 security considerations.
 # ---------------------------------------------------------------------------
 
 STRUCTURAL_FRAMING = (
