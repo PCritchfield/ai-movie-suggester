@@ -107,12 +107,20 @@ def sync_event() -> asyncio.Event:
 
 
 @pytest.fixture
+def pause_event() -> asyncio.Event:
+    event = asyncio.Event()
+    event.set()  # Default: not paused (embedding allowed)
+    return event
+
+
+@pytest.fixture
 def worker(
     mock_library_store: AsyncMock,
     mock_vec_repo: AsyncMock,
     mock_ollama: AsyncMock,
     settings: Settings,
     sync_event: asyncio.Event,
+    pause_event: asyncio.Event,
 ) -> EmbeddingWorker:
     return EmbeddingWorker(
         library_store=mock_library_store,
@@ -120,6 +128,7 @@ def worker(
         ollama_client=mock_ollama,
         settings=settings,
         sync_event=sync_event,
+        pause_event=pause_event,
     )
 
 
@@ -638,3 +647,92 @@ class TestMissingItem:
         mock_ollama.embed_batch.assert_awaited_once()
         texts_arg = mock_ollama.embed_batch.call_args[0][0]
         assert len(texts_arg) == 1
+
+
+# ---------------------------------------------------------------------------
+# Cooperative pause (chat priority)
+# ---------------------------------------------------------------------------
+
+
+class TestPauseEvent:
+    async def test_embedding_worker_skips_on_pause(
+        self,
+        worker: EmbeddingWorker,
+        mock_library_store: AsyncMock,
+        pause_event: asyncio.Event,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Cleared pause_event -> process_cycle skips before queue fetch."""
+        pause_event.clear()
+
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="app.embedding.worker"):
+            await worker.process_cycle()
+
+        mock_library_store.get_retryable_items.assert_not_awaited()
+        assert any("chat_priority" in r.message for r in caplog.records)
+
+    async def test_embedding_worker_resumes_on_unpause(
+        self,
+        worker: EmbeddingWorker,
+        mock_library_store: AsyncMock,
+        mock_ollama: AsyncMock,
+        pause_event: asyncio.Event,
+    ) -> None:
+        """Clear then set pause_event -> next cycle processes normally."""
+        # First: paused -> skip
+        pause_event.clear()
+        await worker.process_cycle()
+        mock_library_store.get_retryable_items.assert_not_awaited()
+
+        # Second: unpaused -> normal processing
+        pause_event.set()
+        rows = [_make_row(jellyfin_id="jf-001", content_hash="h1")]
+        items = [("jf-001", 0)]
+        mock_ollama.health.return_value = True
+        mock_library_store.get_retryable_items.return_value = items
+        mock_library_store.claim_batch.return_value = 1
+        mock_library_store.get_many.return_value = rows
+        mock_ollama.embed_batch.return_value = [_make_embedding_result()]
+        mock_library_store.mark_embedded_many.return_value = 1
+
+        await worker.process_cycle()
+
+        mock_ollama.embed_batch.assert_awaited_once()
+
+    async def test_embedding_fallback_breaks_on_pause(
+        self,
+        worker: EmbeddingWorker,
+        mock_library_store: AsyncMock,
+        mock_vec_repo: AsyncMock,
+        mock_ollama: AsyncMock,
+        pause_event: asyncio.Event,
+    ) -> None:
+        """Pause event cleared during fallback loop -> loop exits early."""
+        rows = [
+            _make_row(jellyfin_id="jf-001", content_hash="h1"),
+            _make_row(jellyfin_id="jf-002", content_hash="h2"),
+            _make_row(jellyfin_id="jf-003", content_hash="h3"),
+        ]
+        items = [(r.jellyfin_id, 0) for r in rows]
+
+        mock_ollama.health.return_value = True
+        mock_library_store.get_retryable_items.return_value = items
+        mock_library_store.claim_batch.return_value = 3
+        mock_library_store.get_many.return_value = rows
+
+        # Batch embed fails -> triggers fallback loop
+        # Side effect: clear pause_event when embed_batch is called
+        def _clear_pause(*args, **kwargs):
+            pause_event.clear()
+            raise OllamaError("batch failed")
+
+        mock_ollama.embed_batch.side_effect = _clear_pause
+
+        await worker.process_cycle()
+
+        # Batch was attempted
+        mock_ollama.embed_batch.assert_awaited_once()
+        # Individual embed was NOT called because pause was cleared
+        mock_ollama.embed.assert_not_awaited()

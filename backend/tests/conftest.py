@@ -16,8 +16,31 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.auth.crypto import derive_keys  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.search.models import SearchResultItem  # noqa: E402
 
 TEST_COOKIE_KEY, TEST_COLUMN_KEY = derive_keys(TEST_SECRET)
+
+
+def make_search_result_item(
+    title: str = "Galaxy Quest",
+    jellyfin_id: str | None = None,
+    year: int | None = 1999,
+    genres: list[str] | None = None,
+    overview: str | None = "A comedy about sci-fi actors.",
+    score: float = 0.8,
+    poster_url: str | None = None,
+) -> SearchResultItem:
+    """Create a SearchResultItem with sensible defaults for tests."""
+    jid = jellyfin_id or f"jf-{title.lower().replace(' ', '-')}"
+    return SearchResultItem(
+        jellyfin_id=jid,
+        title=title,
+        overview=overview,
+        genres=genres or ["Comedy", "Sci-Fi"],
+        year=year,
+        score=score,
+        poster_url=poster_url or f"/Items/{jid}/Images/Primary",
+    )
 
 
 @pytest.fixture

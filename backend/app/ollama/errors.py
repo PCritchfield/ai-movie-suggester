@@ -22,3 +22,7 @@ class OllamaTimeoutError(OllamaError):
 
 class OllamaModelError(OllamaError):
     """The requested model is not available (not pulled or not found)."""
+
+
+class OllamaStreamError(OllamaError):
+    """An error occurred during streaming response from Ollama."""

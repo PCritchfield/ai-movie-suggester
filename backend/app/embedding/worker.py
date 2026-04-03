@@ -51,12 +51,16 @@ class EmbeddingWorker:
         ollama_client: OllamaEmbeddingClient,
         settings: Settings,
         sync_event: asyncio.Event,
+        pause_event: asyncio.Event | None = None,
     ) -> None:
         self._library_store = library_store
         self._vec_repo = vec_repo
         self._ollama_client = ollama_client
         self._settings = settings
         self._sync_event = sync_event
+        self._pause_event = pause_event or asyncio.Event()
+        if pause_event is None:
+            self._pause_event.set()  # Default: not paused
         self._lock = asyncio.Lock()
 
         # State tracking
@@ -176,11 +180,16 @@ class EmbeddingWorker:
 
     async def process_cycle(self) -> None:
         """Run one embedding cycle: fetch queue, health check, embed, store."""
-        # 1. Fetch retryable items (cheap DB query — check before Ollama)
+        # 0. Pause checkpoint — yield to chat when it has GPU priority
         batch_size = self._settings.embedding_batch_size
         cooldown = self._settings.embedding_cooldown_seconds
         max_retries = self._settings.embedding_max_retries
 
+        if not self._pause_event.is_set():
+            logger.info("embedding_cycle_skip reason=chat_priority")
+            return
+
+        # 1. Fetch retryable items (cheap DB query — check before Ollama)
         items = await self._library_store.get_retryable_items(
             cooldown, max_retries, batch_size
         )
@@ -248,6 +257,9 @@ class EmbeddingWorker:
                 len(ordered_ids),
             )
             for jid in ordered_ids:
+                if not self._pause_event.is_set():
+                    logger.info("embedding_fallback_skip reason=chat_priority")
+                    break
                 retry_count, text, content_hash = item_data[jid]
                 await self._process_item(jid, retry_count, text, content_hash)
 
