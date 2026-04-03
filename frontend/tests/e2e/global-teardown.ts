@@ -10,21 +10,29 @@ import path from "path";
 const PROJECT_ROOT = path.resolve(__dirname, "../../..");
 const AUTH_DIR = path.resolve(__dirname, "../../.auth");
 const SENTINEL_FILE = path.join(AUTH_DIR, ".compose-started");
+const ENV_FILE = path.join(AUTH_DIR, ".env.e2e");
 const COMPOSE_PROJECT = "ai-movie-suggester-e2e";
 
 export default async function globalTeardown(): Promise<void> {
-  // Tear down Docker Compose if globalSetup started it
+  // IMPORTANT: Check sentinel BEFORE deleting .auth/ — the sentinel
+  // lives inside .auth/ so the order of these blocks matters.
   if (fs.existsSync(SENTINEL_FILE)) {
     console.log("Tearing down Docker Compose stack...");
     try {
+      const envFileFlag = fs.existsSync(ENV_FILE)
+        ? `--env-file ${ENV_FILE}`
+        : "";
       execSync(
         [
           "docker compose",
           `-p ${COMPOSE_PROJECT}`,
           "-f docker-compose.yml",
           "-f docker-compose.test.yml",
+          envFileFlag,
           "down -v",
-        ].join(" "),
+        ]
+          .filter(Boolean)
+          .join(" "),
         { cwd: PROJECT_ROOT, stdio: "inherit" },
       );
       console.log("Docker Compose stack torn down.");

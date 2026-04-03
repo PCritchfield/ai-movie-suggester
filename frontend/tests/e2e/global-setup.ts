@@ -4,6 +4,11 @@
  *
  * If PLAYWRIGHT_BASE_URL is set, targets the existing server.
  * If unset, starts the Docker Compose stack and manages the full lifecycle.
+ *
+ * Credentials below are ephemeral test-environment values tied to the
+ * disposable Jellyfin container in docker-compose.test.yml.  They are
+ * NOT production secrets.  See backend/tests/integration/conftest.py for
+ * the canonical Python counterparts.
  */
 
 import { execSync } from "child_process";
@@ -41,6 +46,7 @@ const TEST_USERS = [
 const AUTH_HEADER =
   'MediaBrowser Client="ai-movie-suggester-e2e", DeviceId="e2e-setup", Device="playwright", Version="0.0.0"';
 
+// Test-only, deterministic secret — never use in production
 const E2E_ENV_CONTENTS = [
   "SESSION_SECRET=e2e0a1b2c3d4e5f6a7b8c9d0e1f2a3b4",
   "SESSION_SECURE_COOKIE=false",
@@ -222,10 +228,16 @@ async function completeJellyfinWizard(
     console.log("Jellyfin wizard already completed, skipping.");
   }
 
-  // Step 7: Authenticate as admin (retry loop)
+  // Step 7: Authenticate as admin (retry loop).
+  // Empty-password fallback is only safe against a fresh Compose-managed
+  // Jellyfin — never attempt it against an existing server the user pointed
+  // us at via PLAYWRIGHT_BASE_URL.
+  const allowEmptyPassword = !process.env.PLAYWRIGHT_BASE_URL;
   const credentials: Array<{ username: string; password: string }> = [
     { username: adminUser, password: TEST_ADMIN_PASS },
-    { username: adminUser, password: "" },
+    ...(allowEmptyPassword
+      ? [{ username: adminUser, password: "" }]
+      : []),
   ];
 
   const maxAttempts = 10;

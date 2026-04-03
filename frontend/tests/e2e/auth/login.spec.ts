@@ -35,6 +35,6 @@ test.describe("Login", () => {
     );
 
     // Confirm no redirect occurred — still on /login
-    expect(page.url()).toContain("/login");
+    await expect(page).toHaveURL(/\/login/);
   });
 });

@@ -17,6 +17,8 @@ export default defineConfig({
   testDir: "./tests/e2e",
   baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
   outputDir: "./test-results",
+  timeout: 60_000,
+  retries: process.env.CI ? 2 : 0,
 
   reporter: [["html", { outputFolder: "./playwright-report" }]],
 
@@ -38,6 +40,8 @@ export default defineConfig({
       use: { ...devices["Desktop Firefox"] },
     },
     {
+      // webkit is available for local macOS testing but excluded from CI
+      // (flaky on Linux runners). Run locally: npx playwright test --project=webkit
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
     },

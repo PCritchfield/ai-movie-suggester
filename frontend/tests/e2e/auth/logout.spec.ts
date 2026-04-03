@@ -19,7 +19,6 @@ test.describe("Logout", () => {
 
     // Should redirect to /login
     await page.waitForURL("/login");
-    expect(page.url()).toContain("/login");
 
     // Verify session is truly invalidated — navigating to / should redirect
     // back to /login (server-side middleware check, not just client redirect)
