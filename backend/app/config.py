@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     wal_checkpoint_threshold_mb: float = 50.0
 
     # Embedding worker
-    embedding_batch_size: int = 10
+    embedding_batch_size: int = 5
     embedding_worker_interval_seconds: int = 300
     embedding_max_retries: int = 3
     embedding_cooldown_seconds: int = 300
@@ -128,6 +128,7 @@ class Settings(BaseSettings):
         return self
 
     # Tuning
+    chat_system_prompt: str | None = None
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     session_expiry_hours: int = 24
     chat_rate_limit: int = 10
