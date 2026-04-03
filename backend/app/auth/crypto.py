@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 # Fixed application salt — not secret; domain separation comes from the
 # HKDF info parameter.  Generated once via os.urandom(16).
-APP_SALT = bytes.fromhex("a3f1b2c4d5e6f708091a2b3c4d5e6f70")
+_APP_SALT = bytes.fromhex("a3f1b2c4d5e6f708091a2b3c4d5e6f70")
 
 _INFO_COOKIE_SIGNING = b"cookie-signing"
 _INFO_COLUMN_ENCRYPTION = b"column-encryption"
@@ -26,7 +26,7 @@ def _derive_fernet_key(secret: str, info: bytes) -> bytes:
     hkdf = HKDF(
         algorithm=SHA256(),
         length=32,
-        salt=APP_SALT,
+        salt=_APP_SALT,
         info=info,
     )
     raw = hkdf.derive(secret.encode("utf-8"))

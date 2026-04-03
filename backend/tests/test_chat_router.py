@@ -9,11 +9,14 @@ from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.auth.crypto import derive_keys
 from app.auth.dependencies import get_current_session
 from app.auth.models import SessionMeta
 from app.chat.router import create_chat_router
+from app.middleware.rate_limit import create_limiter
 from tests.conftest import TEST_SECRET, make_test_settings
 
 _COOKIE_KEY, _ = derive_keys(TEST_SECRET)
@@ -99,6 +102,62 @@ class TestChatRequiresAuth:
         _, client = _make_chat_app(with_auth=False)
         resp = client.post("/api/chat", json={"message": "test"})
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+
+
+class TestChatRateLimit:
+    def test_exceeding_rate_limit_returns_429(self) -> None:
+        """Requests beyond chat_rate_limit/minute return 429."""
+        settings = make_test_settings(chat_rate_limit=2)
+        limiter = create_limiter()
+
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+
+        events = [
+            {
+                "type": "metadata",
+                "version": 1,
+                "recommendations": [],
+                "search_status": "ok",
+            },
+            {"type": "text", "content": "Hi"},
+            {"type": "done"},
+        ]
+        service = _make_stream_mock(events)
+
+        app = FastAPI()
+        app.state.cookie_key = _COOKIE_KEY
+        app.state.session_store = session_store
+        app.state.settings = settings
+        app.state.limiter = limiter
+        app.state.chat_service = service
+
+        chat_router = create_chat_router(settings=settings, limiter=limiter)
+        app.include_router(chat_router)
+
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+        async def _mock_session() -> SessionMeta:
+            return _make_session_meta()
+
+        app.dependency_overrides[get_current_session] = _mock_session
+
+        client = TestClient(app)
+
+        # First two requests should succeed (limit=2/minute)
+        resp1 = client.post("/api/chat", json={"message": "one"})
+        assert resp1.status_code == 200
+        resp2 = client.post("/api/chat", json={"message": "two"})
+        assert resp2.status_code == 200
+
+        # Third should be rate limited
+        resp3 = client.post("/api/chat", json={"message": "three"})
+        assert resp3.status_code == 429
 
 
 # ---------------------------------------------------------------------------

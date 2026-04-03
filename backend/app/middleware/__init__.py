@@ -1,4 +1,4 @@
-"""Middleware package — security headers, CSRF, rate limiting."""
+"""Middleware package — security headers and CSRF."""
 
 from app.middleware.security_headers import SecurityHeadersMiddleware
 

@@ -134,7 +134,7 @@ Rationale: Different access patterns (sessions are small/frequent; library is la
 - **Permissions**: Enforced at query time via Jellyfin's API. Vector DB is not a security boundary.
 - **Network**: Backend binds to 127.0.0.1 by default. External access via existing reverse proxy (Caddy).
 - **Privacy**: All AI inference is local. TMDb enrichment is opt-in with documented data disclosure.
-- **API hardening**: CORS restricted to frontend origin. `/docs` disabled in production. Rate limiting on chat endpoint. Security headers via middleware.
+- **API hardening**: CORS restricted to frontend origin. `/docs` disabled in production. Rate limiting on chat endpoint. Security headers via middleware. Request validation errors return HTTP 422 (FastAPI/Pydantic convention), not 400.
 - **Credential distinction**: Two types of Jellyfin credentials are used, with different handling:
   - **User tokens** (per-session): Encrypted at rest in `sessions.db` using Fernet with HKDF-derived keys. Never persisted to objects, never logged. Request-scoped — passed as parameters, not stored on instances.
   - **Infrastructure API key** (`JELLYFIN_API_KEY`): Operator-configured, server-scoped. Enables background library sync without a logged-in user session. Loaded once at startup from environment. Never logged at any level. Treat like a root password.
