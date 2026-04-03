@@ -152,7 +152,7 @@ async function completeJellyfinWizard(
 ): Promise<string> {
   let adminUser = TEST_ADMIN_USER;
 
-  // Step 1: Check if wizard needs completion
+  // Step 1: Check if wizard needs completion (200 = pending, 404 = done)
   const configResp = await fetch(`${jellyfinUrl}/Startup/Configuration`);
   if (configResp.status === 200) {
     console.log("Completing Jellyfin first-run wizard...");
@@ -183,7 +183,7 @@ async function completeJellyfinWizard(
       );
     }
 
-    // Step 4: Set admin user
+    // Step 4: Set admin user (may return 500 in CI — non-fatal per Python conftest pattern)
     const adminSetResp = await fetch(`${jellyfinUrl}/Startup/User`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -193,8 +193,8 @@ async function completeJellyfinWizard(
       }),
     });
     if (!adminSetResp.ok) {
-      throw new Error(
-        `Failed to set admin user: ${adminSetResp.status}`,
+      console.warn(
+        `Warning: failed to set admin user (status ${adminSetResp.status}), continuing wizard`,
       );
     }
 
@@ -224,8 +224,12 @@ async function completeJellyfinWizard(
     }
 
     console.log("Jellyfin wizard complete.");
-  } else {
+  } else if (configResp.status === 404) {
     console.log("Jellyfin wizard already completed, skipping.");
+  } else {
+    throw new Error(
+      `Unexpected response from /Startup/Configuration: ${configResp.status}`,
+    );
   }
 
   // Step 7: Authenticate as admin (retry loop).
@@ -357,24 +361,27 @@ async function createStorageState(baseUrl: string): Promise<void> {
 
   const context = await request.newContext({ baseURL: baseUrl });
 
-  const resp = await context.post("/api/auth/login", {
-    data: {
-      username: TEST_USERS[0].name,
-      password: TEST_USERS[0].password,
-    },
-  });
+  try {
+    const resp = await context.post("/api/auth/login", {
+      data: {
+        username: TEST_USERS[0].name,
+        password: TEST_USERS[0].password,
+      },
+    });
 
-  if (!resp.ok()) {
-    throw new Error(
-      `Programmatic login failed: ${resp.status()} ${resp.statusText()}`,
-    );
+    if (!resp.ok()) {
+      throw new Error(
+        `Programmatic login failed: ${resp.status()} ${resp.statusText()}`,
+      );
+    }
+
+    fs.mkdirSync(AUTH_DIR, { recursive: true });
+    await context.storageState({ path: STORAGE_STATE_PATH });
+
+    console.log(`storageState saved to ${STORAGE_STATE_PATH}`);
+  } finally {
+    await context.dispose();
   }
-
-  fs.mkdirSync(AUTH_DIR, { recursive: true });
-  await context.storageState({ path: STORAGE_STATE_PATH });
-  await context.dispose();
-
-  console.log(`storageState saved to ${STORAGE_STATE_PATH}`);
 }
 
 // ---------------------------------------------------------------------------

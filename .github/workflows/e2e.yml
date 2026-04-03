@@ -54,6 +54,21 @@ jobs:
         run: npx playwright install --with-deps chromium firefox
 
       # -----------------------------------------------------------------------
+      # Root .env required by docker-compose.yml env_file directive.
+      # globalSetup writes its own .auth/.env.e2e passed via --env-file,
+      # but the compose service-level env_file: .env also needs to resolve.
+      # -----------------------------------------------------------------------
+      - name: Generate root .env for Compose
+        working-directory: .
+        run: |
+          echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
+          echo "SESSION_SECURE_COOKIE=false" >> .env
+          echo "JELLYFIN_URL=http://jellyfin:8096" >> .env
+          echo "CORS_ORIGIN=http://localhost:3000" >> .env
+          echo "OLLAMA_HOST=http://localhost:11434" >> .env
+          echo "LOG_LEVEL=debug" >> .env
+
+      # -----------------------------------------------------------------------
       # Pre-pull Docker images (globalSetup manages Compose lifecycle;
       # pre-pulling warms the image cache so 'up -d' is faster)
       # -----------------------------------------------------------------------
@@ -69,7 +84,10 @@ jobs:
         run: npx playwright test --project=chromium --project=firefox
 
       # -----------------------------------------------------------------------
-      # Artifacts on failure (never upload .auth/ — contains session cookies)
+      # Artifacts on pass or failure (never upload .auth/ — contains session cookies).
+      # Uses !cancelled() so artifacts are available for debugging on failure
+      # and for report archival on success. if-no-files-found: ignore avoids
+      # errors when directories are empty.
       # -----------------------------------------------------------------------
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
