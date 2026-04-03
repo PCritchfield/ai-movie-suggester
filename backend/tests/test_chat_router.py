@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.auth.crypto import derive_keys
 from app.auth.dependencies import get_current_session
@@ -137,9 +139,6 @@ class TestChatRateLimit:
 
         chat_router = create_chat_router(settings=settings, limiter=limiter)
         app.include_router(chat_router)
-
-        from slowapi import _rate_limit_exceeded_handler
-        from slowapi.errors import RateLimitExceeded
 
         app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
