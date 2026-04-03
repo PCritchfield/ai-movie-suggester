@@ -126,9 +126,12 @@ async function waitForServices(baseUrl?: string): Promise<void> {
     // Only poll the provided base URL when targeting an existing server
     await pollEndpoint(baseUrl, "Frontend (existing server)");
   } else {
-    await pollEndpoint(`${JELLYFIN_URL}/health`, "Jellyfin");
-    await pollEndpoint(`${BACKEND_URL}/health`, "Backend");
-    await pollEndpoint(FRONTEND_URL, "Frontend");
+    // Poll all services in parallel — they boot concurrently via Compose
+    await Promise.all([
+      pollEndpoint(`${JELLYFIN_URL}/health`, "Jellyfin"),
+      pollEndpoint(`${BACKEND_URL}/health`, "Backend"),
+      pollEndpoint(FRONTEND_URL, "Frontend"),
+    ]);
   }
 
   console.log("All services ready.");
@@ -156,18 +159,26 @@ async function completeJellyfinWizard(
     }
 
     // Step 3: Set configuration
-    await fetch(`${jellyfinUrl}/Startup/Configuration`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        UICulture: "en-US",
-        MetadataCountryCode: "US",
-        PreferredMetadataLanguage: "en",
-      }),
-    });
+    const configPostResp = await fetch(
+      `${jellyfinUrl}/Startup/Configuration`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          UICulture: "en-US",
+          MetadataCountryCode: "US",
+          PreferredMetadataLanguage: "en",
+        }),
+      },
+    );
+    if (!configPostResp.ok) {
+      throw new Error(
+        `Failed to set startup configuration: ${configPostResp.status}`,
+      );
+    }
 
     // Step 4: Set admin user
-    await fetch(`${jellyfinUrl}/Startup/User`, {
+    const adminSetResp = await fetch(`${jellyfinUrl}/Startup/User`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -175,6 +186,11 @@ async function completeJellyfinWizard(
         Password: TEST_ADMIN_PASS,
       }),
     });
+    if (!adminSetResp.ok) {
+      throw new Error(
+        `Failed to set admin user: ${adminSetResp.status}`,
+      );
+    }
 
     // Step 5: Remote access
     const remoteResp = await fetch(`${jellyfinUrl}/Startup/RemoteAccess`, {
