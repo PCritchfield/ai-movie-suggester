@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 from app.ollama.errors import (
     OllamaConnectionError,
+    OllamaError,
+    OllamaModelError,
     OllamaStreamError,
     OllamaTimeoutError,
 )
@@ -79,6 +81,8 @@ class OllamaChatClient:
         Raises:
             OllamaTimeoutError: Ollama did not respond in time.
             OllamaConnectionError: Ollama is unreachable.
+            OllamaModelError: The requested model is not available (404).
+            OllamaError: Any other non-2xx response.
             OllamaStreamError: Malformed JSON or unexpected response shape.
         """
         try:
@@ -91,6 +95,14 @@ class OllamaChatClient:
                     "stream": True,
                 },
             ) as response:
+                if response.status_code == 404:
+                    raise OllamaModelError(
+                        f"Model '{self._chat_model}' not found on Ollama"
+                    )
+                if response.status_code >= 400:
+                    raise OllamaError(
+                        f"Unexpected response from Ollama: {response.status_code}"
+                    )
                 async for line in response.aiter_lines():
                     if not line.strip():
                         continue

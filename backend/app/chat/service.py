@@ -29,10 +29,10 @@ class ChatService:
     """Orchestrates the chat pipeline: search -> prompt -> stream.
 
     Yields SSE event dicts:
-    - metadata event (first, always)
+    - metadata event (first on success)
     - text events (LLM tokens)
     - done event (stream complete)
-    - error event (on failure)
+    - error event (on failure — may be first if search is unavailable)
 
     Concurrency note: ``pause_event`` is a binary ``asyncio.Event`` shared
     with ``EmbeddingWorker``.  Under concurrent chat requests the
@@ -64,10 +64,11 @@ class ChatService:
         """Execute the full chat pipeline as an async generator.
 
         Yields SSE event dicts in order:
-        1. metadata — recommendations and search status
+        1. metadata — recommendations and search status (skipped on search failure)
         2. text — individual LLM tokens
         3. done — stream complete
-        On error: yields an error event instead of done.
+        On pre-search error: yields an error event as the first (and only) event.
+        On mid-stream error: yields an error event after metadata/text.
 
         Args:
             query: User's natural-language message.
@@ -88,7 +89,7 @@ class ChatService:
             logger.warning("chat_search_unavailable query_len=%d", len(query))
             yield {
                 "type": SSEEventType.ERROR,
-                "code": ChatErrorCode.OLLAMA_UNAVAILABLE,
+                "code": ChatErrorCode.SEARCH_UNAVAILABLE,
                 "message": (
                     "The search service is currently unavailable. "
                     "Please try again shortly."

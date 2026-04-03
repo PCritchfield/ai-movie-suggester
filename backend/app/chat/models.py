@@ -21,6 +21,7 @@ class ChatErrorCode(StrEnum):
 
     GENERATION_TIMEOUT = "generation_timeout"
     OLLAMA_UNAVAILABLE = "ollama_unavailable"
+    SEARCH_UNAVAILABLE = "search_unavailable"
     STREAM_INTERRUPTED = "stream_interrupted"
 
 

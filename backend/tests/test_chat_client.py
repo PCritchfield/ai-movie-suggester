@@ -45,10 +45,13 @@ def chat_client(mock_http: AsyncMock) -> OllamaChatClient:
 # ---------------------------------------------------------------------------
 
 
-def _make_stream_response(lines: list[str]) -> MagicMock:
+def _make_stream_response(lines: list[str], status_code: int = 200) -> MagicMock:
     """Create a mock async context manager that yields lines."""
 
     class _FakeStream:
+        def __init__(self) -> None:
+            self.status_code = status_code
+
         async def aiter_lines(self):
             for line in lines:
                 yield line
@@ -229,6 +232,30 @@ class TestChatStream:
         mock_http.stream = _make_stream_response(lines)
 
         with pytest.raises(OllamaStreamError, match="Unexpected response shape"):
+            async for _ in chat_client.chat_stream([{"role": "user", "content": "Hi"}]):
+                pass  # pragma: no cover
+
+    async def test_chat_client_model_not_found(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        """404 from Ollama raises OllamaModelError."""
+        from app.ollama.errors import OllamaModelError
+
+        mock_http.stream = _make_stream_response([], status_code=404)
+
+        with pytest.raises(OllamaModelError, match="not found"):
+            async for _ in chat_client.chat_stream([{"role": "user", "content": "Hi"}]):
+                pass  # pragma: no cover
+
+    async def test_chat_client_server_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        """Non-2xx from Ollama raises OllamaError."""
+        from app.ollama.errors import OllamaError
+
+        mock_http.stream = _make_stream_response([], status_code=500)
+
+        with pytest.raises(OllamaError, match="Unexpected response"):
             async for _ in chat_client.chat_stream([{"role": "user", "content": "Hi"}]):
                 pass  # pragma: no cover
 
