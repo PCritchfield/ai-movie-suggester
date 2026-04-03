@@ -29,7 +29,8 @@ RUN uv sync --frozen --no-dev
 
 COPY app/ ./app/
 
-RUN addgroup --system --gid 1001 appgroup && \
+RUN mkdir -p /app/data && \
+    addgroup --system --gid 1001 appgroup && \
     adduser --system --uid 1001 --ingroup appgroup appuser && \
     chown -R appuser:appgroup /app
 
