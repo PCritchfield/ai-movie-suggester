@@ -349,11 +349,11 @@ def test_wal_checkpoint_threshold_mb_default() -> None:
 
 
 def test_embedding_batch_size_default() -> None:
-    """embedding_batch_size defaults to 10."""
+    """embedding_batch_size defaults to 5."""
     env = _REQUIRED_ENV.copy()
     with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
-    assert s.embedding_batch_size == 10
+    assert s.embedding_batch_size == 5
 
 
 def test_embedding_worker_interval_seconds_default() -> None:

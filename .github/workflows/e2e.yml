@@ -1,0 +1,116 @@
+name: E2E
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E — Playwright (Chromium + Firefox)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Skip draft PRs, always run on manual dispatch
+    if: github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      # -----------------------------------------------------------------------
+      # Checkout
+      # -----------------------------------------------------------------------
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      # -----------------------------------------------------------------------
+      # Node setup (matches ci.yml pattern)
+      # -----------------------------------------------------------------------
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # -----------------------------------------------------------------------
+      # Playwright browser cache + install
+      # (--with-deps installs OS-level packages not covered by the npm cache)
+      # -----------------------------------------------------------------------
+      - name: Cache Playwright browsers
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: playwright-${{ runner.os }}-
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox
+
+      # -----------------------------------------------------------------------
+      # Root .env required by docker-compose.yml env_file directive.
+      # globalSetup writes its own .auth/.env.e2e passed via --env-file,
+      # but the compose service-level env_file: .env also needs to resolve.
+      # -----------------------------------------------------------------------
+      - name: Generate root .env for Compose
+        working-directory: .
+        run: |
+          echo "SESSION_SECRET=$(openssl rand -hex 32)" > .env
+          echo "SESSION_SECURE_COOKIE=false" >> .env
+          echo "JELLYFIN_URL=http://jellyfin:8096" >> .env
+          echo "CORS_ORIGIN=http://localhost:3000" >> .env
+          echo "OLLAMA_HOST=http://localhost:11434" >> .env
+          echo "LOG_LEVEL=debug" >> .env
+
+      # -----------------------------------------------------------------------
+      # Pre-pull Docker images (globalSetup manages Compose lifecycle;
+      # pre-pulling warms the image cache so 'up -d' is faster)
+      # -----------------------------------------------------------------------
+      - name: Pre-pull Docker images
+        working-directory: .
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml pull
+        continue-on-error: true
+
+      # -----------------------------------------------------------------------
+      # Run E2E tests (globalSetup starts Docker Compose and writes .env.e2e)
+      # -----------------------------------------------------------------------
+      - name: Run Playwright tests
+        run: npx playwright test --project=chromium --project=firefox
+
+      # -----------------------------------------------------------------------
+      # Artifacts on pass or failure (never upload .auth/ — contains session cookies).
+      # Uses !cancelled() so artifacts are available for debugging on failure
+      # and for report archival on success. if-no-files-found: ignore avoids
+      # errors when directories are empty.
+      # -----------------------------------------------------------------------
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-results
+          path: frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # -----------------------------------------------------------------------
+      # Cleanup — tear down Compose even on failure
+      # -----------------------------------------------------------------------
+      - name: Cleanup Docker Compose
+        if: always()
+        working-directory: .
+        run: docker compose -p ai-movie-suggester-e2e down -v || true
