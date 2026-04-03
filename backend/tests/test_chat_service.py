@@ -206,3 +206,73 @@ class TestChatServiceErrors:
         assert events[0]["type"] == "metadata"
         assert events[1]["type"] == "error"
         assert events[1]["code"] == "stream_interrupted"
+
+
+# ---------------------------------------------------------------------------
+# Pause event signaling
+# ---------------------------------------------------------------------------
+
+
+class TestChatServicePauseSignaling:
+    async def test_chat_service_signals_pause(self) -> None:
+        """Pause event is cleared before chat and set after (happy path)."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fake_stream(messages):
+            yield "Hello"
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fake_stream
+
+        pause_event = asyncio.Event()
+        pause_event.set()  # Start unpaused
+
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            pause_event=pause_event,
+        )
+
+        events = await _collect_events(
+            service,
+            query="test",
+            user_id="uid-1",
+            token="jf-token",
+        )
+
+        # After stream completes, pause event should be set (unpaused)
+        assert pause_event.is_set()
+        assert events[-1] == {"type": "done"}
+
+    async def test_chat_service_signals_pause_on_error(self) -> None:
+        """Pause event is restored even when chat stream errors."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fail_stream(messages):
+            raise OllamaConnectionError("Cannot reach Ollama")
+            yield  # pragma: no cover  # noqa: RUF028
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fail_stream
+
+        pause_event = asyncio.Event()
+        pause_event.set()
+
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            pause_event=pause_event,
+        )
+
+        events = await _collect_events(
+            service,
+            query="test",
+            user_id="uid-1",
+            token="jf-token",
+        )
+
+        # Even after error, pause event should be restored
+        assert pause_event.is_set()
+        assert events[1]["type"] == "error"
