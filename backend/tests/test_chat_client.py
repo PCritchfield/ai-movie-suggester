@@ -154,9 +154,7 @@ class TestChatStream:
         mock_http.stream = _make_stream_response(lines)
 
         tokens = []
-        async for token in chat_client.chat_stream(
-            [{"role": "user", "content": "Hi"}]
-        ):
+        async for token in chat_client.chat_stream([{"role": "user", "content": "Hi"}]):
             tokens.append(token)
 
         assert tokens == ["Hello", " world"]
@@ -193,9 +191,7 @@ class TestChatStream:
         mock_http.stream = _raise_connect
 
         with pytest.raises(OllamaConnectionError):
-            async for _ in chat_client.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            ):
+            async for _ in chat_client.chat_stream([{"role": "user", "content": "Hi"}]):
                 pass  # pragma: no cover
 
     async def test_chat_client_timeout(
@@ -211,9 +207,7 @@ class TestChatStream:
         mock_http.stream = _raise_timeout
 
         with pytest.raises(OllamaTimeoutError):
-            async for _ in chat_client.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            ):
+            async for _ in chat_client.chat_stream([{"role": "user", "content": "Hi"}]):
                 pass  # pragma: no cover
 
     async def test_chat_client_malformed_json(
@@ -224,9 +218,7 @@ class TestChatStream:
         mock_http.stream = _make_stream_response(lines)
 
         with pytest.raises(OllamaStreamError, match="Malformed JSON"):
-            async for _ in chat_client.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            ):
+            async for _ in chat_client.chat_stream([{"role": "user", "content": "Hi"}]):
                 pass  # pragma: no cover
 
     async def test_chat_client_unexpected_shape(
@@ -237,14 +229,10 @@ class TestChatStream:
         mock_http.stream = _make_stream_response(lines)
 
         with pytest.raises(OllamaStreamError, match="Unexpected response shape"):
-            async for _ in chat_client.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            ):
+            async for _ in chat_client.chat_stream([{"role": "user", "content": "Hi"}]):
                 pass  # pragma: no cover
 
-    async def test_base_url_trailing_slash_stripped(
-        self, mock_http: AsyncMock
-    ) -> None:
+    async def test_base_url_trailing_slash_stripped(self, mock_http: AsyncMock) -> None:
         client = OllamaChatClient(
             base_url="http://ollama:11434/",
             http_client=mock_http,

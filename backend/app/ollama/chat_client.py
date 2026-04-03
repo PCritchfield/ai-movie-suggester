@@ -69,9 +69,7 @@ class OllamaChatClient:
         except Exception:
             return False
 
-    async def chat_stream(
-        self, messages: list[dict[str, str]]
-    ) -> AsyncIterator[str]:
+    async def chat_stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
         """Stream chat tokens from Ollama.
 
         POSTs to ``{base_url}/api/chat`` with ``stream: true``.
