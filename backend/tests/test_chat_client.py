@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -45,7 +46,7 @@ def chat_client(mock_http: AsyncMock) -> OllamaChatClient:
 # ---------------------------------------------------------------------------
 
 
-def _make_stream_response(lines: list[str], status_code: int = 200) -> MagicMock:
+def _make_stream_response(lines: list[str], status_code: int = 200) -> Any:
     """Create a mock async context manager that yields lines."""
 
     class _FakeStream:
