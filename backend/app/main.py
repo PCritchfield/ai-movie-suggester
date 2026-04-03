@@ -434,7 +434,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Middleware registration order matters — FastAPI processes middleware
     # in REVERSE registration order, so CORS (registered last) runs first
     # on inbound requests:
-    # (1) security headers, (2) CSRF, (3) rate limiter, (4) CORS
+    # (1) security headers, (2) CSRF, (3) CORS
+    # Rate limiting is applied per-route via slowapi decorators, not middleware.
     application.add_middleware(SecurityHeadersMiddleware, docs_enabled=docs_enabled)
     application.add_middleware(CSRFMiddleware)
 

@@ -15,11 +15,8 @@ _REQUIRED_ENV = {
 
 def test_settings_loads_defaults() -> None:
     """Settings should load with defaults for optional fields."""
-    env = {
-        "JELLYFIN_URL": "http://jellyfin:8096",
-        "SESSION_SECRET": _VALID_SECRET,
-    }
-    with patch.dict(os.environ, env, clear=False):
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
     assert s.jellyfin_url == "http://jellyfin:8096"
     assert s.ollama_host == "http://ollama:11434"
@@ -58,11 +55,8 @@ def test_settings_rejects_short_session_secret() -> None:
 
 def test_settings_jellyfin_timeout_default() -> None:
     """Jellyfin timeout should default to 10 seconds."""
-    env = {
-        "JELLYFIN_URL": "http://jellyfin:8096",
-        "SESSION_SECRET": _VALID_SECRET,
-    }
-    with patch.dict(os.environ, env, clear=False):
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
     assert s.jellyfin_timeout == 10.0
 
