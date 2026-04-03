@@ -6,12 +6,14 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from app.chat.models import ChatErrorCode, SSEEventType
 from app.chat.prompts import build_chat_messages, get_system_prompt
 from app.ollama.errors import (
     OllamaConnectionError,
     OllamaStreamError,
     OllamaTimeoutError,
 )
+from app.search.models import SearchUnavailableError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -59,9 +61,6 @@ class ChatService:
         3. done — stream complete
         On error: yields an error event instead of done.
 
-        SearchUnavailableError is allowed to propagate — the router
-        handles it as 503.
-
         Args:
             query: User's natural-language message.
             user_id: Jellyfin user ID.
@@ -70,23 +69,32 @@ class ChatService:
         Yields:
             Event dicts with ``type`` key.
         """
-        # Step 1: Search
-        response = await self._search_service.search(
-            query=query,
-            limit=10,
-            user_id=user_id,
-            token=token,
-        )
+        try:
+            response = await self._search_service.search(
+                query=query,
+                limit=10,
+                user_id=user_id,
+                token=token,
+            )
+        except SearchUnavailableError:
+            logger.warning("chat_search_unavailable query_len=%d", len(query))
+            yield {
+                "type": SSEEventType.ERROR,
+                "code": ChatErrorCode.OLLAMA_UNAVAILABLE,
+                "message": (
+                    "The search service is currently unavailable. "
+                    "Please try again shortly."
+                ),
+            }
+            return
 
-        # Step 2: Yield metadata event (always first)
         yield {
-            "type": "metadata",
+            "type": SSEEventType.METADATA,
             "version": 1,
             "recommendations": [r.model_dump() for r in response.results],
             "search_status": response.status.value,
         }
 
-        # Step 3: Build messages
         system_prompt = get_system_prompt(self._settings.chat_system_prompt)
         messages = build_chat_messages(
             query=query,
@@ -94,28 +102,18 @@ class ChatService:
             system_prompt=system_prompt,
         )
 
-        # Step 4: Stream LLM tokens with pause signaling
+        # Clear pause event so embedding worker yields to chat
         self._pause_event.clear()
         try:
             async with asyncio.timeout(120.0):
                 async for content in self._chat_client.chat_stream(messages):
-                    yield {"type": "text", "content": content}
+                    yield {"type": SSEEventType.TEXT, "content": content}
 
-            # Step 5: Done
-            yield {"type": "done"}
-        except TimeoutError:
+            yield {"type": SSEEventType.DONE}
+        except (TimeoutError, OllamaTimeoutError):
             yield {
-                "type": "error",
-                "code": "generation_timeout",
-                "message": (
-                    "The response took too long to generate. "
-                    "Your recommendations are shown above."
-                ),
-            }
-        except OllamaTimeoutError:
-            yield {
-                "type": "error",
-                "code": "generation_timeout",
+                "type": SSEEventType.ERROR,
+                "code": ChatErrorCode.GENERATION_TIMEOUT,
                 "message": (
                     "The response took too long to generate. "
                     "Your recommendations are shown above."
@@ -123,8 +121,8 @@ class ChatService:
             }
         except (OllamaConnectionError, OllamaStreamError):
             yield {
-                "type": "error",
-                "code": "ollama_unavailable",
+                "type": SSEEventType.ERROR,
+                "code": ChatErrorCode.OLLAMA_UNAVAILABLE,
                 "message": (
                     "The AI service became unavailable. "
                     "Your recommendations are shown above."
@@ -133,8 +131,8 @@ class ChatService:
         except Exception:
             logger.exception("chat_stream_interrupted")
             yield {
-                "type": "error",
-                "code": "stream_interrupted",
+                "type": SSEEventType.ERROR,
+                "code": ChatErrorCode.STREAM_INTERRUPTED,
                 "message": (
                     "The response was interrupted. "
                     "Your recommendations are shown above."

@@ -35,7 +35,6 @@ def _make_session_meta() -> SessionMeta:
 def _make_chat_app(
     *,
     session_store: Any = None,
-    ollama_chat_client: Any = None,
     chat_service: Any = None,
     settings: Any = None,
     with_auth: bool = True,
@@ -47,12 +46,6 @@ def _make_chat_app(
     app.state.session_store = session_store or AsyncMock()
     app.state.settings = settings
     app.state.limiter = None
-
-    # Chat client mock
-    _chat_client = ollama_chat_client or AsyncMock()
-    if not hasattr(_chat_client, "health"):
-        _chat_client.health = AsyncMock(return_value=True)
-    app.state.ollama_chat_client = _chat_client
 
     # Chat service mock
     app.state.chat_service = chat_service or AsyncMock()
@@ -124,28 +117,6 @@ class TestChatValidation:
         _, client = _make_chat_app()
         resp = client.post("/api/chat", json={"message": "x" * 1001})
         assert resp.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# Ollama down
-# ---------------------------------------------------------------------------
-
-
-class TestChatOllamaDown:
-    def test_ollama_down_returns_503(self) -> None:
-        chat_client = AsyncMock()
-        chat_client.health = AsyncMock(return_value=False)
-
-        session_store = AsyncMock()
-        session_store.get_token = AsyncMock(return_value="jf-token")
-
-        _, client = _make_chat_app(
-            session_store=session_store,
-            ollama_chat_client=chat_client,
-        )
-
-        resp = client.post("/api/chat", json={"message": "test"})
-        assert resp.status_code == 503
 
 
 # ---------------------------------------------------------------------------

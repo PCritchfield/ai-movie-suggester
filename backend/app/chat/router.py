@@ -12,7 +12,6 @@ from slowapi import Limiter  # noqa: TC002
 
 from app.auth.dependencies import get_current_session
 from app.chat.models import ChatRequest  # noqa: TC001
-from app.search.models import SearchUnavailableError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -47,7 +46,6 @@ def create_chat_router(
             401: {"description": "Not authenticated"},
             422: {"description": "Validation error"},
             429: {"description": "Rate limit exceeded"},
-            503: {"description": "Service unavailable"},
         },
     )
     @_limit
@@ -66,31 +64,13 @@ def create_chat_router(
         if token is None:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        chat_client = request.app.state.ollama_chat_client
-        healthy = await chat_client.health()
-        if not healthy:
-            raise HTTPException(
-                status_code=503,
-                detail="Chat service unavailable: Ollama is down",
-            )
-
         service = request.app.state.chat_service
 
-        try:
-            event_stream = service.stream(
-                query=body.message,
-                user_id=session.user_id,
-                token=token,
-            )
-        except SearchUnavailableError:
-            logger.warning(
-                "chat_search_unavailable query_len=%d",
-                len(body.message),
-            )
-            raise HTTPException(
-                status_code=503,
-                detail="Search unavailable: embedding service is down",
-            ) from None
+        event_stream = service.stream(
+            query=body.message,
+            user_id=session.user_id,
+            token=token,
+        )
 
         return StreamingResponse(
             content=_sse_generator(event_stream),

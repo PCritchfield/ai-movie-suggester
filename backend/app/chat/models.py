@@ -2,7 +2,26 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
+
+
+class SSEEventType(StrEnum):
+    """SSE event type identifiers for the chat stream."""
+
+    METADATA = "metadata"
+    TEXT = "text"
+    DONE = "done"
+    ERROR = "error"
+
+
+class ChatErrorCode(StrEnum):
+    """Error codes sent in SSE error events."""
+
+    GENERATION_TIMEOUT = "generation_timeout"
+    OLLAMA_UNAVAILABLE = "ollama_unavailable"
+    STREAM_INTERRUPTED = "stream_interrupted"
 
 
 class ChatRequest(BaseModel):

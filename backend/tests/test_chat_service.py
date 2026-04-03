@@ -8,26 +8,11 @@ from unittest.mock import AsyncMock
 from app.chat.service import ChatService
 from app.ollama.errors import OllamaConnectionError
 from app.search.models import SearchResponse, SearchResultItem, SearchStatus
-from tests.conftest import make_test_settings
+from tests.conftest import make_search_result_item, make_test_settings
 
 # ---------------------------------------------------------------------------
 # Factories
 # ---------------------------------------------------------------------------
-
-
-def _make_result(
-    title: str = "Galaxy Quest",
-    jid: str = "jf-001",
-) -> SearchResultItem:
-    return SearchResultItem(
-        jellyfin_id=jid,
-        title=title,
-        overview="A comedy about sci-fi actors.",
-        genres=["Comedy", "Sci-Fi"],
-        year=1999,
-        score=0.8,
-        poster_url=f"/Items/{jid}/Images/Primary",
-    )
 
 
 def _make_search_response(
@@ -35,7 +20,7 @@ def _make_search_response(
     status: SearchStatus = SearchStatus.OK,
 ) -> SearchResponse:
     if results is None:
-        results = [_make_result()]
+        results = [make_search_result_item()]
     return SearchResponse(
         status=status,
         results=results,

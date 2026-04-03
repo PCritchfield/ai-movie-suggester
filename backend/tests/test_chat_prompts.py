@@ -9,30 +9,7 @@ from app.chat.prompts import (
     format_movie_context,
     get_system_prompt,
 )
-from app.search.models import SearchResultItem
-
-# ---------------------------------------------------------------------------
-# Factories
-# ---------------------------------------------------------------------------
-
-
-def _make_result(
-    title: str = "Galaxy Quest",
-    year: int | None = 1999,
-    genres: list[str] | None = None,
-    overview: str | None = "A comedy about sci-fi actors.",
-    score: float = 0.8,
-) -> SearchResultItem:
-    return SearchResultItem(
-        jellyfin_id=f"jf-{title.lower().replace(' ', '-')}",
-        title=title,
-        overview=overview,
-        genres=genres or ["Comedy", "Sci-Fi"],
-        year=year,
-        score=score,
-        poster_url=f"/Items/jf-{title.lower().replace(' ', '-')}/Images/Primary",
-    )
-
+from tests.conftest import make_search_result_item as _make_result
 
 # ---------------------------------------------------------------------------
 # get_system_prompt
