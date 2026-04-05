@@ -82,6 +82,7 @@ export function useInstallPrompt(): UseInstallPromptReturn {
     await deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === "accepted") {
+      localStorage.setItem(DISMISSED_KEY, "true");
       setDismissed(true);
     }
     setDeferredPrompt(null);

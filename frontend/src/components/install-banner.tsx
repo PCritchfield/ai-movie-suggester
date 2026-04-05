@@ -26,7 +26,11 @@ export function InstallBanner() {
           {platform === "ios" ? (
             <p className="text-sm text-foreground">
               Install this app: tap{" "}
-              <Share className="inline-block h-4 w-4 align-text-bottom" /> then{" "}
+              <Share
+                className="inline-block h-4 w-4 align-text-bottom"
+                aria-hidden
+              />
+              <span className="sr-only">the Share button</span> then{" "}
               <strong>&quot;Add to Home Screen&quot;</strong>
             </p>
           ) : (

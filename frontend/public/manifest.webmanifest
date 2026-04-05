@@ -2,6 +2,7 @@
   "name": "AI Movie Suggester",
   "short_name": "Movies",
   "description": "AI-powered movie recommendations for Jellyfin",
+  "lang": "en",
   "start_url": "/",
   "display": "minimal-ui",
   "background_color": "#ffffff",
