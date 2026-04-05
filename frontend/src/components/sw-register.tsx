@@ -3,8 +3,7 @@
 import { useEffect } from "react";
 
 /**
- * Registers the service worker on mount.
- * Renders nothing — this is a side-effect-only component.
+ * Registers the service worker on mount. Renders nothing.
  */
 export function SwRegister() {
   useEffect(() => {

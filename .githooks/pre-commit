@@ -8,9 +8,11 @@
 PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '^backend/.*\.py$' || true)
 if [ -n "$PYTHON_FILES" ]; then
   echo "🐍 Running ruff on backend..."
+  # Strip backend/ prefix — ruff runs from the backend directory
+  BACKEND_REL=$(echo "$PYTHON_FILES" | sed 's|^backend/||')
   cd backend
-  uv run ruff check --fix $PYTHON_FILES
-  uv run ruff format $PYTHON_FILES
+  uv run ruff check --fix $BACKEND_REL
+  uv run ruff format $BACKEND_REL
   cd ..
   echo $PYTHON_FILES | xargs git add
 fi
@@ -19,9 +21,11 @@ fi
 TS_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '^frontend/.*\.\(ts\|tsx\)$' || true)
 if [ -n "$TS_FILES" ]; then
   echo "📦 Running eslint + prettier on frontend..."
+  # Strip frontend/ prefix — tools run from the frontend directory
+  FRONTEND_REL=$(echo "$TS_FILES" | sed 's|^frontend/||')
   cd frontend
-  npx eslint --fix $TS_FILES
-  npx prettier --write $TS_FILES
+  npx eslint --fix $FRONTEND_REL
+  npx prettier --write $FRONTEND_REL
   cd ..
   echo $TS_FILES | xargs git add
 fi
