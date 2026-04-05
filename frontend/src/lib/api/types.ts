@@ -13,6 +13,13 @@ export interface ErrorResponse {
   detail: string;
 }
 
+export class NetworkError extends Error {
+  constructor() {
+    super("Server unreachable — check your connection");
+    this.name = "NetworkError";
+  }
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly body: unknown;
