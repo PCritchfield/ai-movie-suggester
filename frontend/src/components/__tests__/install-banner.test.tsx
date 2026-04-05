@@ -35,18 +35,14 @@ describe("InstallBanner", () => {
     render(<InstallBanner />);
 
     expect(screen.getByText("Install")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Install AI Movie Suggester/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Install AI Movie Suggester/)).toBeInTheDocument();
   });
 
   it("renders iOS instructions on iOS Safari", () => {
     mockHook({ platform: "ios", canPrompt: true });
     render(<InstallBanner />);
 
-    expect(
-      screen.getByText(/Add to Home Screen/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Add to Home Screen/)).toBeInTheDocument();
     // Should not show "Install" button on iOS — only the dismiss X
     expect(
       screen.queryByRole("button", { name: "Install" })
