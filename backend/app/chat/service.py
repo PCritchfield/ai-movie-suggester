@@ -18,6 +18,7 @@ from app.search.models import SearchUnavailableError
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from app.chat.conversation_store import ConversationStore
     from app.config import Settings
     from app.ollama.chat_client import OllamaChatClient
     from app.search.service import SearchService
@@ -49,35 +50,52 @@ class ChatService:
         chat_client: OllamaChatClient,
         pause_event: asyncio.Event,
         settings: Settings,
+        conversation_store: ConversationStore,
     ) -> None:
         self._search_service = search_service
         self._chat_client = chat_client
         self._pause_event = pause_event
         self._settings = settings
+        self._conversation_store = conversation_store
 
     async def stream(
         self,
         query: str,
         user_id: str,
         token: str,
+        session_id: str,
     ) -> AsyncIterator[dict]:
         """Execute the full chat pipeline as an async generator.
 
         Yields SSE event dicts in order:
-        1. metadata — recommendations and search status (skipped on search failure)
+        1. metadata — recommendations, search status, and turn_count
         2. text — individual LLM tokens
         3. done — stream complete
         On pre-search error: yields an error event as the first (and only) event.
         On mid-stream error: yields an error event after metadata/text.
 
+        Conversation history is managed via two mutation windows to avoid
+        holding the conversation lock across I/O:
+        - Window 1 (before search): read history + store user turn
+        - Window 2 (after streaming): store assistant turn on success only
+
         Args:
             query: User's natural-language message.
             user_id: Jellyfin user ID.
             token: Decrypted Jellyfin access token.
+            session_id: Auth session ID for conversation tracking.
 
         Yields:
             Event dicts with ``type`` key.
         """
+        # Mutation window 1: read history + store user turn
+        lock = self._conversation_store.get_lock(session_id)
+        async with lock:
+            history = self._conversation_store.get_turns(session_id)
+            self._conversation_store.add_turn(session_id, "user", query)
+
+        turn_count = self._conversation_store.turn_count(session_id)
+
         try:
             response = await self._search_service.search(
                 query=query,
@@ -102,6 +120,7 @@ class ChatService:
             "version": 1,
             "recommendations": [r.model_dump() for r in response.results],
             "search_status": response.status.value,
+            "turn_count": turn_count,
         }
 
         system_prompt = get_system_prompt(self._settings.chat_system_prompt)
@@ -109,16 +128,26 @@ class ChatService:
             query=query,
             results=response.results,
             system_prompt=system_prompt,
+            history=history,
+            context_token_budget=self._settings.conversation_context_budget,
         )
 
         # Clear pause event so embedding worker yields to chat
         self._pause_event.clear()
         try:
+            assistant_text = ""
             async with asyncio.timeout(120.0):
                 async for content in self._chat_client.chat_stream(messages):
+                    assistant_text += content
                     yield {"type": SSEEventType.TEXT, "content": content}
 
             yield {"type": SSEEventType.DONE}
+
+            # Mutation window 2: store assistant response (success only)
+            async with lock:
+                self._conversation_store.add_turn(
+                    session_id, "assistant", assistant_text
+                )
         except (TimeoutError, OllamaTimeoutError):
             yield {
                 "type": SSEEventType.ERROR,
