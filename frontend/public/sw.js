@@ -1,10 +1,8 @@
-// Service Worker for AI Movie Suggester PWA
 // Strategy: precache app shell, network-first for everything else
 // API responses are NEVER cached (security: permission-filtered data)
 
 const CACHE_NAME = "ams-shell-v1";
 
-// Static assets to precache — the app shell
 const SHELL_ASSETS = [
   "/",
   "/login",
@@ -15,18 +13,16 @@ const SHELL_ASSETS = [
   "/icons/apple-touch-icon.png",
 ];
 
-// Install: precache the app shell
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_ASSETS);
-    })
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(SHELL_ASSETS))
+      // Activate immediately, don't wait for old SW to finish
+      .then(() => self.skipWaiting())
   );
-  // Activate immediately, don't wait for old SW to finish
-  self.skipWaiting();
 });
 
-// Activate: clean up old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -41,7 +37,6 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for navigation, cache-first for static shell assets
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -51,12 +46,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Never cache non-GET requests
   if (request.method !== "GET") {
     return;
   }
 
-  // Navigation requests: network-first, fall back to offline page
+  // Navigation: network-first, fall back to offline page
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(() => {
@@ -66,7 +60,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets: cache-first, fall back to network
+  // Static shell assets: cache-first, fall back to network
   if (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
@@ -80,10 +74,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Everything else: network-first
+  // Everything else: network-first, clean error if uncached
   event.respondWith(
     fetch(request).catch(() => {
-      return caches.match(request);
+      return caches.match(request).then((r) => r || Response.error());
     })
   );
 });

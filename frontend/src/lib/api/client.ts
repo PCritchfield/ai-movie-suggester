@@ -19,9 +19,6 @@ export async function apiGet<T>(path: string): Promise<T> {
   const response = await networkFetch(`${getBaseUrl()}${path}`, {
     method: "GET",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
   return parseResponse<T>(response);
 }

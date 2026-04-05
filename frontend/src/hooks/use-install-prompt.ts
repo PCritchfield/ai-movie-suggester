@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const DISMISSED_KEY = "pwa-install-dismissed";
 
@@ -22,21 +22,14 @@ export interface UseInstallPromptReturn {
   dismiss: () => void;
 }
 
-function detectPlatform(): Platform {
-  if (typeof window === "undefined") return "unsupported";
-
+function detectIos(): boolean {
+  if (typeof window === "undefined") return false;
   const ua = navigator.userAgent;
   const isIos =
     /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    (/Mac/.test(ua) && navigator.maxTouchPoints > 1);
   const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua);
-
-  if (isIos && isSafari) return "ios";
-
-  // Android Chrome or desktop Chrome — beforeinstallprompt capable
-  if ("BeforeInstallPromptEvent" in window) return "android";
-
-  return "unsupported";
+  return isIos && isSafari;
 }
 
 function isStandalone(): boolean {
@@ -50,30 +43,39 @@ function isStandalone(): boolean {
 }
 
 function isDismissed(): boolean {
-  if (typeof localStorage === "undefined") return false;
-  return localStorage.getItem(DISMISSED_KEY) === "true";
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(DISMISSED_KEY) === "true";
+  } catch {
+    return false;
+  }
 }
 
 export function useInstallPrompt(): UseInstallPromptReturn {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const [platform, setPlatform] = useState<Platform>(() => detectPlatform());
-  const [dismissed, setDismissed] = useState(() => isStandalone() || isDismissed());
+  const [dismissed, setDismissed] = useState(
+    () => isStandalone() || isDismissed()
+  );
+
+  // Platform is derived: iOS detected statically, Android confirmed by event
+  const platform = useMemo<Platform>(() => {
+    if (detectIos()) return "ios";
+    if (deferredPrompt) return "android";
+    return "unsupported";
+  }, [deferredPrompt]);
 
   useEffect(() => {
-    if (dismissed) return;
-
-    if (platform === "ios") return;
+    if (dismissed || detectIos()) return;
 
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setPlatform("android");
     };
 
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, [dismissed, platform]);
+  }, [dismissed]);
 
   const prompt = useCallback(async () => {
     if (!deferredPrompt) return;

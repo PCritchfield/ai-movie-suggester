@@ -52,21 +52,15 @@ describe("useInstallPrompt", () => {
     );
     mockPlatform("Linux armv81");
     mockMaxTouchPoints(5);
-    // Remove BeforeInstallPromptEvent from window for clean state
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (window as any).BeforeInstallPromptEvent;
   });
 
   describe("Android / beforeinstallprompt", () => {
     it("captures beforeinstallprompt event and enables prompt", async () => {
-      // Simulate browser support
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).BeforeInstallPromptEvent = Event;
-
       const { result } = renderHook(() => useInstallPrompt());
 
-      // Before event fires, canPrompt is false (no deferred prompt yet)
-      expect(result.current.platform).toBe("android");
+      // Before event fires, platform is unsupported (no proof of Android yet)
+      expect(result.current.platform).toBe("unsupported");
+      expect(result.current.canPrompt).toBe(false);
 
       // Simulate the browser firing beforeinstallprompt
       const mockEvent = new Event("beforeinstallprompt");
@@ -84,9 +78,6 @@ describe("useInstallPrompt", () => {
     });
 
     it("calls prompt() on the deferred event", async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).BeforeInstallPromptEvent = Event;
-
       const { result } = renderHook(() => useInstallPrompt());
 
       const promptFn = vi.fn().mockResolvedValue(undefined);
