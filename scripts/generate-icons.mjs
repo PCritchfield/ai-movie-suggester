@@ -1,10 +1,27 @@
 /**
  * Generate PWA icon assets from an SVG source.
- * Uses @napi-rs/canvas for server-side PNG rendering.
+ *
+ * Prerequisite: install the optional script dependency first:
+ *   npm install --no-save @napi-rs/canvas
  *
  * Usage: node scripts/generate-icons.mjs
  */
-import { createCanvas } from "@napi-rs/canvas";
+let createCanvas;
+try {
+  ({ createCanvas } = await import("@napi-rs/canvas"));
+} catch (error) {
+  if (
+    error?.code === "ERR_MODULE_NOT_FOUND" ||
+    error?.code === "MODULE_NOT_FOUND"
+  ) {
+    console.error(
+      'Missing dependency "@napi-rs/canvas". Install it first:\n' +
+        "  npm install --no-save @napi-rs/canvas"
+    );
+    process.exit(1);
+  }
+  throw error;
+}
 import { writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";

@@ -80,16 +80,24 @@ export function useInstallPrompt(): UseInstallPromptReturn {
   const prompt = useCallback(async () => {
     if (!deferredPrompt) return;
     await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
+    await deferredPrompt.userChoice;
+    // Persist dismissal for both outcomes — the native prompt is one-shot,
+    // so showing the banner again after dismissal would be confusing
+    try {
       localStorage.setItem(DISMISSED_KEY, "true");
-      setDismissed(true);
+    } catch {
+      // Storage unavailable (e.g. Safari private mode) — still hide in-memory
     }
+    setDismissed(true);
     setDeferredPrompt(null);
   }, [deferredPrompt]);
 
   const dismiss = useCallback(() => {
-    localStorage.setItem(DISMISSED_KEY, "true");
+    try {
+      localStorage.setItem(DISMISSED_KEY, "true");
+    } catch {
+      // Storage unavailable — still hide in-memory
+    }
     setDismissed(true);
   }, []);
 

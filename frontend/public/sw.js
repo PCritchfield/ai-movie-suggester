@@ -25,16 +25,18 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      );
-    })
+    caches
+      .keys()
+      .then((keys) => {
+        return Promise.all(
+          keys
+            .filter((key) => key !== CACHE_NAME)
+            .map((key) => caches.delete(key))
+        );
+      })
+      // Take control of all clients immediately
+      .then(() => self.clients.claim())
   );
-  // Take control of all clients immediately
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
@@ -54,21 +56,31 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(() => {
-        return caches.match("/offline.html");
+        return caches
+          .match("/offline.html")
+          .then((r) => r || Response.error());
       })
     );
     return;
   }
 
-  // Static shell assets: cache-first, fall back to network
+  // Static shell assets: cache-first, populate cache on miss
   if (
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icons/") ||
     url.pathname === "/manifest.webmanifest"
   ) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        return cached || fetch(request);
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(request).then((cached) => {
+          if (cached) return cached;
+          return fetch(request).then((response) => {
+            if (response.ok) {
+              cache.put(request, response.clone());
+            }
+            return response;
+          });
+        });
       })
     );
     return;

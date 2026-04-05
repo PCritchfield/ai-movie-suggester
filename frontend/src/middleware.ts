@@ -10,6 +10,6 @@ export function middleware(request: NextRequest): NextResponse {
 
 export const config = {
   matcher: [
-    "/((?!login|api|_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/|sw.js|offline.html).*)",
+    "/((?!login|api|_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|icons/|sw\\.js|offline\\.html).*)",
   ],
 };
