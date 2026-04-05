@@ -35,6 +35,6 @@ describe("config.matcher", () => {
     expect(pattern).toContain("api");
     expect(pattern).toContain("_next/static");
     expect(pattern).toContain("_next/image");
-    expect(pattern).toContain("favicon.ico");
+    expect(pattern).toContain("favicon\\.ico");
   });
 });
