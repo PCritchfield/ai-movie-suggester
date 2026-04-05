@@ -40,8 +40,8 @@ describe("apiGet", () => {
     const { apiGet } = await import("../client");
     await apiGet("/api/auth/me");
     const call = vi.mocked(fetch).mock.calls[0];
-    const headers = call[1]?.headers as Record<string, string>;
-    expect(headers["X-CSRF-Token"]).toBeUndefined();
+    const headers = call[1]?.headers as Record<string, string> | undefined;
+    expect(headers?.["X-CSRF-Token"]).toBeUndefined();
   });
 
   it("returns parsed JSON on 200", async () => {
