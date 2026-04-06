@@ -18,11 +18,14 @@ A self-hosted AI companion for Jellyfin that uses RAG to provide conversational 
 
 ## Architecture Decisions
 
-- **TMDb enrichment is opt-in** (off by default). The app works with Jellyfin metadata only. Privacy-first.
-- **SQLite-vec** behind a repository abstraction. WAL mode for concurrent reads. Swap to Qdrant should be a one-module change.
+- **TMDb enrichment is opt-in** (off by default, not yet implemented). The app works with Jellyfin metadata only. Privacy-first.
+- **SQLite-vec** behind a repository abstraction. WAL mode (PASSIVE checkpoint) for concurrent reads. Separate reader/writer connections. Swap to Qdrant should be a one-module change.
 - **Jellyfin tokens never persisted to disk.** Stored in server-side encrypted sessions only. Frontend never sees raw tokens.
-- **Permission filtering at query time**, not index time. Vector DB stores all items; results filtered against Jellyfin's permission API per-user.
-- **Incremental sync** in v1. Track per-item content hash. Re-embed only changed items.
+- **CSRF protection via Double-Submit pattern.** State-changing requests require `X-CSRF-Token` header matching the `csrf_token` cookie. Login is exempt.
+- **Permission filtering at query time**, not index time. Vector DB stores all items; results filtered via in-memory TTL-cached permission set per-user.
+- **Sync and embedding are decoupled.** Sync engine discovers changes and enqueues; embedding worker processes asynchronously in batches. Content hash (SHA-256) triggers re-embedding on change.
+- **Conversation history is ephemeral.** In-memory only (not persisted to disk). Persisting chat messages would constitute logging PII. Lost on restart by design.
+- **Cooperative GPU pause.** Chat signals embedding worker to yield via `asyncio.Event`. Not a queue — worker voluntarily skips its cycle while chat is active.
 - **OpenAPI spec** defines the frontend-backend contract. This is the only shared artifact between runtimes.
 - **CPU-only is the default** deployment. GPU support is opt-in via `docker-compose.ollama.yml`.
 
