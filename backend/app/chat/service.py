@@ -93,8 +93,7 @@ class ChatService:
         async with lock:
             history = self._conversation_store.get_turns(session_id)
             self._conversation_store.add_turn(session_id, "user", query)
-
-        turn_count = self._conversation_store.turn_count(session_id)
+            turn_count = self._conversation_store.turn_count(session_id)
 
         try:
             response = await self._search_service.search(

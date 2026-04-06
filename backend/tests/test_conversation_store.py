@@ -136,6 +136,67 @@ class TestConcurrentAccess:
             assert f"msg-{200 + i}" in contents
 
 
+class TestTTLExpiry:
+    async def test_ttl_expiry(self) -> None:
+        """Conversations expire after TTL and are removed by cleanup()."""
+        store = ConversationStore(max_turns=10, ttl_seconds=0.1)
+        store.add_turn("s1", "user", "old message")
+        await asyncio.sleep(0.15)
+
+        # Add a fresh conversation that should NOT be expired
+        store.add_turn("s2", "user", "new message")
+
+        removed = store.cleanup()
+        assert removed == 1
+        assert store.get_turns("s1") == []
+        assert len(store.get_turns("s2")) == 1
+
+
+class TestLRUEviction:
+    def test_lru_eviction(self) -> None:
+        """LRU session evicted when max_sessions is reached."""
+        store = ConversationStore(max_turns=10, max_sessions=2)
+        store.add_turn("s-a", "user", "first")
+        store.add_turn("s-b", "user", "second")
+
+        # Adding a third should evict s-a (least recently used)
+        store.add_turn("s-c", "user", "third")
+
+        assert store.get_turns("s-a") == []
+        assert len(store.get_turns("s-b")) == 1
+        assert len(store.get_turns("s-c")) == 1
+
+    def test_get_lock_respects_lru_cap(self) -> None:
+        """get_lock() also evicts LRU when at capacity."""
+        store = ConversationStore(max_turns=10, max_sessions=2)
+        store.add_turn("s-a", "user", "first")
+        store.add_turn("s-b", "user", "second")
+
+        # get_lock for a new session should trigger LRU eviction
+        store.get_lock("s-c")
+
+        assert "s-a" not in store._conversations
+        assert "s-c" in store._conversations
+
+
+class TestCleanupPeriodic:
+    async def test_cleanup_returns_count(self) -> None:
+        """cleanup() returns the number of expired conversations."""
+        store = ConversationStore(max_turns=10, ttl_seconds=0.1)
+        store.add_turn("s1", "user", "msg1")
+        store.add_turn("s2", "user", "msg2")
+        await asyncio.sleep(0.15)
+
+        removed = store.cleanup()
+        assert removed == 2
+
+    async def test_cleanup_no_expired(self) -> None:
+        """cleanup() returns 0 when nothing is expired."""
+        store = ConversationStore(max_turns=10, ttl_seconds=3600)
+        store.add_turn("s1", "user", "msg")
+        assert store.cleanup() == 0
+
+
 class TestSettingsValidation:
     def test_conversation_max_turns_too_low(self) -> None:
         """Settings rejects conversation_max_turns below 1."""

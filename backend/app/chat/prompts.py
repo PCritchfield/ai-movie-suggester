@@ -39,6 +39,8 @@ DEFAULT_CONVERSATIONAL_TONE = (
     "library fits well, say so honestly rather than forcing a bad match."
 )
 
+CONTEXT_PREFIX = "Available movies:\n"
+
 
 # ---------------------------------------------------------------------------
 # Public functions
@@ -148,14 +150,14 @@ def build_chat_messages(
     context_tokens = 0
     while effective_max >= 0:
         context_text = format_movie_context(results, effective_max, max_overview_chars)
-        context_tokens = estimate_tokens(f"Available movies:\n{context_text}")
+        context_tokens = estimate_tokens(f"{CONTEXT_PREFIX}{context_text}")
         if context_tokens <= remaining_budget or effective_max == 0:
             break
         effective_max -= 1
 
     context_msg: dict[str, str] = {
         "role": "user",
-        "content": f"Available movies:\n{context_text}",
+        "content": f"{CONTEXT_PREFIX}{context_text}",
     }
 
     # --- History (newest-first, subject to remaining budget) -------------
@@ -164,11 +166,13 @@ def build_chat_messages(
 
     if history and history_budget > 0:
         accumulated = 0
-        # Walk newest-first so we keep the most recent turns.
+        # Walk newest-first, skip turns that don't fit but keep trying
+        # older ones — a large assistant response shouldn't block
+        # shorter earlier turns from being included.
         for turn in reversed(history):
             turn_tokens = estimate_tokens(turn.content)
             if accumulated + turn_tokens > history_budget:
-                break
+                continue
             history_msgs.append({"role": turn.role, "content": turn.content})
             accumulated += turn_tokens
         # Reverse to restore chronological order.

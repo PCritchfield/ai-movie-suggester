@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -25,10 +26,15 @@ class ConversationTurn:
 class ConversationEntry:
     """Per-session conversation state."""
 
-    turns: list[ConversationTurn] = field(default_factory=list)
+    turns: deque[ConversationTurn] = field(default_factory=deque)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     last_active: float = field(default_factory=time.monotonic)
     created_at: float = field(default_factory=time.time)
+
+
+def _make_entry(max_turns: int) -> ConversationEntry:
+    """Create a ConversationEntry with a bounded deque."""
+    return ConversationEntry(turns=deque(maxlen=max_turns))
 
 
 class ConversationStore:
@@ -53,41 +59,43 @@ class ConversationStore:
         """Return first 8 chars of SHA-256 hash for safe logging."""
         return hashlib.sha256(session_id.encode()).hexdigest()[:8]
 
+    def _evict_lru_if_needed(self) -> None:
+        """Evict the least-recently-used session if at capacity."""
+        if len(self._conversations) >= self._max_sessions:
+            lru_id = min(
+                self._conversations,
+                key=lambda k: self._conversations[k].last_active,
+            )
+            del self._conversations[lru_id]
+            logger.info(
+                "conversation_lru_eviction session_id_hash=%s",
+                self._session_hash(lru_id),
+            )
+
+    def _get_or_create(self, session_id: str) -> ConversationEntry:
+        """Return existing entry or create one (with LRU eviction check)."""
+        entry = self._conversations.get(session_id)
+        if entry is not None:
+            return entry
+        self._evict_lru_if_needed()
+        entry = _make_entry(self._max_turns)
+        self._conversations[session_id] = entry
+        return entry
+
     def add_turn(self, session_id: str, role: str, content: str) -> None:
         """Add a turn to the conversation, creating entry if needed.
 
-        Content is truncated to MAX_TURN_CONTENT_CHARS. Oldest turns
-        are evicted if the turn limit is exceeded. LRU eviction occurs
-        if the session cap is reached when creating a new entry.
+        Content is truncated to MAX_TURN_CONTENT_CHARS.
+        deque(maxlen) handles FIFO eviction automatically.
 
         The caller is responsible for acquiring the conversation lock.
         """
-        if session_id not in self._conversations:
-            # LRU eviction if at capacity
-            if len(self._conversations) >= self._max_sessions:
-                lru_id = min(
-                    self._conversations,
-                    key=lambda k: self._conversations[k].last_active,
-                )
-                del self._conversations[lru_id]
-                logger.info(
-                    "conversation_lru_eviction session_id_hash=%s",
-                    self._session_hash(lru_id),
-                )
-            self._conversations[session_id] = ConversationEntry()
+        entry = self._get_or_create(session_id)
 
-        entry = self._conversations[session_id]
-
-        # Truncate content
         if len(content) > MAX_TURN_CONTENT_CHARS:
             content = content[:MAX_TURN_CONTENT_CHARS]
 
         entry.turns.append(ConversationTurn(role=role, content=content))
-
-        # FIFO eviction if over turn limit
-        while len(entry.turns) > self._max_turns:
-            entry.turns.pop(0)
-
         entry.last_active = time.monotonic()
 
     def get_turns(self, session_id: str) -> list[ConversationTurn]:
@@ -99,10 +107,11 @@ class ConversationStore:
         return list(entry.turns)
 
     def get_lock(self, session_id: str) -> asyncio.Lock:
-        """Return the lock for a session, creating the entry if needed."""
-        if session_id not in self._conversations:
-            self._conversations[session_id] = ConversationEntry()
-        return self._conversations[session_id].lock
+        """Return the lock for a session, creating the entry if needed.
+
+        Uses _get_or_create to ensure LRU capacity check is honoured.
+        """
+        return self._get_or_create(session_id).lock
 
     def clear_history(self, session_id: str) -> None:
         """Clear all turns for a session (no-op if session doesn't exist)."""
