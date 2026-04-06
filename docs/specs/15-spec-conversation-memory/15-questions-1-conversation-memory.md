@@ -58,12 +58,12 @@ Issue #113 mentions resolving "more like that" and "not that one" references. Th
 
 Issue #113 proposes `DELETE /api/chat/{session_id}` to clear history. Is a dedicated endpoint needed, or is there a simpler approach?
 
-- [x] (A) `DELETE /api/chat/history` — clears the current user's conversation (identified from auth cookie). Returns 404 (not 403) if no conversation exists — don't leak existence.
+- [x] (A) `DELETE /api/chat/history` — clears the current user's conversation (identified from auth cookie). Always returns 204 (no-op if no conversation exists) to avoid leaking existence.
 - [ ] (B) `DELETE /api/chat/{conversation_id}`
 - [ ] (C) No dedicated endpoint
 - [ ] (D) Other
 
-**Council notes:** Unanimous on A. Angua added: return 404 not 403, CSRF middleware already covers DELETE.
+**Council notes:** Unanimous on A. Angua added: return 204 unconditionally to avoid existence leakage; CSRF middleware already covers DELETE.
 
 ## 7. SSE Protocol Changes
 

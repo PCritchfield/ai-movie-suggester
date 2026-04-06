@@ -134,16 +134,20 @@ class ChatService:
         # Clear pause event so embedding worker yields to chat
         self._pause_event.clear()
         try:
-            assistant_text = ""
+            assistant_chunks: list[str] = []
             async with asyncio.timeout(120.0):
                 async for content in self._chat_client.chat_stream(messages):
-                    assistant_text += content
+                    assistant_chunks.append(content)
                     yield {"type": SSEEventType.TEXT, "content": content}
 
+            assistant_text = "".join(assistant_chunks)
             yield {"type": SSEEventType.DONE}
 
-            # Mutation window 2: store assistant response (success only)
-            async with lock:
+            # Mutation window 2: store assistant response (success only).
+            # Re-acquire lock via get_lock() in case the original entry
+            # was purged/evicted during the unlocked streaming phase.
+            window2_lock = self._conversation_store.get_lock(session_id)
+            async with window2_lock:
                 self._conversation_store.add_turn(
                     session_id, "assistant", assistant_text
                 )

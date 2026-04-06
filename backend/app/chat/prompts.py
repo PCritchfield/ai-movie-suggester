@@ -166,13 +166,13 @@ def build_chat_messages(
 
     if history and history_budget > 0:
         accumulated = 0
-        # Walk newest-first, skip turns that don't fit but keep trying
-        # older ones — a large assistant response shouldn't block
-        # shorter earlier turns from being included.
+        # Walk newest-first and keep the most recent contiguous suffix
+        # that fits. Stop on the first turn that doesn't fit to preserve
+        # conversational coherence (no orphaned user/assistant turns).
         for turn in reversed(history):
             turn_tokens = estimate_tokens(turn.content)
             if accumulated + turn_tokens > history_budget:
-                continue
+                break
             history_msgs.append({"role": turn.role, "content": turn.content})
             accumulated += turn_tokens
         # Reverse to restore chronological order.
