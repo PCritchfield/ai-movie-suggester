@@ -188,6 +188,7 @@ This is a backend-only spec. No API endpoints, no frontend changes, no new servi
   - `LastPlayedDate` is null/absent: `last_played_date=None`.
   - `PlayCount` is absent: `play_count=0`.
   - `IsFavorite` is absent: `is_favorite=False`.
+  - `UserData` is present but an empty dict `{}`: `last_played_date=None`, `play_count=0`, `is_favorite=False`.
 
 - FR-3.7: The system shall add one integration test in `backend/tests/integration/test_jellyfin_client.py` (or a new `test_watch_history.py` in the integration directory) that:
   - Authenticates as test user `alice` against the real Jellyfin instance.
