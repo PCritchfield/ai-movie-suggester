@@ -12,6 +12,7 @@ from app.jellyfin.errors import JellyfinError
 
 if TYPE_CHECKING:
     from app.auth.session_store import SessionStore
+    from app.chat.conversation_store import ConversationStore
     from app.jellyfin.client import JellyfinClient
 
 logger = logging.getLogger(__name__)
@@ -26,11 +27,13 @@ class AuthService:
         jellyfin_client: JellyfinClient,
         session_expiry_hours: int,
         max_sessions_per_user: int,
+        conversation_store: ConversationStore | None = None,
     ) -> None:
         self._store = session_store
         self._jf = jellyfin_client
         self._expiry_hours = session_expiry_hours
         self._max_sessions = max_sessions_per_user
+        self._conversation_store = conversation_store
 
     async def _enforce_session_cap(self, user_id: str) -> None:
         """Evict oldest sessions until count < max_sessions_per_user."""
@@ -47,6 +50,8 @@ class AuthService:
                     user_id,
                 )
             await self._store.delete(oldest.session_id)
+            if self._conversation_store is not None:
+                self._conversation_store.purge_session(oldest.session_id)
             count = await self._store.count_by_user(user_id)
             logger.info(
                 "session_evicted user_id=%s sessions_count=%d",
@@ -97,7 +102,9 @@ class AuthService:
 
 
 async def cleanup_expired_sessions(
-    store: SessionStore, jf_client: JellyfinClient
+    store: SessionStore,
+    jf_client: JellyfinClient,
+    conversation_store: ConversationStore | None = None,
 ) -> None:
     """Delete expired sessions and attempt Jellyfin token revocation."""
     expired = await store.get_expired()
@@ -110,4 +117,6 @@ async def cleanup_expired_sessions(
                 session.user_id,
             )
         await store.delete(session.session_id)
+        if conversation_store is not None:
+            conversation_store.purge_session(session.session_id)
         logger.info("session_expired user_id=%s", session.user_id)

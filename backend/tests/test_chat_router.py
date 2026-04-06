@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 from app.auth.crypto import derive_keys
 from app.auth.dependencies import get_current_session
 from app.auth.models import SessionMeta
+from app.chat.conversation_store import ConversationStore
 from app.chat.router import create_chat_router
 from app.middleware.rate_limit import create_limiter
 from tests.conftest import TEST_SECRET, make_test_settings
@@ -51,6 +52,11 @@ def _make_chat_app(
 
     # Chat service mock
     app.state.chat_service = chat_service or AsyncMock()
+
+    # Conversation store (real, in-memory)
+    app.state.conversation_store = ConversationStore(
+        max_turns=10, ttl_seconds=7200, max_sessions=100
+    )
 
     chat_router = create_chat_router(settings=settings, limiter=None)
     app.include_router(chat_router)
@@ -433,3 +439,75 @@ class TestChatStreamsSSE:
         done_events = [e for e in parsed if e["type"] == "done"]
         assert len(done_events) == 1
         assert set(done_events[0].keys()) == {"type"}
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/chat/history tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteChatHistory:
+    def test_delete_chat_history(self) -> None:
+        """DELETE clears conversation, next message starts fresh."""
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+
+        events = [
+            {
+                "type": "metadata",
+                "version": 1,
+                "recommendations": [],
+                "search_status": "ok",
+                "turn_count": 1,
+            },
+            {"type": "text", "content": "Hi"},
+            {"type": "done"},
+        ]
+        service = _make_stream_mock(events)
+
+        app, client = _make_chat_app(
+            session_store=session_store,
+            chat_service=service,
+        )
+
+        # Add some turns to the store
+        app.state.conversation_store.add_turn(_SESSION_ID, "user", "hello")
+        app.state.conversation_store.add_turn(_SESSION_ID, "assistant", "hi")
+        assert app.state.conversation_store.turn_count(_SESSION_ID) == 2
+
+        # DELETE should clear
+        resp = client.delete("/api/chat/history")
+        assert resp.status_code == 204
+        assert app.state.conversation_store.turn_count(_SESSION_ID) == 0
+
+    def test_delete_chat_history_requires_auth(self) -> None:
+        """Unauthenticated DELETE returns 401."""
+        _, client = _make_chat_app(with_auth=False)
+        resp = client.delete("/api/chat/history")
+        assert resp.status_code == 401
+
+    def test_delete_chat_history_idempotent(self) -> None:
+        """DELETE with no conversation returns 204. Twice returns 204."""
+        _, client = _make_chat_app()
+        resp1 = client.delete("/api/chat/history")
+        assert resp1.status_code == 204
+        resp2 = client.delete("/api/chat/history")
+        assert resp2.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# Session cascade tests
+# ---------------------------------------------------------------------------
+
+
+class TestSessionCascade:
+    def test_session_destroy_purges_conversation(self) -> None:
+        """purge_session removes conversation."""
+        store = ConversationStore(max_turns=10, ttl_seconds=7200, max_sessions=100)
+        store.add_turn("session-1", "user", "hello")
+        store.add_turn("session-1", "assistant", "hi")
+        assert store.turn_count("session-1") == 2
+
+        store.purge_session("session-1")
+        assert store.turn_count("session-1") == 0
+        assert store.get_turns("session-1") == []

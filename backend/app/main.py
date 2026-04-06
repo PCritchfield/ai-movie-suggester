@@ -19,6 +19,7 @@ from app.auth.crypto import derive_keys
 from app.auth.router import create_auth_router
 from app.auth.service import AuthService, cleanup_expired_sessions
 from app.auth.session_store import SessionStore
+from app.chat.conversation_store import ConversationStore
 from app.config import Settings
 from app.embedding.router import router as embedding_router
 from app.embedding.worker import EmbeddingWorker
@@ -185,12 +186,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.sync_engine = sync_engine
 
+        # Create conversation store early (in-memory, ephemeral) —
+        # needed by both AuthService (session eviction cascade) and ChatService.
+        conversation_store = ConversationStore(
+            max_turns=settings.conversation_max_turns,
+            ttl_seconds=settings.conversation_ttl_minutes * 60,
+            max_sessions=settings.conversation_max_sessions,
+        )
+        app.state.conversation_store = conversation_store
+
         # Wire auth service and router
         auth_service = AuthService(
             session_store=store,
             jellyfin_client=jf_client,
             session_expiry_hours=settings.session_expiry_hours,
             max_sessions_per_user=settings.max_sessions_per_user,
+            conversation_store=conversation_store,
         )
         auth_router = create_auth_router(
             auth_service=auth_service,
@@ -251,6 +262,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             chat_client=ollama_chat_client,
             pause_event=embedding_pause_event,
             settings=settings,
+            conversation_store=conversation_store,
         )
         app.state.chat_service = chat_service
 
@@ -281,7 +293,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             _logger.warning("ollama not reachable at startup")
 
         # Run expired-session cleanup once at startup
-        await cleanup_expired_sessions(store, jf_client)
+        await cleanup_expired_sessions(
+            store, jf_client, conversation_store=conversation_store
+        )
 
         # Schedule periodic cleanup
         cleanup_interval = settings.session_expiry_hours * 3600 / 4
@@ -290,11 +304,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             while True:
                 await asyncio.sleep(cleanup_interval)
                 try:
-                    await cleanup_expired_sessions(store, jf_client)
+                    await cleanup_expired_sessions(
+                        store, jf_client, conversation_store=conversation_store
+                    )
                 except Exception:
                     _logger.warning("session cleanup failed", exc_info=True)
 
         cleanup_task = asyncio.create_task(_periodic_cleanup())
+
+        # Schedule periodic conversation memory cleanup (TTL eviction)
+        async def _periodic_conversation_cleanup() -> None:
+            while True:
+                await asyncio.sleep(300)  # 5 minutes
+                try:
+                    conversation_store.cleanup()
+                except Exception:
+                    _logger.warning("conversation cleanup failed", exc_info=True)
+
+        conversation_cleanup_task = asyncio.create_task(
+            _periodic_conversation_cleanup()
+        )
 
         # Schedule periodic library sync (if configured)
         sync_task: asyncio.Task[None] | None = None
@@ -351,6 +380,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             sync_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await sync_task
+        conversation_cleanup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await conversation_cleanup_task
         cleanup_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await cleanup_task

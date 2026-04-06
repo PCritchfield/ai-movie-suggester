@@ -54,9 +54,14 @@ def csrf_app(tmp_path: object) -> Iterator[TestClient]:
 
     app = FastAPI()
     app.add_middleware(CSRFMiddleware)
+    from app.chat.conversation_store import ConversationStore
+
     app.state.session_store = store
     app.state.cookie_key = TEST_COOKIE_KEY
     app.state.jellyfin_client = mock_jf
+    app.state.conversation_store = ConversationStore(
+        max_turns=10, ttl_seconds=7200, max_sessions=100
+    )
 
     auth_router = create_auth_router(
         auth_service=service,

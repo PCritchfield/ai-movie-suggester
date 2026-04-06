@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from app.chat.conversation_store import ConversationTurn
     from app.search.models import SearchResultItem
 
 # ---------------------------------------------------------------------------
@@ -38,10 +39,17 @@ DEFAULT_CONVERSATIONAL_TONE = (
     "library fits well, say so honestly rather than forcing a bad match."
 )
 
+CONTEXT_PREFIX = "Available movies:\n"
+
 
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
+
+
+def estimate_tokens(text: str) -> int:
+    """Conservative character-based token estimate (chars / 4)."""
+    return len(text) // 4
 
 
 def get_system_prompt(operator_override: str | None = None) -> str:
@@ -98,31 +106,79 @@ def build_chat_messages(
     context_token_budget: int = 4000,
     max_results: int = 10,
     max_overview_chars: int = 200,
+    history: list[ConversationTurn] | None = None,
 ) -> list[dict[str, str]]:
     """Build the message list for the Ollama chat API.
 
-    Returns a list of three message dicts:
-    1. System message with the full system prompt
-    2. User message with the movie context
-    3. User message with the original query
+    Returns a list of message dicts suitable for the Ollama chat API.
+    When ``history`` is provided, conversation turns are included between
+    the system prompt and the movie context, subject to the token budget.
 
-    The ``context_token_budget`` parameter is accepted but NOT enforced
-    in v1 — it exists for future conversation memory (issue #113).
+    Budget allocation strategy:
+    1. System prompt and query are always included (never truncated).
+    2. Movie context is included next, shrinking ``max_results`` if needed.
+    3. Remaining budget is allocated to history (newest turns first).
 
     Args:
         query: The user's natural-language query.
         results: Search results for context.
         system_prompt: Pre-assembled system prompt.
-        context_token_budget: Reserved for future use (issue #113).
+        context_token_budget: Approximate token budget for the whole message
+            list (system + history + context + query).
         max_results: Maximum movies in context.
         max_overview_chars: Truncate overviews.
+        history: Previous conversation turns (chronological order).
 
     Returns:
         List of message dicts with role and content keys.
     """
-    context = format_movie_context(results, max_results, max_overview_chars)
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Available movies:\n{context}"},
-        {"role": "user", "content": query},
-    ]
+    system_msg: dict[str, str] = {"role": "system", "content": system_prompt}
+    query_msg: dict[str, str] = {"role": "user", "content": query}
+
+    system_tokens = estimate_tokens(system_prompt)
+    query_tokens = estimate_tokens(query)
+    remaining_budget = context_token_budget - system_tokens - query_tokens
+
+    # Graceful degradation: if budget exhausted by system + query, return
+    # just those two messages.
+    if remaining_budget <= 0:
+        return [system_msg, query_msg]
+
+    # --- Movie context (shrink max_results until it fits) ----------------
+    effective_max = min(max_results, len(results))
+    context_text = ""
+    context_tokens = 0
+    while effective_max >= 0:
+        context_text = format_movie_context(results, effective_max, max_overview_chars)
+        context_tokens = estimate_tokens(f"{CONTEXT_PREFIX}{context_text}")
+        if context_tokens <= remaining_budget or effective_max == 0:
+            break
+        effective_max -= 1
+
+    context_msg: dict[str, str] = {
+        "role": "user",
+        "content": f"{CONTEXT_PREFIX}{context_text}",
+    }
+
+    # --- History (newest-first, subject to remaining budget) -------------
+    history_budget = remaining_budget - context_tokens
+    history_msgs: list[dict[str, str]] = []
+
+    if history and history_budget > 0:
+        accumulated = 0
+        # Walk newest-first and keep the most recent contiguous suffix
+        # that fits. Stop on the first turn that doesn't fit to preserve
+        # conversational coherence (no orphaned user/assistant turns).
+        for turn in reversed(history):
+            turn_tokens = estimate_tokens(turn.content)
+            if accumulated + turn_tokens > history_budget:
+                break
+            history_msgs.append({"role": turn.role, "content": turn.content})
+            accumulated += turn_tokens
+        # Reverse to restore chronological order.
+        history_msgs.reverse()
+
+    # --- Assemble --------------------------------------------------------
+    if history_msgs:
+        return [system_msg, *history_msgs, context_msg, query_msg]
+    return [system_msg, context_msg, query_msg]

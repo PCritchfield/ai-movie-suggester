@@ -6,7 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from slowapi import Limiter  # noqa: TC002
 
@@ -70,11 +70,31 @@ def create_chat_router(
             query=body.message,
             user_id=session.user_id,
             token=token,
+            session_id=session.session_id,
         )
 
         return StreamingResponse(
             content=_sse_generator(event_stream),
             media_type="text/event-stream",
         )
+
+    @router.delete(
+        "/chat/history",
+        status_code=204,
+        responses={
+            204: {"description": "History cleared (or no history existed)"},
+            401: {"description": "Not authenticated"},
+        },
+    )
+    async def clear_chat_history(
+        request: Request,
+        session: SessionMeta = Depends(get_current_session),  # noqa: B008
+    ) -> Response:
+        """Clear the current user's conversation history."""
+        conversation_store = request.app.state.conversation_store
+        lock = conversation_store.get_lock(session.session_id)
+        async with lock:
+            conversation_store.clear_history(session.session_id)
+        return Response(status_code=204)
 
     return router

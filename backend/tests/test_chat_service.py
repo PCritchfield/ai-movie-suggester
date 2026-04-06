@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock
 
+from app.chat.conversation_store import ConversationStore
 from app.chat.service import ChatService
 from app.ollama.errors import OllamaConnectionError
 from app.search.models import SearchResponse, SearchResultItem, SearchStatus
@@ -34,17 +35,24 @@ def _make_chat_service(
     search_service: AsyncMock | None = None,
     chat_client: AsyncMock | None = None,
     pause_event: asyncio.Event | None = None,
+    conversation_store: ConversationStore | None = None,
 ) -> ChatService:
     settings = make_test_settings()
     _search = search_service or AsyncMock()
     _chat = chat_client or AsyncMock()
     _pause = pause_event or asyncio.Event()
     _pause.set()  # default: embedding not paused
+    _conv = conversation_store or ConversationStore(
+        max_turns=settings.conversation_max_turns,
+        ttl_seconds=settings.conversation_ttl_minutes * 60,
+        max_sessions=settings.conversation_max_sessions,
+    )
     return ChatService(
         search_service=_search,
         chat_client=_chat,
         pause_event=_pause,
         settings=settings,
+        conversation_store=_conv,
     )
 
 
@@ -84,6 +92,7 @@ class TestChatServiceHappyPath:
             query="funny space movies",
             user_id="uid-1",
             token="jf-token",
+            session_id="test-session",
         )
 
         # First event is metadata
@@ -122,6 +131,7 @@ class TestChatServiceHappyPath:
             query="anything?",
             user_id="uid-1",
             token="jf-token",
+            session_id="test-session",
         )
 
         assert events[0]["type"] == "metadata"
@@ -158,6 +168,7 @@ class TestChatServiceErrors:
             query="test",
             user_id="uid-1",
             token="jf-token",
+            session_id="test-session",
         )
 
         assert events[0]["type"] == "metadata"
@@ -186,6 +197,7 @@ class TestChatServiceErrors:
             query="test",
             user_id="uid-1",
             token="jf-token",
+            session_id="test-session",
         )
 
         assert events[0]["type"] == "metadata"
@@ -224,6 +236,7 @@ class TestChatServicePauseSignaling:
             query="test",
             user_id="uid-1",
             token="jf-token",
+            session_id="test-session",
         )
 
         # After stream completes, pause event should be set (unpaused)
@@ -256,8 +269,145 @@ class TestChatServicePauseSignaling:
             query="test",
             user_id="uid-1",
             token="jf-token",
+            session_id="test-session",
         )
 
         # Even after error, pause event should be restored
         assert pause_event.is_set()
         assert events[1]["type"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# Conversation memory
+# ---------------------------------------------------------------------------
+
+
+class TestChatServiceConversationMemory:
+    async def test_chat_endpoint_maintains_history(self) -> None:
+        """Two sequential messages — turn_count increases."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fake_stream(messages):
+            yield "Response"
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fake_stream
+
+        store = ConversationStore(max_turns=20)
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            conversation_store=store,
+        )
+
+        # First message
+        events1 = await _collect_events(
+            service,
+            query="hello",
+            user_id="uid-1",
+            token="jf-token",
+            session_id="s1",
+        )
+        assert events1[0]["turn_count"] == 1  # user turn stored
+
+        # Second message
+        events2 = await _collect_events(
+            service,
+            query="more",
+            user_id="uid-1",
+            token="jf-token",
+            session_id="s1",
+        )
+        # After first exchange: user + assistant = 2 turns. Then new user = 3.
+        assert events2[0]["turn_count"] == 3
+
+    async def test_chat_endpoint_turn_count_in_metadata(self) -> None:
+        """Metadata event includes turn_count field."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fake_stream(messages):
+            yield "Hi"
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fake_stream
+
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+        )
+
+        events = await _collect_events(
+            service,
+            query="test",
+            user_id="uid-1",
+            token="jf-token",
+            session_id="test-session",
+        )
+        assert "turn_count" in events[0]
+        assert events[0]["turn_count"] == 1
+
+    async def test_chat_endpoint_history_truncation_graceful(self) -> None:
+        """Many messages exceeding turn limit — no error, oldest evicted."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fake_stream(messages):
+            yield "Ok"
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fake_stream
+
+        store = ConversationStore(max_turns=4)
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            conversation_store=store,
+        )
+
+        for i in range(5):
+            events = await _collect_events(
+                service,
+                query=f"msg-{i}",
+                user_id="uid-1",
+                token="jf-token",
+                session_id="s1",
+            )
+            assert events[-1]["type"] == "done"
+
+        # Store should have exactly 4 turns (limit)
+        assert store.turn_count("s1") == 4
+
+    async def test_chat_mid_stream_error_preserves_user_turn(self) -> None:
+        """Ollama failure: user turn stored, no assistant turn."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fail_stream(messages):
+            raise OllamaConnectionError("Cannot reach Ollama")
+            yield  # pragma: no cover  # noqa: RUF028
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fail_stream
+
+        store = ConversationStore(max_turns=10)
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            conversation_store=store,
+        )
+
+        events = await _collect_events(
+            service,
+            query="test",
+            user_id="uid-1",
+            token="jf-token",
+            session_id="s1",
+        )
+
+        assert events[-1]["type"] == "error"
+        turns = store.get_turns("s1")
+        assert len(turns) == 1
+        assert turns[0].role == "user"
+        assert turns[0].content == "test"

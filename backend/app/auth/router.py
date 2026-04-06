@@ -174,6 +174,9 @@ def create_auth_router(
             return LogoutResponse(detail="Logged out")
 
         await session_store.delete(session_id)
+        # Cascade: purge conversation memory for this session
+        conversation_store = request.app.state.conversation_store
+        conversation_store.purge_session(session_id)
         logger.info("user_logout user_id=%s", session.user_id)
 
         # Invalidate permission cache for the user

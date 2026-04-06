@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from app.chat.conversation_store import ConversationTurn
 from app.chat.prompts import (
     DEFAULT_CONVERSATIONAL_TONE,
     STRUCTURAL_FRAMING,
     build_chat_messages,
+    estimate_tokens,
     format_movie_context,
     get_system_prompt,
 )
@@ -146,3 +148,136 @@ class TestBuildChatMessages:
             system_prompt=prompt,
         )
         assert messages[0]["content"] == prompt
+
+
+# ---------------------------------------------------------------------------
+# build_chat_messages with history (Spec 15, Task 3.0)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildChatMessagesWithHistory:
+    def test_estimate_tokens(self) -> None:
+        """estimate_tokens returns len // 4."""
+        assert estimate_tokens("hello world") == len("hello world") // 4
+        assert estimate_tokens("") == 0
+
+    def test_build_chat_messages_with_history(self) -> None:
+        """History turns appear between system prompt and current context."""
+        results = [_make_result()]
+        prompt = get_system_prompt()
+        history = [
+            ConversationTurn(role="user", content="I like sci-fi"),
+            ConversationTurn(
+                role="assistant",
+                content="Great! Here are some sci-fi picks.",
+            ),
+        ]
+        messages = build_chat_messages(
+            query="more like that",
+            results=results,
+            system_prompt=prompt,
+            context_token_budget=6000,
+            history=history,
+        )
+        assert len(messages) == 5
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "user"
+        assert messages[1]["content"] == "I like sci-fi"
+        assert messages[2]["role"] == "assistant"
+        assert messages[2]["content"] == "Great! Here are some sci-fi picks."
+        assert messages[3]["role"] == "user"  # movie context
+        assert "Available movies:" in messages[3]["content"]
+        assert messages[4]["role"] == "user"  # query
+        assert messages[4]["content"] == "more like that"
+
+    def test_build_chat_messages_backward_compatible(self) -> None:
+        """Call without history produces same 3-message structure."""
+        results = [_make_result()]
+        prompt = get_system_prompt()
+        messages = build_chat_messages(
+            query="test",
+            results=results,
+            system_prompt=prompt,
+        )
+        assert len(messages) == 3
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "user"
+        assert messages[2]["role"] == "user"
+
+    def test_build_chat_messages_history_truncation(self) -> None:
+        """History exceeding budget: oldest turns dropped, newest preserved."""
+        # Create 20 turns with substantial content
+        history = []
+        for i in range(20):
+            role = "user" if i % 2 == 0 else "assistant"
+            history.append(
+                ConversationTurn(role=role, content=f"message {i} " + "x" * 200)
+            )
+
+        results = [_make_result()]
+        prompt = get_system_prompt()
+        messages = build_chat_messages(
+            query="test",
+            results=results,
+            system_prompt=prompt,
+            context_token_budget=500,
+            history=history,
+        )
+        # System prompt is always first
+        assert messages[0]["role"] == "system"
+        # Last message is always the query
+        assert messages[-1]["content"] == "test"
+        # Not all history fits — fewer than 20 history messages
+        assert len(messages) < 23  # system + 20 history + context + query
+
+    def test_build_chat_messages_system_prompt_never_truncated(self) -> None:
+        """Even with massive history, system prompt is always present and complete."""
+        prompt = get_system_prompt()
+        history = [
+            ConversationTurn(role="user", content="x" * 10000) for _ in range(10)
+        ]
+        messages = build_chat_messages(
+            query="test",
+            results=[_make_result()],
+            system_prompt=prompt,
+            context_token_budget=100,
+            history=history,
+        )
+        assert messages[0]["role"] == "system"
+        assert messages[0]["content"] == prompt
+
+    def test_build_chat_messages_budget_allocation(self) -> None:
+        """Movie context preserved when history is truncated."""
+        history = [ConversationTurn(role="user", content="x" * 500) for _ in range(10)]
+        results = [_make_result(title="Galaxy Quest")]
+        prompt = get_system_prompt()
+        messages = build_chat_messages(
+            query="test",
+            results=results,
+            system_prompt=prompt,
+            context_token_budget=800,
+            history=history,
+        )
+        # Movie context should be present
+        context_msgs = [
+            m for m in messages if "Available movies:" in m.get("content", "")
+        ]
+        assert len(context_msgs) == 1
+        assert "Galaxy Quest" in context_msgs[0]["content"]
+
+    def test_build_chat_messages_budget_exhausted_by_system_and_query(self) -> None:
+        """When budget is tiny, returns just [system, query]. No crash."""
+        prompt = get_system_prompt()
+        history = [ConversationTurn(role="user", content="should not appear")]
+        messages = build_chat_messages(
+            query="test",
+            results=[_make_result()],
+            system_prompt=prompt,
+            context_token_budget=10,  # far too small
+            history=history,
+        )
+        assert len(messages) == 2
+        assert messages[0]["role"] == "system"
+        assert messages[0]["content"] == prompt
+        assert messages[1]["role"] == "user"
+        assert messages[1]["content"] == "test"

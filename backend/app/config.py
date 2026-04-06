@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     search_overfetch_multiplier: Annotated[int, Field(ge=1, le=10)] = 3
     search_rate_limit: int = 10
 
+    # Conversation memory
+    conversation_max_turns: Annotated[int, Field(ge=1, le=100)] = 10
+    conversation_ttl_minutes: Annotated[int, Field(ge=1)] = 120
+    conversation_max_sessions: Annotated[int, Field(ge=1)] = 100
+    conversation_context_budget: Annotated[int, Field(ge=100)] = 6000
+
     @model_validator(mode="after")
     def _validate_embedding_batch_size(self) -> Settings:
         """Reject embedding_batch_size outside the 1–50 range."""
