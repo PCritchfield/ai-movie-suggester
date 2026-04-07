@@ -1,5 +1,5 @@
-import { getCsrfToken, getBaseUrl } from "./shared";
-import { ApiAuthError, ApiError, NetworkError } from "./types";
+import { getCsrfToken, getBaseUrl, parseResponse } from "./shared";
+import { networkFetch } from "./client";
 import type { SSEEvent } from "./types";
 
 /**
@@ -58,6 +58,10 @@ export async function* parseSSEStream(
  * POST /api/chat with JSON body { message }, CSRF token, and credentials.
  * On success, returns the ReadableStream for consumption by parseSSEStream().
  * On error, throws ApiAuthError (401/403), ApiError (429/422), or NetworkError.
+ *
+ * Reuses networkFetch (NetworkError wrapping) and parseResponse (error
+ * classification) from the shared API client. The only difference from
+ * apiPost is that on success we return the raw stream, not parsed JSON.
  */
 export async function sendChatMessage(
   message: string
@@ -71,39 +75,17 @@ export async function sendChatMessage(
     headers["X-CSRF-Token"] = csrf;
   }
 
-  let response: Response;
-  try {
-    response = await fetch(`${getBaseUrl()}/api/chat`, {
-      method: "POST",
-      credentials: "include",
-      headers,
-      body: JSON.stringify({ message }),
-    });
-  } catch (err) {
-    if (err instanceof TypeError) {
-      throw new NetworkError();
-    }
-    throw err;
-  }
+  const response = await networkFetch(`${getBaseUrl()}/api/chat`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify({ message }),
+  });
 
-  if (response.status === 401 || response.status === 403) {
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      body = null;
-    }
-    throw new ApiAuthError(response.status as 401 | 403, body);
-  }
-
+  // For non-OK responses, delegate to parseResponse which throws
+  // ApiAuthError (401/403) or ApiError (other statuses)
   if (!response.ok) {
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      body = null;
-    }
-    throw new ApiError(response.status, body);
+    await parseResponse<never>(response);
   }
 
   if (!response.body) {

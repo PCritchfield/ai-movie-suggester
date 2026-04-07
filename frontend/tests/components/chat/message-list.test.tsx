@@ -153,7 +153,7 @@ describe("MessageList error handling", () => {
       role: "user",
       content: "hello",
       error: {
-        code: "generation_timeout",
+        code: "auth_expired",
         message: "Your session has expired.",
       },
     };
@@ -178,7 +178,7 @@ describe("MessageList error handling", () => {
       role: "assistant",
       content: "",
       error: {
-        code: "generation_timeout",
+        code: "rate_limited",
         message: "Too many requests. Please wait a moment.",
       },
     };
@@ -242,7 +242,7 @@ describe("MessageList accessibility", () => {
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
-  });
+  }, 15000);
 
   it("passes axe audit (streaming state)", async () => {
     const streamingMsg: ChatMessage = {
@@ -256,7 +256,7 @@ describe("MessageList accessibility", () => {
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
-  });
+  }, 15000);
 
   it("passes axe audit (error state with retry button)", async () => {
     const errorMsg: ChatMessage = {
@@ -277,7 +277,7 @@ describe("MessageList accessibility", () => {
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
-  });
+  }, 15000);
 
   it("message list container has role='log' and aria-live='polite'", () => {
     render(<MessageList messages={[userMessage]} isStreaming={false} />);

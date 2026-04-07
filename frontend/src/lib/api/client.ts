@@ -1,7 +1,7 @@
 import { getCsrfToken, getBaseUrl, parseResponse } from "./shared";
 import { NetworkError } from "./types";
 
-async function networkFetch(
+export async function networkFetch(
   input: string,
   init: RequestInit
 ): Promise<Response> {

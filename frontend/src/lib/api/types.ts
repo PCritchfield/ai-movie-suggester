@@ -62,7 +62,9 @@ export type ChatErrorCode =
   | "generation_timeout"
   | "ollama_unavailable"
   | "search_unavailable"
-  | "stream_interrupted";
+  | "stream_interrupted"
+  | "auth_expired"
+  | "rate_limited";
 
 // --- SSE Event types (discriminated union) ---
 

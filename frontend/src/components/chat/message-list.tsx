@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -36,12 +36,8 @@ function MessageError({
   messageId: string;
   onRetry?: (messageId: string) => void;
 }) {
-  const is401 =
-    error.code === "generation_timeout" &&
-    error.message === "Your session has expired.";
-  const is429 =
-    error.code === "generation_timeout" &&
-    error.message.includes("Too many requests");
+  const is401 = error.code === "auth_expired";
+  const is429 = error.code === "rate_limited";
 
   return (
     <div role="alert" className="mt-2 text-sm text-destructive">
@@ -100,9 +96,6 @@ function RetryButton({
     </button>
   );
 }
-
-// Need React import for RetryButton useState/useEffect
-import React from "react";
 
 export function MessageList({
   messages,
