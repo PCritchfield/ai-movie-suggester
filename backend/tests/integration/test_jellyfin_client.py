@@ -14,7 +14,7 @@ import pytest_asyncio
 
 from app.jellyfin.client import JellyfinClient
 from app.jellyfin.errors import JellyfinAuthError
-from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo
+from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo, WatchHistoryEntry
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -114,3 +114,29 @@ async def test_get_items_pagination_params(
     )
     assert isinstance(result, PaginatedItems)
     assert result.start_index == 0
+
+
+@pytest.mark.integration
+async def test_get_watched_items_returns_list(
+    jf_client: JellyfinClient,
+    test_users: dict[str, str],
+) -> None:
+    """get_watched_items returns list[WatchHistoryEntry] (empty for test instance)."""
+    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    result = await jf_client.get_watched_items(auth.access_token, auth.user_id)
+    assert isinstance(result, list)
+    for entry in result:
+        assert isinstance(entry, WatchHistoryEntry)
+
+
+@pytest.mark.integration
+async def test_get_favorite_items_returns_list(
+    jf_client: JellyfinClient,
+    test_users: dict[str, str],
+) -> None:
+    """get_favorite_items returns list[WatchHistoryEntry] (empty for test instance)."""
+    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    result = await jf_client.get_favorite_items(auth.access_token, auth.user_id)
+    assert isinstance(result, list)
+    for entry in result:
+        assert isinstance(entry, WatchHistoryEntry)

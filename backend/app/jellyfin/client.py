@@ -8,6 +8,7 @@ format (Authorization header, not X-Emby-Authorization; no quotes on Token).
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
@@ -20,7 +21,7 @@ from app.jellyfin.errors import (
     JellyfinConnectionError,
     JellyfinError,
 )
-from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo
+from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo, WatchHistoryEntry
 
 logger = logging.getLogger(__name__)
 
@@ -257,3 +258,114 @@ class JellyfinClient:
             start_index += len(page.items)
             if start_index >= page.total_count:
                 break
+
+    @staticmethod
+    def _parse_watch_entry(item: dict[str, Any]) -> WatchHistoryEntry:
+        """Parse a single Jellyfin item dict into a WatchHistoryEntry.
+
+        Handles missing/null UserData gracefully with safe defaults.
+        """
+        user_data = item.get("UserData") or {}
+        last_played_raw = user_data.get("LastPlayedDate")
+        last_played_date: datetime | None = None
+        if last_played_raw:
+            last_played_date = datetime.fromisoformat(last_played_raw)
+        return WatchHistoryEntry(
+            jellyfin_id=item["Id"],
+            last_played_date=last_played_date,
+            play_count=user_data.get("PlayCount", 0),
+            is_favorite=user_data.get("IsFavorite", False),
+        )
+
+    async def _paginate_watch_entries(
+        self,
+        token: str,
+        user_id: str,
+        params: dict[str, str | int | bool],
+        log_prefix: str,
+    ) -> list[WatchHistoryEntry]:
+        """Auto-paginate a watch-history style query, returning all entries.
+
+        Shared pagination logic for get_watched_items and get_favorite_items.
+        The caller supplies the filter-specific *params*; this method adds
+        StartIndex/Limit and drives the pagination loop.
+
+        Token is passed through to _request, never stored.
+        """
+        page_size = 200
+        start_index = 0
+        page_number = 0
+        all_entries: list[WatchHistoryEntry] = []
+
+        def _extract(data: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+            return data["Items"], data["TotalRecordCount"]
+
+        while True:
+            page_params = {**params, "StartIndex": start_index, "Limit": page_size}
+            resp = await self._request(
+                "GET",
+                f"/Users/{user_id}/Items",
+                token=token,
+                params=page_params,
+            )
+
+            items, total_count = self._parse_response(resp, _extract)
+            page_number += 1
+            logger.debug("%s page=%d items=%d", log_prefix, page_number, len(items))
+
+            for item in items:
+                try:
+                    all_entries.append(self._parse_watch_entry(item))
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise JellyfinError(
+                        "Unexpected Jellyfin response while parsing watch entry"
+                    ) from exc
+
+            if not items:
+                break
+
+            start_index += len(items)
+            if start_index >= total_count:
+                break
+
+        return all_entries
+
+    async def get_watched_items(
+        self,
+        token: str,
+        user_id: str,
+    ) -> list[WatchHistoryEntry]:
+        """Fetch all played items for a user, auto-paginating.
+
+        Uses the user's own token for per-user permission enforcement.
+        Token is passed through to _request, never stored.
+        """
+        params: dict[str, str | int | bool] = {
+            "IsPlayed": True,
+            "IncludeItemTypes": "Movie",
+            "SortBy": "DatePlayed",
+            "SortOrder": "Descending",
+            "Recursive": True,
+        }
+        return await self._paginate_watch_entries(
+            token, user_id, params, "watched_items_fetch"
+        )
+
+    async def get_favorite_items(
+        self,
+        token: str,
+        user_id: str,
+    ) -> list[WatchHistoryEntry]:
+        """Fetch all favorited items for a user, auto-paginating.
+
+        Uses the user's own token for per-user permission enforcement.
+        Token is passed through to _request, never stored.
+        """
+        params: dict[str, str | int | bool] = {
+            "IsFavorite": True,
+            "IncludeItemTypes": "Movie",
+            "Recursive": True,
+        }
+        return await self._paginate_watch_entries(
+            token, user_id, params, "favorite_items_fetch"
+        )
