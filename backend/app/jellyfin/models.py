@@ -1,6 +1,7 @@
-"""Pydantic models for Jellyfin API responses.
+"""Pydantic models and dataclass DTOs for Jellyfin API responses.
 
 Uses Field aliases to map Jellyfin's PascalCase JSON to snake_case Python.
+Includes plain dataclass DTOs for lightweight internal transfer objects.
 """
 
 from __future__ import annotations

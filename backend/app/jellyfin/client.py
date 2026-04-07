@@ -314,7 +314,12 @@ class JellyfinClient:
             logger.debug("%s page=%d items=%d", log_prefix, page_number, len(items))
 
             for item in items:
-                all_entries.append(self._parse_watch_entry(item))
+                try:
+                    all_entries.append(self._parse_watch_entry(item))
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise JellyfinError(
+                        "Unexpected Jellyfin response while parsing watch entry"
+                    ) from exc
 
             if not items:
                 break
