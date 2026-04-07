@@ -229,3 +229,69 @@ describe("MessageList error handling", () => {
     expect(screen.getByText("Search is down")).toBeInTheDocument();
   });
 });
+
+// ─── Accessibility Tests ───────────────────────────────────────────────
+
+describe("MessageList accessibility", () => {
+  it("passes axe audit (default state with mixed messages)", async () => {
+    const { container } = render(
+      <MessageList
+        messages={[userMessage, assistantMessage]}
+        isStreaming={false}
+      />
+    );
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it("passes axe audit (streaming state)", async () => {
+    const streamingMsg: ChatMessage = {
+      id: "a-stream",
+      role: "assistant",
+      content: "Streaming content...",
+      isStreaming: true,
+    };
+    const { container } = render(
+      <MessageList messages={[userMessage, streamingMsg]} isStreaming={true} />
+    );
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it("passes axe audit (error state with retry button)", async () => {
+    const errorMsg: ChatMessage = {
+      id: "a-err-axe",
+      role: "assistant",
+      content: "",
+      error: {
+        code: "stream_interrupted",
+        message: "Connection lost",
+      },
+    };
+    const { container } = render(
+      <MessageList
+        messages={[userMessage, errorMsg]}
+        isStreaming={false}
+        onRetry={vi.fn()}
+      />
+    );
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it("message list container has role='log' and aria-live='polite'", () => {
+    render(<MessageList messages={[userMessage]} isStreaming={false} />);
+    const log = screen.getByRole("log");
+    expect(log).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("aria-busy toggles between 'true' (streaming) and 'false' (idle)", () => {
+    const { rerender } = render(
+      <MessageList messages={[userMessage]} isStreaming={true} />
+    );
+    expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "true");
+
+    rerender(<MessageList messages={[userMessage]} isStreaming={false} />);
+    expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "false");
+  });
+});

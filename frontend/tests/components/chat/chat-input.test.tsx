@@ -72,4 +72,20 @@ describe("ChatInput", () => {
     expect(button.className).toContain("min-h-11");
     expect(button.className).toContain("min-w-11");
   });
+
+  it("passes axe accessibility audit (default state)", async () => {
+    const { container } = render(
+      <ChatInput onSend={vi.fn()} isStreaming={false} />
+    );
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it("passes axe accessibility audit (streaming/disabled state)", async () => {
+    const { container } = render(
+      <ChatInput onSend={vi.fn()} isStreaming={true} />
+    );
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
 });

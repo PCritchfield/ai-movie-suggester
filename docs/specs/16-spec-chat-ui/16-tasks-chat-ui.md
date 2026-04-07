@@ -135,7 +135,7 @@ Add inline error display on message bubbles for both SSE-level errors (ChatError
 - [x] 3.9 Write `retry` hook test: calling `retry(messageId)` removes the failed assistant message and re-sends the original user message text (file: `frontend/tests/hooks/use-chat.test.ts`)
 - [x] 3.10 Run full test suite (`npm test`) to confirm all error handling tests pass
 
-### [ ] 4.0 Accessibility Audit and Mobile Viewport Polish
+### [x] 4.0 Accessibility Audit and Mobile Viewport Polish
 
 Add `role="log"` and `aria-live="polite"` to message list container. Toggle `aria-busy` with streaming state. Ensure all interactive elements use semantic HTML (`<form>`, `<button>`, `<textarea>`). Add `aria-label` attributes to send, retry, and new conversation buttons. Apply `height: 100dvh` layout, `position: sticky` input, `env(safe-area-inset-bottom)` padding. Run axe audits on all chat components. Demoable via axe audit passing with zero violations plus mobile viewport screenshot at 375px.
 
@@ -152,16 +152,16 @@ Add `role="log"` and `aria-live="polite"` to message list container. Toggle `ari
 
 #### 4.0 Tasks
 
-- [ ] 4.1 Add `role="log"` and `aria-live="polite"` attributes to the `MessageList` scroll container element (file: `frontend/src/components/chat/message-list.tsx`)
-- [ ] 4.2 Add `aria-busy` attribute to the `MessageList` container that toggles to `"true"` when `isStreaming` prop is true and `"false"` when idle (file: `frontend/src/components/chat/message-list.tsx`)
-- [ ] 4.3 Verify all interactive elements use semantic HTML: `ChatInput` uses `<form>` wrapping `<textarea>` + `<button>`, retry/clear actions use `<button>` elements (not `<div>` or `<span>` with click handlers). Audit and fix any non-semantic elements (files: `frontend/src/components/chat/chat-input.tsx`, `frontend/src/components/chat/message-list.tsx`)
-- [ ] 4.4 Ensure `aria-label` attributes are present: send button (`"Send message"`), retry buttons (`"Retry message"`), new conversation button (`"Start new conversation"`). Verify no duplicate or missing labels (files: `frontend/src/components/chat/chat-input.tsx`, `frontend/src/components/chat/message-list.tsx`)
-- [ ] 4.5 Apply `height: 100dvh` to the chat page root container, `flex: 1; overflow-y: auto` to the message list, and `position: sticky; bottom: 0` to the input area. Add `padding-bottom: env(safe-area-inset-bottom)` to the input container for iOS home indicator (file: `frontend/src/app/(protected)/page.tsx`)
-- [ ] 4.6 Add axe accessibility audit to `MessageList` tests: (1) default state with mixed user/assistant messages passes axe, (2) streaming state (assistant message with `isStreaming: true`) passes axe (file: `frontend/tests/components/chat/message-list.test.tsx`)
-- [ ] 4.7 Add axe accessibility audit to `ChatInput` tests: (1) default state passes axe, (2) disabled/streaming state passes axe (file: `frontend/tests/components/chat/chat-input.test.tsx`)
-- [ ] 4.8 Add axe accessibility audit to error state: render a `MessageList` containing a message with an error and retry button, assert `toHaveNoViolations()` (file: `frontend/tests/components/chat/message-list.test.tsx`)
-- [ ] 4.9 Write ARIA attribute tests: (1) message list container has `role="log"`, (2) message list container has `aria-live="polite"`, (3) `aria-busy` is `"true"` during streaming and `"false"` when idle, (4) error elements have `role="alert"` (file: `frontend/tests/components/chat/message-list.test.tsx`)
-- [ ] 4.10 Run full test suite (`npm test`) including all axe audits to confirm zero violations. Verify mobile layout at 375px viewport width via responsive devtools or screenshot
+- [x] 4.1 Add `role="log"` and `aria-live="polite"` attributes to the `MessageList` scroll container element (file: `frontend/src/components/chat/message-list.tsx`)
+- [x] 4.2 Add `aria-busy` attribute to the `MessageList` container that toggles to `"true"` when `isStreaming` prop is true and `"false"` when idle (file: `frontend/src/components/chat/message-list.tsx`)
+- [x] 4.3 Verify all interactive elements use semantic HTML: `ChatInput` uses `<form>` wrapping `<textarea>` + `<button>`, retry/clear actions use `<button>` elements (not `<div>` or `<span>` with click handlers). Audit and fix any non-semantic elements (files: `frontend/src/components/chat/chat-input.tsx`, `frontend/src/components/chat/message-list.tsx`)
+- [x] 4.4 Ensure `aria-label` attributes are present: send button (`"Send message"`), retry buttons (`"Retry message"`), new conversation button (`"Start new conversation"`). Verify no duplicate or missing labels (files: `frontend/src/components/chat/chat-input.tsx`, `frontend/src/components/chat/message-list.tsx`)
+- [x] 4.5 Apply `height: 100dvh` to the chat page root container, `flex: 1; overflow-y: auto` to the message list, and `position: sticky; bottom: 0` to the input area. Add `padding-bottom: env(safe-area-inset-bottom)` to the input container for iOS home indicator (file: `frontend/src/app/(protected)/page.tsx`)
+- [x] 4.6 Add axe accessibility audit to `MessageList` tests: (1) default state with mixed user/assistant messages passes axe, (2) streaming state (assistant message with `isStreaming: true`) passes axe (file: `frontend/tests/components/chat/message-list.test.tsx`)
+- [x] 4.7 Add axe accessibility audit to `ChatInput` tests: (1) default state passes axe, (2) disabled/streaming state passes axe (file: `frontend/tests/components/chat/chat-input.test.tsx`)
+- [x] 4.8 Add axe accessibility audit to error state: render a `MessageList` containing a message with an error and retry button, assert `toHaveNoViolations()` (file: `frontend/tests/components/chat/message-list.test.tsx`)
+- [x] 4.9 Write ARIA attribute tests: (1) message list container has `role="log"`, (2) message list container has `aria-live="polite"`, (3) `aria-busy` is `"true"` during streaming and `"false"` when idle, (4) error elements have `role="alert"` (file: `frontend/tests/components/chat/message-list.test.tsx`)
+- [x] 4.10 Run full test suite (`npm test`) including all axe audits to confirm zero violations. Verify mobile layout at 375px viewport width via responsive devtools or screenshot
 
 ### [ ] 5.0 Header, Empty State, and Search Status Banner
 
