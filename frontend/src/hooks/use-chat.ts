@@ -186,6 +186,7 @@ export function useChat(): UseChatReturn {
   const bufferRef = useRef("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const assistantIdRef = useRef<string>("");
+  const lastFlushedLengthRef = useRef(0);
 
   const stopFlushTimer = useCallback(() => {
     if (intervalRef.current) {
@@ -208,11 +209,13 @@ export function useChat(): UseChatReturn {
       messageText: string
     ) => {
       bufferRef.current = "";
+      lastFlushedLengthRef.current = 0;
       assistantIdRef.current = assistantMessageId;
 
-      // Set up 50ms flush interval
+      // Set up 50ms flush interval — only dispatch when new tokens arrived
       intervalRef.current = setInterval(() => {
-        if (bufferRef.current) {
+        if (bufferRef.current.length > lastFlushedLengthRef.current) {
+          lastFlushedLengthRef.current = bufferRef.current.length;
           dispatch({
             type: "UPDATE_ASSISTANT_CONTENT",
             payload: {
@@ -384,10 +387,21 @@ export function useChat(): UseChatReturn {
     (messageId: string) => {
       if (isStreamingRef.current) return;
 
-      // Find the user message that triggered the failed exchange
-      const userMessage = state.messages.find(
-        (m) => m.id === messageId && m.role === "user"
-      );
+      // Find the user message that triggered the failed exchange.
+      // If retrying from an assistant error, find the preceding user message.
+      const msg = state.messages.find((m) => m.id === messageId);
+      if (!msg) return;
+
+      let userMessage: ChatMessage | undefined;
+      if (msg.role === "assistant") {
+        const idx = state.messages.indexOf(msg);
+        userMessage = state.messages
+          .slice(0, idx)
+          .reverse()
+          .find((m) => m.role === "user");
+      } else {
+        userMessage = msg;
+      }
       if (!userMessage) return;
 
       // Find the paired errored assistant message (right after user message)

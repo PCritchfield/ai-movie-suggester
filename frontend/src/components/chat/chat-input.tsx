@@ -1,6 +1,12 @@
 "use client";
 
-import { useRef, useCallback, type FormEvent, type KeyboardEvent } from "react";
+import {
+  useRef,
+  useState,
+  useCallback,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import { Send } from "lucide-react";
 
 interface ChatInputProps {
@@ -10,6 +16,7 @@ interface ChatInputProps {
 
 export function ChatInput({ onSend, isStreaming }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [hasContent, setHasContent] = useState(false);
 
   const resetTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -17,6 +24,7 @@ export function ChatInput({ onSend, isStreaming }: ChatInputProps) {
       textarea.value = "";
       textarea.style.height = "auto";
       textarea.focus();
+      setHasContent(false);
     }
   }, []);
 
@@ -51,6 +59,8 @@ export function ChatInput({ onSend, isStreaming }: ChatInputProps) {
   const handleInput = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
+    // Track whether the textarea has non-whitespace content
+    setHasContent(textarea.value.trim().length > 0);
     // Reset height to auto to get the correct scrollHeight
     textarea.style.height = "auto";
     // Max height: approximately 6 lines (~144px)
@@ -84,7 +94,7 @@ export function ChatInput({ onSend, isStreaming }: ChatInputProps) {
         />
         <button
           type="submit"
-          disabled={isStreaming}
+          disabled={isStreaming || !hasContent}
           aria-label="Send message"
           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >

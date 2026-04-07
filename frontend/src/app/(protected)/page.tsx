@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { useChat } from "@/hooks/use-chat";
 import { HeaderContent } from "@/components/chat/header-content";
 import { MessageList } from "@/components/chat/message-list";
@@ -24,6 +24,15 @@ export default function ChatPage() {
     }
     return undefined;
   }, [messages]);
+
+  // Reset banner dismissal when search status transitions (no effect needed)
+  const prevSearchStatusRef = useRef(latestSearchStatus);
+  if (prevSearchStatusRef.current !== latestSearchStatus) {
+    prevSearchStatusRef.current = latestSearchStatus;
+    if (bannerDismissed) {
+      setBannerDismissed(false);
+    }
+  }
 
   // Reset banner dismissed state when a new assistant message arrives with ok status
   const handleNewConversation = useCallback(async () => {
