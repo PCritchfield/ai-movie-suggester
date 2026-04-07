@@ -48,6 +48,7 @@ INJECTION_PATTERNS: dict[str, re.Pattern[str]] = {
     ),
     "delimiter_escape": re.compile(
         r"</(?:system-instructions|movie-context|user-query)>",
+        re.IGNORECASE,
     ),
 }
 

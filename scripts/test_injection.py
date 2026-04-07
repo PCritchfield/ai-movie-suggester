@@ -6,9 +6,10 @@ set of injection payloads. Does NOT call the LLM — tests the pre-processing
 pipeline only.
 
 Usage:
-    cd backend && python -m scripts.test_injection
-    # or from project root:
+    # from project root:
     make test-injection
+    # or:
+    python scripts/test_injection.py
 """
 
 from __future__ import annotations
