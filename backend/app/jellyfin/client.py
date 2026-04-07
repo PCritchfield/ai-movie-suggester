@@ -277,14 +277,19 @@ class JellyfinClient:
             is_favorite=user_data.get("IsFavorite", False),
         )
 
-    async def get_watched_items(
+    async def _paginate_watch_entries(
         self,
         token: str,
         user_id: str,
+        params: dict[str, str | int | bool],
+        log_prefix: str,
     ) -> list[WatchHistoryEntry]:
-        """Fetch all played items for a user, auto-paginating.
+        """Auto-paginate a watch-history style query, returning all entries.
 
-        Uses the user's own token for per-user permission enforcement.
+        Shared pagination logic for get_watched_items and get_favorite_items.
+        The caller supplies the filter-specific *params*; this method adds
+        StartIndex/Limit and drives the pagination loop.
+
         Token is passed through to _request, never stored.
         """
         page_size = 200
@@ -292,31 +297,21 @@ class JellyfinClient:
         page_number = 0
         all_entries: list[WatchHistoryEntry] = []
 
+        def _extract(data: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+            return data["Items"], data["TotalRecordCount"]
+
         while True:
-            params: dict[str, str | int | bool] = {
-                "IsPlayed": True,
-                "IncludeItemTypes": "Movie",
-                "SortBy": "DatePlayed",
-                "SortOrder": "Descending",
-                "Recursive": True,
-                "StartIndex": start_index,
-                "Limit": page_size,
-            }
+            page_params = {**params, "StartIndex": start_index, "Limit": page_size}
             resp = await self._request(
                 "GET",
                 f"/Users/{user_id}/Items",
                 token=token,
-                params=params,
+                params=page_params,
             )
-
-            def _extract(data: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
-                return data["Items"], data["TotalRecordCount"]
 
             items, total_count = self._parse_response(resp, _extract)
             page_number += 1
-            logger.debug(
-                "watched_items_fetch page=%d items=%d", page_number, len(items)
-            )
+            logger.debug("%s page=%d items=%d", log_prefix, page_number, len(items))
 
             for item in items:
                 all_entries.append(self._parse_watch_entry(item))
@@ -329,6 +324,27 @@ class JellyfinClient:
                 break
 
         return all_entries
+
+    async def get_watched_items(
+        self,
+        token: str,
+        user_id: str,
+    ) -> list[WatchHistoryEntry]:
+        """Fetch all played items for a user, auto-paginating.
+
+        Uses the user's own token for per-user permission enforcement.
+        Token is passed through to _request, never stored.
+        """
+        params: dict[str, str | int | bool] = {
+            "IsPlayed": True,
+            "IncludeItemTypes": "Movie",
+            "SortBy": "DatePlayed",
+            "SortOrder": "Descending",
+            "Recursive": True,
+        }
+        return await self._paginate_watch_entries(
+            token, user_id, params, "watched_items_fetch"
+        )
 
     async def get_favorite_items(
         self,
@@ -340,43 +356,11 @@ class JellyfinClient:
         Uses the user's own token for per-user permission enforcement.
         Token is passed through to _request, never stored.
         """
-        page_size = 200
-        start_index = 0
-        page_number = 0
-        all_entries: list[WatchHistoryEntry] = []
-
-        while True:
-            params: dict[str, str | int | bool] = {
-                "IsFavorite": True,
-                "IncludeItemTypes": "Movie",
-                "Recursive": True,
-                "StartIndex": start_index,
-                "Limit": page_size,
-            }
-            resp = await self._request(
-                "GET",
-                f"/Users/{user_id}/Items",
-                token=token,
-                params=params,
-            )
-
-            def _extract(data: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
-                return data["Items"], data["TotalRecordCount"]
-
-            items, total_count = self._parse_response(resp, _extract)
-            page_number += 1
-            logger.debug(
-                "favorite_items_fetch page=%d items=%d", page_number, len(items)
-            )
-
-            for item in items:
-                all_entries.append(self._parse_watch_entry(item))
-
-            if not items:
-                break
-
-            start_index += len(items)
-            if start_index >= total_count:
-                break
-
-        return all_entries
+        params: dict[str, str | int | bool] = {
+            "IsFavorite": True,
+            "IncludeItemTypes": "Movie",
+            "Recursive": True,
+        }
+        return await self._paginate_watch_entries(
+            token, user_id, params, "favorite_items_fetch"
+        )
