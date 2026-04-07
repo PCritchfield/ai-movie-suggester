@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { axe, toHaveNoViolations } from "jest-axe";
 import type { ChatMessage } from "@/lib/api/types";
 import { MessageList } from "@/components/chat/message-list";
@@ -89,5 +90,142 @@ describe("MessageList", () => {
     );
 
     expect(screen.queryByLabelText("Loading response")).not.toBeInTheDocument();
+  });
+});
+
+// ─── Error Handling Tests ──────────────────────────────────────────────
+
+describe("MessageList error handling", () => {
+  it("SSE error event displays inline error message and retry button on assistant message", () => {
+    const errorMsg: ChatMessage = {
+      id: "a-err",
+      role: "assistant",
+      content: "",
+      error: {
+        code: "ollama_unavailable",
+        message: "Ollama is not reachable",
+      },
+    };
+
+    const onRetry = vi.fn();
+    render(
+      <MessageList
+        messages={[userMessage, errorMsg]}
+        isStreaming={false}
+        onRetry={onRetry}
+      />
+    );
+
+    expect(screen.getByText("Ollama is not reachable")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /retry message/i })
+    ).toBeInTheDocument();
+  });
+
+  it("clicking retry calls onRetry with the message id", async () => {
+    const user = userEvent.setup();
+    const errorMsg: ChatMessage = {
+      id: "a-err",
+      role: "assistant",
+      content: "",
+      error: {
+        code: "stream_interrupted",
+        message: "Connection lost",
+      },
+    };
+
+    const onRetry = vi.fn();
+    render(
+      <MessageList
+        messages={[userMessage, errorMsg]}
+        isStreaming={false}
+        onRetry={onRetry}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /retry message/i }));
+    expect(onRetry).toHaveBeenCalledWith("a-err");
+  });
+
+  it("HTTP 401 error displays 'Log in again' link pointing to /login?reason=session_expired", () => {
+    const errorMsg: ChatMessage = {
+      id: "u-err",
+      role: "user",
+      content: "hello",
+      error: {
+        code: "generation_timeout",
+        message: "Your session has expired.",
+      },
+    };
+
+    render(
+      <MessageList
+        messages={[errorMsg]}
+        isStreaming={false}
+        onRetry={vi.fn()}
+      />
+    );
+
+    const link = screen.getByText("Log in again");
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "/login?reason=session_expired");
+  });
+
+  it("HTTP 429 error disables retry button with cooldown text and re-enables after timeout", async () => {
+    vi.useFakeTimers();
+    const errorMsg: ChatMessage = {
+      id: "a-429",
+      role: "assistant",
+      content: "",
+      error: {
+        code: "generation_timeout",
+        message: "Too many requests. Please wait a moment.",
+      },
+    };
+
+    render(
+      <MessageList
+        messages={[userMessage, errorMsg]}
+        isStreaming={false}
+        onRetry={vi.fn()}
+      />
+    );
+
+    const button = screen.getByRole("button", { name: /retry message/i });
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent("Try again in a moment");
+
+    // Advance past 10s cooldown
+    act(() => {
+      vi.advanceTimersByTime(10001);
+    });
+
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveTextContent("Retry");
+
+    vi.useRealTimers();
+  });
+
+  it("error messages have role='alert' attribute", () => {
+    const errorMsg: ChatMessage = {
+      id: "a-alert",
+      role: "assistant",
+      content: "",
+      error: {
+        code: "search_unavailable",
+        message: "Search is down",
+      },
+    };
+
+    render(
+      <MessageList
+        messages={[errorMsg]}
+        isStreaming={false}
+        onRetry={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Search is down")).toBeInTheDocument();
   });
 });

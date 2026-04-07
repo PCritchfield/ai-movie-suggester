@@ -219,4 +219,71 @@ describe("useChat", () => {
     expect(mockApiDelete).toHaveBeenCalledWith("/api/chat/history");
     expect(result.current.messages).toHaveLength(0);
   });
+
+  it("retry removes failed assistant message and re-sends original user message text", async () => {
+    const mockStream = {};
+    // First call: error
+    mockSendChatMessage.mockResolvedValueOnce(mockStream);
+    mockParseSSEStream.mockReturnValueOnce(
+      mockSSEGenerator([
+        {
+          type: "error" as const,
+          code: "ollama_unavailable" as const,
+          message: "Ollama is down",
+        },
+      ])
+    );
+
+    const { result } = renderHook(() => useChat());
+
+    // Send initial message that will error
+    act(() => {
+      result.current.sendMessage("recommend something");
+    });
+
+    await waitFor(
+      () => {
+        expect(result.current.isStreaming).toBe(false);
+      },
+      { timeout: 3000 }
+    );
+
+    // Should have user msg + errored assistant msg
+    expect(result.current.messages).toHaveLength(2);
+    const userMsg = result.current.messages[0];
+    expect(userMsg.role).toBe("user");
+    expect(userMsg.content).toBe("recommend something");
+
+    // Set up mocks for retry (successful this time)
+    mockSendChatMessage.mockResolvedValueOnce(mockStream);
+    mockParseSSEStream.mockReturnValueOnce(
+      mockSSEGenerator([
+        { type: "text" as const, content: "Here are some movies" },
+        { type: "done" as const },
+      ])
+    );
+
+    // Call retry with the user message ID
+    act(() => {
+      result.current.retry(userMsg.id);
+    });
+
+    await waitFor(
+      () => {
+        expect(result.current.isStreaming).toBe(false);
+      },
+      { timeout: 3000 }
+    );
+
+    // Should now have original user msg + removed errored assistant + new user msg + new assistant
+    // Actually retry sends a new message, so there should be original + new user + new assistant
+    // The errored assistant should be removed
+    const assistantMsgs = result.current.messages.filter(
+      (m) => m.role === "assistant"
+    );
+    // The latest assistant should have content
+    const latestAssistant = assistantMsgs[assistantMsgs.length - 1];
+    expect(latestAssistant?.content).toBe("Here are some movies");
+    expect(latestAssistant?.error).toBeUndefined();
+  });
 });

@@ -108,7 +108,7 @@ Install `react-markdown`, `remark-gfm`, and `rehype-sanitize`. Implement the `us
 - [x] 2.16 Write `ChatInput` component tests: (1) Enter submits message via `onSend` prop, (2) Shift+Enter inserts newline without submitting, (3) send button is disabled when `isStreaming` is true, (4) send button is disabled when textarea is empty, (5) clears textarea and refocuses after send (file: `frontend/tests/components/chat/chat-input.test.tsx`)
 - [x] 2.17 Run full test suite (`npm test`), type-check (`npm run type-check`), and lint (`npm run lint`) to confirm zero errors
 
-### [ ] 3.0 Error Handling and Retry UX
+### [x] 3.0 Error Handling and Retry UX
 
 Add inline error display on message bubbles for both SSE-level errors (ChatErrorCode) and HTTP-level errors (401, 422, 429). Implement retry buttons that re-send the original message. Add 401 "Log in again" link and 429 cooldown-disabled retry. All retry buttons meet 44x44px touch target. Error messages use `role="alert"` for screen reader announcement. Demoable via screenshot of error state with visible retry button.
 
@@ -124,16 +124,16 @@ Add inline error display on message bubbles for both SSE-level errors (ChatError
 
 #### 3.0 Tasks
 
-- [ ] 3.1 Add a `retry` callback to the `useChat` hook return value. `retry(messageId: string)` looks up the user message that triggered the failed exchange, re-sends its text via `sendMessage`, and removes the failed assistant message from state before the new attempt (file: `frontend/src/hooks/use-chat.ts`)
-- [ ] 3.2 Add inline error display to `MessageList` for SSE-level errors: when an assistant message has an `error` field set, render the error `message` text and a "Retry" button below the assistant bubble. The retry button calls `retry(messageId)` from the hook (file: `frontend/src/components/chat/message-list.tsx`)
-- [ ] 3.3 Add inline error display to `MessageList` for HTTP-level errors: when a user message has an `error` field set (meaning the request failed before streaming), render a failure indicator and "Retry" button on the user message bubble (file: `frontend/src/components/chat/message-list.tsx`)
-- [ ] 3.4 Handle HTTP 401 specifically: when error status is 401, render a "Log in again" link (`<a href="/login?reason=session_expired">`) instead of / in addition to a retry button (file: `frontend/src/components/chat/message-list.tsx`)
-- [ ] 3.5 Handle HTTP 429 specifically: render the retry button in a disabled state with a "Try again in a moment" label. Use a `setTimeout(10000)` to re-enable the button after 10 seconds. Use local component state to track the cooldown (file: `frontend/src/components/chat/message-list.tsx`)
-- [ ] 3.6 Ensure all retry buttons have a minimum touch target of 44x44px (`min-h-11 min-w-11` or equivalent Tailwind) and `aria-label="Retry message"` (file: `frontend/src/components/chat/message-list.tsx`)
-- [ ] 3.7 Add `role="alert"` to all error message containers so screen readers announce them immediately (file: `frontend/src/components/chat/message-list.tsx`)
-- [ ] 3.8 Write error handling tests: (1) SSE error event displays inline error message and retry button on assistant message, (2) clicking retry re-sends the original user message, (3) HTTP 401 error displays "Log in again" link pointing to `/login?reason=session_expired`, (4) HTTP 429 error disables retry button with cooldown text and re-enables after timeout (use `vi.useFakeTimers`), (5) error messages have `role="alert"` attribute (file: `frontend/tests/components/chat/message-list.test.tsx`)
-- [ ] 3.9 Write `retry` hook test: calling `retry(messageId)` removes the failed assistant message and re-sends the original user message text (file: `frontend/tests/hooks/use-chat.test.ts`)
-- [ ] 3.10 Run full test suite (`npm test`) to confirm all error handling tests pass
+- [x] 3.1 Add a `retry` callback to the `useChat` hook return value. `retry(messageId: string)` looks up the user message that triggered the failed exchange, re-sends its text via `sendMessage`, and removes the failed assistant message from state before the new attempt (file: `frontend/src/hooks/use-chat.ts`)
+- [x] 3.2 Add inline error display to `MessageList` for SSE-level errors: when an assistant message has an `error` field set, render the error `message` text and a "Retry" button below the assistant bubble. The retry button calls `retry(messageId)` from the hook (file: `frontend/src/components/chat/message-list.tsx`)
+- [x] 3.3 Add inline error display to `MessageList` for HTTP-level errors: when a user message has an `error` field set (meaning the request failed before streaming), render a failure indicator and "Retry" button on the user message bubble (file: `frontend/src/components/chat/message-list.tsx`)
+- [x] 3.4 Handle HTTP 401 specifically: when error status is 401, render a "Log in again" link (`<a href="/login?reason=session_expired">`) instead of / in addition to a retry button (file: `frontend/src/components/chat/message-list.tsx`)
+- [x] 3.5 Handle HTTP 429 specifically: render the retry button in a disabled state with a "Try again in a moment" label. Use a `setTimeout(10000)` to re-enable the button after 10 seconds. Use local component state to track the cooldown (file: `frontend/src/components/chat/message-list.tsx`)
+- [x] 3.6 Ensure all retry buttons have a minimum touch target of 44x44px (`min-h-11 min-w-11` or equivalent Tailwind) and `aria-label="Retry message"` (file: `frontend/src/components/chat/message-list.tsx`)
+- [x] 3.7 Add `role="alert"` to all error message containers so screen readers announce them immediately (file: `frontend/src/components/chat/message-list.tsx`)
+- [x] 3.8 Write error handling tests: (1) SSE error event displays inline error message and retry button on assistant message, (2) clicking retry re-sends the original user message, (3) HTTP 401 error displays "Log in again" link pointing to `/login?reason=session_expired`, (4) HTTP 429 error disables retry button with cooldown text and re-enables after timeout (use `vi.useFakeTimers`), (5) error messages have `role="alert"` attribute (file: `frontend/tests/components/chat/message-list.test.tsx`)
+- [x] 3.9 Write `retry` hook test: calling `retry(messageId)` removes the failed assistant message and re-sends the original user message text (file: `frontend/tests/hooks/use-chat.test.ts`)
+- [x] 3.10 Run full test suite (`npm test`) to confirm all error handling tests pass
 
 ### [ ] 4.0 Accessibility Audit and Mobile Viewport Polish
 
