@@ -1,4 +1,4 @@
-.PHONY: dev dev-full dev-ui build test lint clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full
+.PHONY: dev dev-full dev-ui build test lint clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection
 
 # Default dev target — full stack with Ollama
 dev: dev-full
@@ -71,6 +71,14 @@ test-integration:
 # in a separate shell — splitting this would break unconditional teardown.
 test-integration-full:
 	@$(MAKE) jellyfin-up && $(MAKE) test-integration; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
+
+# ---------------------------------------------------------------------------
+# Adversarial injection test harness
+# ---------------------------------------------------------------------------
+
+# Run prompt injection adversarial payloads (no LLM needed)
+test-injection:
+	cd backend && uv run python ../scripts/test_injection.py
 
 # ---------------------------------------------------------------------------
 
