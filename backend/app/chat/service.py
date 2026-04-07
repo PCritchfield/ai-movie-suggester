@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from app.chat.models import ChatErrorCode, SSEEventType
 from app.chat.prompts import build_chat_messages, get_system_prompt
-from app.chat.sanitize import sanitize_user_input
+from app.chat.sanitize import check_injection_patterns, sanitize_user_input
 from app.ollama.errors import (
     OllamaConnectionError,
     OllamaStreamError,
@@ -90,6 +90,14 @@ class ChatService:
             Event dicts with ``type`` key.
         """
         query = sanitize_user_input(query)
+
+        patterns = check_injection_patterns(query)
+        if patterns:
+            logger.warning(
+                "chat_injection_detected patterns=%s query_len=%d",
+                ",".join(patterns),
+                len(query),
+            )
 
         # Mutation window 1: read history + store user turn
         lock = self._conversation_store.get_lock(session_id)

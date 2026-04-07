@@ -15,8 +15,8 @@
 - [x] 2.7 Write 8 new XML structure tests
 
 ## Task 3.0: Observability
-- [ ] 3.1 Add `INJECTION_PATTERNS` and `check_injection_patterns()` to `sanitize.py`
-- [ ] 3.2 Integrate pattern logging in `ChatService.stream()`
-- [ ] 3.3 Write 7 pattern detection tests + 2 service logging tests
-- [ ] 3.4 Create `scripts/test_injection.py` manual harness
-- [ ] 3.5 Add `test-injection` Makefile target
+- [x] 3.1 Add `INJECTION_PATTERNS` and `check_injection_patterns()` to `sanitize.py`
+- [x] 3.2 Integrate pattern logging in `ChatService.stream()`
+- [x] 3.3 Write 7 pattern detection tests + 2 service logging tests
+- [x] 3.4 Create `scripts/test_injection.py` manual harness
+- [x] 3.5 Add `test-injection` Makefile target
