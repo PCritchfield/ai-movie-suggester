@@ -117,7 +117,7 @@ class SearchService:
                     genres=item.genres,
                     year=item.production_year,
                     score=score_map.get(jid, 0.0),
-                    poster_url=f"/Items/{jid}/Images/Primary",
+                    poster_url=f"/api/images/{jid}",
                 )
             )
 

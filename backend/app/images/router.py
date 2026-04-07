@@ -1,0 +1,81 @@
+"""Image proxy router — proxies Jellyfin poster images through the backend."""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi.responses import StreamingResponse
+
+from app.auth.dependencies import get_current_session
+
+if TYPE_CHECKING:
+    from app.auth.models import SessionMeta
+    from app.config import Settings
+
+logger = logging.getLogger(__name__)
+
+
+def create_images_router(settings: Settings) -> APIRouter:
+    """Build the images APIRouter for proxying Jellyfin poster images."""
+    router = APIRouter(prefix="/api", tags=["images"])
+
+    @router.get(
+        "/images/{jellyfin_id}",
+        responses={
+            200: {"content": {"image/jpeg": {}}, "description": "Poster image"},
+            401: {"description": "Not authenticated"},
+            404: {"description": "No poster found"},
+            422: {"description": "Invalid ID format"},
+            502: {"description": "Jellyfin unreachable"},
+        },
+    )
+    async def get_image(
+        request: Request,
+        jellyfin_id: str = Path(pattern=r"^[a-f0-9]{32}$"),  # noqa: B008
+        session: SessionMeta = Depends(get_current_session),  # noqa: B008
+    ) -> StreamingResponse:
+        """Proxy a Jellyfin poster image for the given item."""
+        session_store = request.app.state.session_store
+        token = await session_store.get_token(session.session_id)
+        if token is None:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        jellyfin_url = settings.jellyfin_url.rstrip("/")
+        image_url = f"{jellyfin_url}/Items/{jellyfin_id}/Images/Primary"
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    image_url,
+                    headers={"Authorization": f'MediaBrowser Token="{token}"'},
+                )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            logger.warning("image_proxy_upstream_error id=%s", jellyfin_id)
+            raise HTTPException(status_code=502, detail="Jellyfin unreachable") from exc
+
+        if resp.status_code == 404:
+            raise HTTPException(status_code=404, detail="No poster found")
+
+        if resp.status_code == 401:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=502, detail="Jellyfin error")
+
+        headers: dict[str, str] = {
+            "Cache-Control": "private, max-age=86400",
+        }
+        content_type = resp.headers.get("content-type", "image/jpeg")
+        if "content-length" in resp.headers:
+            headers["Content-Length"] = resp.headers["content-length"]
+
+        return StreamingResponse(
+            iter([resp.content]),
+            media_type=content_type,
+            headers=headers,
+        )
+
+    return router

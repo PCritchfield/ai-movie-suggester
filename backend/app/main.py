@@ -234,6 +234,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.include_router(search_router)
 
+        # Mount image proxy router
+        from app.images.router import create_images_router
+
+        images_router = create_images_router(settings=settings)
+        app.include_router(images_router)
+
         # Create chat client, service, pause event, and mount router.
         # NOTE: embedding_pause_event is created here (before the async
         # lifespan block) because EmbeddingWorker receives it during

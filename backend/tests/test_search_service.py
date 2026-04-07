@@ -158,7 +158,7 @@ class TestSearchEnrichesWithMetadata:
         assert item.title == "Galaxy Quest"
         assert item.genres == ["Drama"]
         assert item.year == 2020
-        assert item.poster_url == "/Items/m1/Images/Primary"
+        assert item.poster_url == "/api/images/m1"
         assert item.score == 0.8
 
 
