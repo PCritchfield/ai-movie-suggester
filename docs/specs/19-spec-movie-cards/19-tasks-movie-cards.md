@@ -115,7 +115,7 @@ Add `community_rating` and `runtime_minutes` to `SearchResultItem`. Community ra
   - Update `test_search_service.py` — test that `community_rating` and `runtime_minutes` appear on `SearchResultItem` results
   - Update text builder tests — test that runtime appears in composite text when present, is omitted when None
 
-### [ ] 3.0 Movie Card Component + Responsive Layout
+### [x] 3.0 Movie Card Component + Responsive Layout
 
 Render movie recommendation cards below the assistant's text response. Each card shows poster, title, year, truncated overview, and up to 3 genre pills. Horizontal scroll carousel on mobile (< 768px) with peek and scroll indicator. 2-column grid on tablet/desktop. Placeholder graphic for missing posters.
 
@@ -130,20 +130,20 @@ Render movie recommendation cards below the assistant's text response. Each card
 
 #### 3.0 Tasks
 
-- [ ] 3.1 Create `frontend/src/components/chat/poster-placeholder.tsx` — a `"use client"` component that renders an SVG film-frame icon (from lucide-react, e.g., `Film` or `Clapperboard`) centered on a `bg-muted` background with the movie title overlaid below. Use existing semantic colors. Ensure text contrast passes WCAG AA against the muted background. Accept `title: string` and `className?: string` props.
-- [ ] 3.2 Create `frontend/src/components/chat/movie-card.tsx` — a `"use client"` component using the existing shadcn `Card` compound component as a base. Props: `item: SearchResultItem`, `onClick: () => void`. Renders:
+- [x] 3.1 Create `frontend/src/components/chat/poster-placeholder.tsx` — a `"use client"` component that renders an SVG film-frame icon (from lucide-react, e.g., `Film` or `Clapperboard`) centered on a `bg-muted` background with the movie title overlaid below. Use existing semantic colors. Ensure text contrast passes WCAG AA against the muted background. Accept `title: string` and `className?: string` props.
+- [x] 3.2 Create `frontend/src/components/chat/movie-card.tsx` — a `"use client"` component using the existing shadcn `Card` compound component as a base. Props: `item: SearchResultItem`, `onClick: () => void`. Renders:
   - Poster `<img>` with `src={item.poster_url}`, `alt="{title} ({year})"`, `loading="lazy"`, 2:3 aspect ratio container. On error (404), swap to `PosterPlaceholder`.
   - Title + year in `CardHeader`
   - Truncated overview (~3 lines, CSS `line-clamp-3`) in `CardContent`
   - Up to 3 genre pills (slice `item.genres` to 3) as small `muted` background badges
   - Entire card wrapped in a `<button>` or has `role="button"` + `tabIndex={0}` + `onClick`/`onKeyDown` for the full-card tap target (min 44x44px)
-- [ ] 3.3 Create `frontend/src/components/chat/card-carousel.tsx` — a `"use client"` component. Props: `items: SearchResultItem[]`, `onCardClick: (item: SearchResultItem) => void`. Renders:
+- [x] 3.3 Create `frontend/src/components/chat/card-carousel.tsx` — a `"use client"` component. Props: `items: SearchResultItem[]`, `onCardClick: (item: SearchResultItem) => void`. Renders:
   - Mobile (< 768px): horizontal scroll container with `overflow-x-auto`, `scroll-snap-type: x mandatory`, `scroll-snap-align: start` on children, and `scroll-padding` on the container to prevent mandatory snap from overshooting the peek (critical for iOS Safari). Cards at ~80% viewport width to show peek (~15-20px of next card). Scroll position indicator dots below.
   - Desktop (768px+): 2-column CSS grid (`grid-cols-2`, `gap-4`)
   - Use Tailwind responsive prefixes (`md:grid md:grid-cols-2`) for the breakpoint switch
   - Renders `MovieCard` for each item, passing the `onCardClick` callback
-- [ ] 3.4 Integrate into `frontend/src/components/chat/message-list.tsx` — after the ReactMarkdown block in the assistant message branch (after line ~159), render `<CardCarousel>` when `msg.recommendations` exists and has length > 0. Pass a no-op `onCardClick` for now (Task 4.0 will wire the detail sheet). Import CardCarousel as a lazy-loaded component or direct import.
-- [ ] 3.5 Write `frontend/src/components/chat/__tests__/movie-card.test.tsx`:
+- [x] 3.4 Integrate into `frontend/src/components/chat/message-list.tsx` — after the ReactMarkdown block in the assistant message branch (after line ~159), render `<CardCarousel>` when `msg.recommendations` exists and has length > 0. Pass a no-op `onCardClick` for now (Task 4.0 will wire the detail sheet). Import CardCarousel as a lazy-loaded component or direct import.
+- [x] 3.5 Write `frontend/src/components/chat/__tests__/movie-card.test.tsx`:
   - Test renders title, year, overview, genres
   - Test overview is truncated (line-clamp class present)
   - Test only first 3 genres are shown when item has > 3
@@ -153,7 +153,7 @@ Render movie recommendation cards below the assistant's text response. Each card
   - Test calls onClick on Enter keypress
   - Test shows PosterPlaceholder when image fires `onError`
   - Test axe accessibility audit passes
-- [ ] 3.6 Write `frontend/src/components/chat/__tests__/card-carousel.test.tsx`:
+- [x] 3.6 Write `frontend/src/components/chat/__tests__/card-carousel.test.tsx`:
   - Test renders correct number of MovieCard children
   - Test renders scroll indicator dots matching item count
   - Test carousel container has scroll-snap CSS classes

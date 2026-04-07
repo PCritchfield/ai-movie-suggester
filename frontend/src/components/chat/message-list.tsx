@@ -4,12 +4,18 @@ import React, { useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import type { ChatMessage, ChatErrorCode } from "@/lib/api/types";
+import type {
+  ChatMessage,
+  ChatErrorCode,
+  SearchResultItem,
+} from "@/lib/api/types";
+import { CardCarousel } from "./card-carousel";
 
 interface MessageListProps {
   messages: ChatMessage[];
   isStreaming: boolean;
   onRetry?: (messageId: string) => void;
+  onCardClick?: (item: SearchResultItem) => void;
 }
 
 /** Dots animation for streaming loading state */
@@ -101,6 +107,7 @@ export function MessageList({
   messages,
   isStreaming,
   onRetry,
+  onCardClick,
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -157,6 +164,12 @@ export function MessageList({
                         {msg.content}
                       </ReactMarkdown>
                     </div>
+                  )}
+                  {msg.recommendations && msg.recommendations.length > 0 && (
+                    <CardCarousel
+                      items={msg.recommendations}
+                      onCardClick={onCardClick ?? (() => {})}
+                    />
                   )}
                   {msg.error && (
                     <MessageError
