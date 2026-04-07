@@ -82,7 +82,7 @@ Expose `GET /api/images/{jellyfin_id}` — an authenticated endpoint that proxie
   - Test that only `Content-Type` and `Content-Length` headers are forwarded
 - [x] 1.6 Run existing `test_search_service.py` and `test_search_router.py` to confirm poster_url format change doesn't break them — update expected values if tests assert on the old `/Items/...` format
 
-### [ ] 2.0 Extend Search Results with Community Rating + Runtime
+### [x] 2.0 Extend Search Results with Community Rating + Runtime
 
 Add `community_rating` and `runtime_minutes` to `SearchResultItem`. Community rating is already in the DB — wire it through. Runtime requires a sync pipeline change: fetch `RunTimeTicks` from Jellyfin, convert to minutes, store in `library_items`, include in content hash.
 
@@ -95,21 +95,21 @@ Add `community_rating` and `runtime_minutes` to `SearchResultItem`. Community ra
 
 #### 2.0 Tasks
 
-- [ ] 2.1 Add `run_time_ticks: int | None = Field(default=None, alias="RunTimeTicks")` to `LibraryItem` in `backend/app/jellyfin/models.py`
-- [ ] 2.2 Add `"RunTimeTicks"` to `_ITEM_FIELDS` in `backend/app/jellyfin/client.py` (line 35) — append to the comma-separated string
-- [ ] 2.3 Add `runtime_minutes: int | None` field to `LibraryItemRow` dataclass in `backend/app/library/models.py` (insert before `content_hash`)
-- [ ] 2.4 Update `backend/app/library/store.py`:
+- [x] 2.1 Add `run_time_ticks: int | None = Field(default=None, alias="RunTimeTicks")` to `LibraryItem` in `backend/app/jellyfin/models.py`
+- [x] 2.2 Add `"RunTimeTicks"` to `_ITEM_FIELDS` in `backend/app/jellyfin/client.py` (line 35) — append to the comma-separated string
+- [x] 2.3 Add `runtime_minutes: int | None` field to `LibraryItemRow` dataclass in `backend/app/library/models.py` (insert before `content_hash`)
+- [x] 2.4 Update `backend/app/library/store.py`:
   - Add `runtime_minutes INTEGER` to the CREATE TABLE statement
   - Add a `PRAGMA table_info(library_items)` check in the `open()` method — if `runtime_minutes` column is absent, run `ALTER TABLE library_items ADD COLUMN runtime_minutes INTEGER`. This matches the existing migration pattern used for `deleted_at` in the same file. Do NOT use try/except OperationalError.
   - **IMPORTANT: Append `runtime_minutes` at the END of all SELECT column lists** (after `synced_at`, as positional index 11). Do NOT insert it mid-query — `_row_to_item()` maps by positional index and inserting mid-list would silently corrupt all subsequent field mappings.
   - Update `_row_to_item()` to map `row[11]` to `runtime_minutes`
   - Update upsert logic to include `runtime_minutes` in INSERT and UPDATE
-- [ ] 2.5 Update `_to_row()` in `backend/app/sync/engine.py` to convert `item.run_time_ticks` to `runtime_minutes`: `runtime_minutes = item.run_time_ticks // 600_000_000 if item.run_time_ticks is not None else None`
-- [ ] 2.6 Add `runtime_minutes: int | None = None` parameter to `build_sections()` in `backend/app/ollama/text_builder.py`. Add a `_build_runtime_section()` helper (e.g., `"Runtime: 120 minutes."`) and append to sections if present. Bump `TEMPLATE_VERSION` so existing embeddings are re-queued. **⚠️ WARNING: Bumping TEMPLATE_VERSION triggers a full library re-embedding.** The first sync after deploy will re-queue every item in the library for embedding. On consumer hardware, expect ~seconds per item (a 1000-movie library ≈ 30–60 minutes of Ollama inference). Note this in the PR description so operators are aware.
-- [ ] 2.7 Add `community_rating: float | None = None` and `runtime_minutes: int | None = None` to `SearchResultItem` in `backend/app/search/models.py`
-- [ ] 2.8 Populate the new fields in `backend/app/search/service.py` (line ~120 area): `community_rating=item.community_rating` and `runtime_minutes=item.runtime_minutes` (runtime_minutes will need to be added to `LibraryItemRow` first)
-- [ ] 2.9 Update `SearchResultItem` interface in `frontend/src/lib/api/types.ts` — add `community_rating: number | null` and `runtime_minutes: number | null`
-- [ ] 2.10 Write/update tests:
+- [x] 2.5 Update `_to_row()` in `backend/app/sync/engine.py` to convert `item.run_time_ticks` to `runtime_minutes`: `runtime_minutes = item.run_time_ticks // 600_000_000 if item.run_time_ticks is not None else None`
+- [x] 2.6 Add `runtime_minutes: int | None = None` parameter to `build_sections()` in `backend/app/ollama/text_builder.py`. Add a `_build_runtime_section()` helper (e.g., `"Runtime: 120 minutes."`) and append to sections if present. Bump `TEMPLATE_VERSION` so existing embeddings are re-queued. **⚠️ WARNING: Bumping TEMPLATE_VERSION triggers a full library re-embedding.** The first sync after deploy will re-queue every item in the library for embedding. On consumer hardware, expect ~seconds per item (a 1000-movie library ≈ 30–60 minutes of Ollama inference). Note this in the PR description so operators are aware.
+- [x] 2.7 Add `community_rating: float | None = None` and `runtime_minutes: int | None = None` to `SearchResultItem` in `backend/app/search/models.py`
+- [x] 2.8 Populate the new fields in `backend/app/search/service.py` (line ~120 area): `community_rating=item.community_rating` and `runtime_minutes=item.runtime_minutes` (runtime_minutes will need to be added to `LibraryItemRow` first)
+- [x] 2.9 Update `SearchResultItem` interface in `frontend/src/lib/api/types.ts` — add `community_rating: number | null` and `runtime_minutes: number | null`
+- [x] 2.10 Write/update tests:
   - Update `test_sync_engine.py` — test that a Jellyfin item with `RunTimeTicks: 54000000000` produces `runtime_minutes: 90`, and `None` produces `None`
   - Update `test_library_store.py` — test that `runtime_minutes` round-trips through upsert and get_many
   - Update `test_search_service.py` — test that `community_rating` and `runtime_minutes` appear on `SearchResultItem` results

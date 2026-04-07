@@ -33,6 +33,7 @@ def _make_library_item(jid: str, title: str = "Movie") -> LibraryItemRow:
         people=[],
         content_hash="hash",
         synced_at=_NOW,
+        runtime_minutes=120,
     )
 
 
@@ -160,6 +161,8 @@ class TestSearchEnrichesWithMetadata:
         assert item.year == 2020
         assert item.poster_url == "/api/images/m1"
         assert item.score == 0.8
+        assert item.community_rating == 7.0
+        assert item.runtime_minutes == 120
 
 
 class TestSearchTruncatesToLimit:

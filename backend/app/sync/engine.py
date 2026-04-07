@@ -43,6 +43,9 @@ def _to_row(item: LibraryItem, content_hash: str) -> LibraryItemRow:
     people = [
         p["Name"] for p in item.people if p.get("Type") == "Actor" and "Name" in p
     ]
+    runtime_minutes = (
+        item.run_time_ticks // 600_000_000 if item.run_time_ticks is not None else None
+    )
     return LibraryItemRow(
         jellyfin_id=item.id,
         title=item.name,
@@ -55,6 +58,7 @@ def _to_row(item: LibraryItem, content_hash: str) -> LibraryItemRow:
         people=people,
         content_hash=content_hash,
         synced_at=int(time.time()),
+        runtime_minutes=runtime_minutes,
     )
 
 

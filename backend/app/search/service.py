@@ -118,6 +118,8 @@ class SearchService:
                     year=item.production_year,
                     score=score_map.get(jid, 0.0),
                     poster_url=f"/api/images/{jid}",
+                    community_rating=item.community_rating,
+                    runtime_minutes=item.runtime_minutes,
                 )
             )
 

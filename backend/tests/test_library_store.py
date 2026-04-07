@@ -33,6 +33,7 @@ def _make_item(
     people: list[str] | None = None,
     content_hash: str = "abc123hash",
     synced_at: int | None = None,
+    runtime_minutes: int | None = 117,
 ) -> LibraryItemRow:
     """Helper to build LibraryItemRow with sensible defaults."""
     return LibraryItemRow(
@@ -47,6 +48,7 @@ def _make_item(
         people=people if people is not None else ["Sigourney Weaver", "Tom Skerritt"],
         content_hash=content_hash,
         synced_at=synced_at if synced_at is not None else _now(),
+        runtime_minutes=runtime_minutes,
     )
 
 
@@ -169,6 +171,20 @@ class TestGet:
         assert fetched.people == ["Tim Allen", "Sigourney Weaver"]
         assert fetched.content_hash == "hash-gq"
         assert fetched.synced_at == 1700000000
+
+    async def test_runtime_minutes_round_trips(self, store: LibraryStore) -> None:
+        item = _make_item(jellyfin_id="jf-runtime", runtime_minutes=90)
+        await store.upsert_many([item])
+        fetched = await store.get("jf-runtime")
+        assert fetched is not None
+        assert fetched.runtime_minutes == 90
+
+    async def test_runtime_minutes_null_round_trips(self, store: LibraryStore) -> None:
+        item = _make_item(jellyfin_id="jf-no-runtime", runtime_minutes=None)
+        await store.upsert_many([item])
+        fetched = await store.get("jf-no-runtime")
+        assert fetched is not None
+        assert fetched.runtime_minutes is None
 
     async def test_missing_id_returns_none(self, store: LibraryStore) -> None:
         assert await store.get("nonexistent") is None

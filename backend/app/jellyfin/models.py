@@ -82,6 +82,7 @@ class LibraryItem(BaseModel):
     tags: list[str] = Field(default_factory=list, alias="Tags")
     studios: list[str] = Field(default_factory=list, alias="Studios")
     community_rating: float | None = Field(default=None, alias="CommunityRating")
+    run_time_ticks: int | None = Field(default=None, alias="RunTimeTicks")
     people: list[dict[str, Any]] = Field(default_factory=list, alias="People")
 
     @field_validator("studios", mode="before")

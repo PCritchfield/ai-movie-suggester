@@ -29,6 +29,7 @@ class LibraryItemRow:
     people: list[str]  # Actor names only
     content_hash: str  # SHA-256 hex digest
     synced_at: int  # Unix epoch seconds
+    runtime_minutes: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

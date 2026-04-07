@@ -65,6 +65,7 @@ def _make_library_item(jid: str, title: str = "Test Movie") -> LibraryItemRow:
         people=[],
         content_hash="hash",
         synced_at=_NOW,
+        runtime_minutes=120,
     )
 
 
