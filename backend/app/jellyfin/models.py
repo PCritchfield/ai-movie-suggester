@@ -5,9 +5,29 @@ Uses Field aliases to map Jellyfin's PascalCase JSON to snake_case Python.
 
 from __future__ import annotations
 
-from typing import Any, Self
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+
+@dataclass(frozen=True, slots=True)
+class WatchHistoryEntry:
+    """User-scoped activity data for a single watched/favorited item.
+
+    Slim DTO for the history-aware ranking service — contains only the
+    activity fields needed for scoring.  Does NOT extend LibraryItem:
+    catalog metadata lives in library_items from sync; this is a
+    different domain with a different lifecycle.
+    """
+
+    jellyfin_id: str
+    last_played_date: datetime | None
+    play_count: int
+    is_favorite: bool
 
 
 class AuthResult(BaseModel):
