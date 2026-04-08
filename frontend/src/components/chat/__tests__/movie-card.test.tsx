@@ -19,6 +19,7 @@ function makeItem(overrides: Partial<SearchResultItem> = {}): SearchResultItem {
     poster_url: "/api/images/abc123def456abc123def456abc123de",
     community_rating: 7.4,
     runtime_minutes: 102,
+    jellyfin_web_url: null,
     ...overrides,
   };
 }

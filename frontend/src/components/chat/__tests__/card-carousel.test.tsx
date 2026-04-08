@@ -14,6 +14,7 @@ function makeItem(id: string, title: string = "Movie"): SearchResultItem {
     poster_url: `/api/images/${id}`,
     community_rating: 7.0,
     runtime_minutes: 120,
+    jellyfin_web_url: null,
   };
 }
 

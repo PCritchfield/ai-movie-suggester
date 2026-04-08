@@ -168,3 +168,8 @@ class Settings(BaseSettings):
     def cors_origin_str(self) -> str:
         """Return cors_origin as a plain string with trailing slash stripped."""
         return str(self.cors_origin).rstrip("/")
+
+    @property
+    def effective_jellyfin_web_url(self) -> str:
+        """Return jellyfin_web_url or fall back to jellyfin_url."""
+        return self.jellyfin_web_url or self.jellyfin_url

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import Response
+from slowapi import Limiter  # noqa: TC002
 
 from app.auth.dependencies import get_current_session
 
@@ -17,11 +18,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_ALLOWED_CONTENT_TYPES = frozenset(
+    {"image/jpeg", "image/png", "image/webp", "image/gif"}
+)
 
-def create_images_router(settings: Settings) -> APIRouter:
+
+def create_images_router(
+    settings: Settings,
+    limiter: Limiter | None = None,
+) -> APIRouter:
     """Build the images APIRouter for proxying Jellyfin poster images."""
     router = APIRouter(prefix="/api", tags=["images"])
     jellyfin_base = settings.jellyfin_url.rstrip("/")
+    _limit = limiter.limit("30/minute") if limiter else (lambda f: f)
 
     @router.get(
         "/images/{jellyfin_id}",
@@ -30,9 +39,11 @@ def create_images_router(settings: Settings) -> APIRouter:
             401: {"description": "Not authenticated"},
             404: {"description": "No poster found"},
             422: {"description": "Invalid ID format"},
+            429: {"description": "Rate limit exceeded"},
             502: {"description": "Jellyfin unreachable"},
         },
     )
+    @_limit
     async def get_image(
         request: Request,
         jellyfin_id: str = Path(pattern=r"^[a-f0-9]{32}$"),  # noqa: B008
@@ -65,10 +76,15 @@ def create_images_router(settings: Settings) -> APIRouter:
         if resp.status_code >= 400:
             raise HTTPException(status_code=502, detail="Jellyfin error")
 
+        content_type = resp.headers.get("content-type", "image/jpeg")
+        if content_type not in _ALLOWED_CONTENT_TYPES:
+            raise HTTPException(
+                status_code=502, detail="Unexpected content type from Jellyfin"
+            )
+
         headers: dict[str, str] = {
             "Cache-Control": "private, max-age=86400",
         }
-        content_type = resp.headers.get("content-type", "image/jpeg")
         if "content-length" in resp.headers:
             headers["Content-Length"] = resp.headers["content-length"]
 
