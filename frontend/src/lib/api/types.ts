@@ -52,6 +52,9 @@ export interface SearchResultItem {
   year: number | null;
   score: number;
   poster_url: string;
+  community_rating: number | null;
+  runtime_minutes: number | null;
+  jellyfin_web_url: string | null;
 }
 
 /** Mirrors backend SearchStatus enum */

@@ -46,6 +46,9 @@ class SearchResultItem(BaseModel):
     year: int | None
     score: float
     poster_url: str
+    community_rating: float | None = None
+    runtime_minutes: int | None = None
+    jellyfin_web_url: str | None = None
 
 
 class SearchResponse(BaseModel):

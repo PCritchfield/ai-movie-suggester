@@ -154,6 +154,23 @@ class TestMissingFieldCombinations:
         result = build_composite_text(item)
         assert result.text == "Title: Alien. Year: 1979."
 
+    def test_runtime_included_when_present(self) -> None:
+        item = _make_item(
+            Name="Alien",
+            ProductionYear=1979,
+            RunTimeTicks=69600000000,  # 116 minutes
+        )
+        result = build_composite_text(item)
+        assert "Runtime: 116 minutes." in result.text
+
+    def test_runtime_omitted_when_none(self) -> None:
+        item = _make_item(
+            Name="Alien",
+            ProductionYear=1979,
+        )
+        result = build_composite_text(item)
+        assert "Runtime:" not in result.text
+
     def test_empty_overview_string_treated_as_missing(self) -> None:
         item = _make_item(
             Name="Alien",

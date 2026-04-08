@@ -32,7 +32,9 @@ _APP_VERSION = "0.1.0"
 _DEVICE = "Server"
 _DEFAULT_DEVICE_ID = "ai-movie-suggester-server"
 # Fields to request from Jellyfin — matches our LibraryItem model
-_ITEM_FIELDS = "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,People"
+_ITEM_FIELDS = (
+    "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,RunTimeTicks,People"
+)
 
 
 class JellyfinClient:

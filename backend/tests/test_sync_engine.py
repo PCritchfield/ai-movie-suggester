@@ -112,6 +112,7 @@ def _make_library_item(
     genres: list[str] | None = None,
     production_year: int | None = 2024,
     people: list[dict[str, str]] | None = None,
+    run_time_ticks: int | None = None,
 ) -> LibraryItem:
     """Create a LibraryItem for testing."""
     if genres is None:
@@ -121,20 +122,21 @@ def _make_library_item(
             {"Name": "Actor One", "Type": "Actor"},
             {"Name": "Director One", "Type": "Director"},
         ]
-    return LibraryItem.model_validate(
-        {
-            "Id": item_id,
-            "Name": name,
-            "Type": "Movie",
-            "Overview": overview,
-            "Genres": genres,
-            "ProductionYear": production_year,
-            "Tags": [],
-            "Studios": [],
-            "CommunityRating": 7.5,
-            "People": people,
-        }
-    )
+    data: dict[str, object] = {
+        "Id": item_id,
+        "Name": name,
+        "Type": "Movie",
+        "Overview": overview,
+        "Genres": genres,
+        "ProductionYear": production_year,
+        "Tags": [],
+        "Studios": [],
+        "CommunityRating": 7.5,
+        "People": people,
+    }
+    if run_time_ticks is not None:
+        data["RunTimeTicks"] = run_time_ticks
+    return LibraryItem.model_validate(data)
 
 
 def _make_paginated(
@@ -635,6 +637,45 @@ async def test_purge_without_vector_repo() -> None:
     assert count == 1
     store.delete_from_embedding_queue.assert_called_once()
     store.hard_delete_many.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_sync_runtime_ticks_conversion() -> None:
+    """RunTimeTicks is converted to runtime_minutes in the stored row."""
+    # 54000000000 ticks = 90 minutes (54e9 / 600e6 = 90)
+    item = _make_library_item("jf-001", "Movie One", run_time_ticks=54000000000)
+    page = _make_paginated([item])
+
+    store = _make_mock_store()
+    client = _make_mock_client([page])
+    settings = _make_mock_settings()
+
+    engine = SyncEngine(store, client, settings)
+    await engine.run_sync()
+
+    store.upsert_many.assert_called_once()
+    rows = store.upsert_many.call_args[0][0]
+    assert len(rows) == 1
+    assert rows[0].runtime_minutes == 90
+
+
+@pytest.mark.asyncio
+async def test_sync_runtime_ticks_none() -> None:
+    """None RunTimeTicks produces None runtime_minutes."""
+    item = _make_library_item("jf-001", "Movie One", run_time_ticks=None)
+    page = _make_paginated([item])
+
+    store = _make_mock_store()
+    client = _make_mock_client([page])
+    settings = _make_mock_settings()
+
+    engine = SyncEngine(store, client, settings)
+    await engine.run_sync()
+
+    store.upsert_many.assert_called_once()
+    rows = store.upsert_many.call_args[0][0]
+    assert len(rows) == 1
+    assert rows[0].runtime_minutes is None
 
 
 @pytest.mark.asyncio

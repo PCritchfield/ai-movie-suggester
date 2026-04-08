@@ -65,6 +65,7 @@ def _make_library_item(jid: str, title: str = "Test Movie") -> LibraryItemRow:
         people=[],
         content_hash="hash",
         synced_at=_NOW,
+        runtime_minutes=120,
     )
 
 
@@ -159,7 +160,7 @@ class TestSearchReturnsResults:
         assert len(data["results"]) == 2
         assert data["results"][0]["title"] == "Galaxy Quest"
         assert data["results"][0]["score"] == 0.8
-        assert data["results"][0]["poster_url"] == "/Items/movie-1/Images/Primary"
+        assert data["results"][0]["poster_url"] == "/api/images/movie-1"
         assert "total_candidates" in data
         assert "filtered_count" in data
         assert "query_time_ms" in data

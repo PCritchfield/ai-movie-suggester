@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_VERSION: int = 2
+TEMPLATE_VERSION: int = 3
 """Template version constant. Bumping this signals that all embeddings
 built with an older version are stale and should be regenerated.
 
@@ -30,6 +30,7 @@ Version history:
   1 — Initial template (plain composite text, no prefix).
   2 — Added ``search_document:`` prefix at the embedding call-site
       for nomic-embed-text asymmetric retrieval (Spec 11).
+  3 — Added runtime section to composite text (Spec 19).
 """
 
 _LENGTH_WARNING_THRESHOLD = 6000
@@ -69,11 +70,19 @@ def _build_year_section(production_year: int | None) -> str | None:
     return None
 
 
+def _build_runtime_section(runtime_minutes: int | None) -> str | None:
+    """Build the runtime section, or None if not set."""
+    if runtime_minutes is not None:
+        return f"Runtime: {runtime_minutes} minutes."
+    return None
+
+
 def build_sections(
     title: str,
     overview: str | None,
     genres: list[str],
     production_year: int | None,
+    runtime_minutes: int | None = None,
 ) -> str:
     """Assemble composite text from raw field values.
 
@@ -95,6 +104,10 @@ def build_sections(
     y = _build_year_section(production_year)
     if y is not None:
         sections.append(y)
+
+    rt = _build_runtime_section(runtime_minutes)
+    if rt is not None:
+        sections.append(rt)
 
     return " ".join(sections)
 
@@ -118,6 +131,7 @@ def build_composite_text(item: LibraryItem) -> CompositeTextResult:
         overview=item.overview,
         genres=item.genres,
         production_year=item.production_year,
+        runtime_minutes=item.runtime_minutes,
     )
 
     if len(text) > _LENGTH_WARNING_THRESHOLD:

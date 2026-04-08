@@ -33,6 +33,7 @@ def _make_library_item(jid: str, title: str = "Movie") -> LibraryItemRow:
         people=[],
         content_hash="hash",
         synced_at=_NOW,
+        runtime_minutes=120,
     )
 
 
@@ -158,8 +159,10 @@ class TestSearchEnrichesWithMetadata:
         assert item.title == "Galaxy Quest"
         assert item.genres == ["Drama"]
         assert item.year == 2020
-        assert item.poster_url == "/Items/m1/Images/Primary"
+        assert item.poster_url == "/api/images/m1"
         assert item.score == 0.8
+        assert item.community_rating == 7.0
+        assert item.runtime_minutes == 120
 
 
 class TestSearchTruncatesToLimit:
@@ -283,6 +286,73 @@ class TestSearchOkStatus:
         result = await service.search("test", limit=10, user_id="u1", token="tok")
 
         assert result.status == "ok"
+
+
+class TestSearchJellyfinWebUrl:
+    async def test_jellyfin_web_url_populated_when_configured(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 10
+        vec_repo.search.return_value = [_make_search_result("m1", 0.8)]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        service._jellyfin_web_url = "https://jellyfin.example.com"
+        result = await service.search("test", limit=10, user_id="u1", token="tok")
+
+        assert len(result.results) == 1
+        assert (
+            result.results[0].jellyfin_web_url
+            == "https://jellyfin.example.com/web/#!/details?id=m1"
+        )
+
+    async def test_jellyfin_web_url_none_when_not_configured(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 10
+        vec_repo.search.return_value = [_make_search_result("m1", 0.8)]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        # No jellyfin_web_url set (default None)
+        result = await service.search("test", limit=10, user_id="u1", token="tok")
+
+        assert len(result.results) == 1
+        assert result.results[0].jellyfin_web_url is None
 
 
 class TestSearchResponseMetadata:

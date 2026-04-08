@@ -55,6 +55,7 @@ def _to_row(item: LibraryItem, content_hash: str) -> LibraryItemRow:
         people=people,
         content_hash=content_hash,
         synced_at=int(time.time()),
+        runtime_minutes=item.runtime_minutes,
     )
 
 

@@ -37,12 +37,16 @@ class SearchService:
         permission_service: PermissionService,
         library_store: LibraryStore,
         overfetch_multiplier: int = 3,
+        jellyfin_web_url: str | None = None,
     ) -> None:
         self._ollama = ollama_client
         self._vec_repo = vec_repo
         self._permissions = permission_service
         self._library = library_store
         self._overfetch = overfetch_multiplier
+        self._jellyfin_web_url = (
+            jellyfin_web_url.rstrip("/") if jellyfin_web_url else None
+        )
 
     async def search(
         self,
@@ -109,6 +113,10 @@ class SearchService:
             item = item_map.get(jid)
             if item is None:
                 continue
+            web_url: str | None = None
+            if self._jellyfin_web_url:
+                web_url = f"{self._jellyfin_web_url}/web/#!/details?id={jid}"
+
             results.append(
                 SearchResultItem(
                     jellyfin_id=jid,
@@ -117,7 +125,10 @@ class SearchService:
                     genres=item.genres,
                     year=item.production_year,
                     score=score_map.get(jid, 0.0),
-                    poster_url=f"/Items/{jid}/Images/Primary",
+                    poster_url=f"/api/images/{jid}",
+                    community_rating=item.community_rating,
+                    runtime_minutes=item.runtime_minutes,
+                    jellyfin_web_url=web_url,
                 )
             )
 

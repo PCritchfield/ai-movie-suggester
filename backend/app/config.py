@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Required
     jellyfin_url: str
     jellyfin_timeout: float = 10.0
+    jellyfin_web_url: str | None = None
     session_secret: Annotated[str, Field(min_length=32)]
 
     # Ollama
@@ -86,7 +87,6 @@ class Settings(BaseSettings):
 
     # Library sync
     jellyfin_api_key: SecretStr | None = None
-    library_db_path: str = "data/library.db"
     library_sync_page_size: int = 200
 
     # Sync engine
@@ -168,3 +168,12 @@ class Settings(BaseSettings):
     def cors_origin_str(self) -> str:
         """Return cors_origin as a plain string with trailing slash stripped."""
         return str(self.cors_origin).rstrip("/")
+
+    @property
+    def effective_jellyfin_web_url(self) -> str | None:
+        """Return jellyfin_web_url if explicitly configured, else None.
+
+        No fallback to jellyfin_url — that may be a Docker-internal address
+        (e.g., http://jellyfin:8096) that users can't reach.
+        """
+        return self.jellyfin_web_url

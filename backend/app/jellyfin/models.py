@@ -82,7 +82,15 @@ class LibraryItem(BaseModel):
     tags: list[str] = Field(default_factory=list, alias="Tags")
     studios: list[str] = Field(default_factory=list, alias="Studios")
     community_rating: float | None = Field(default=None, alias="CommunityRating")
+    run_time_ticks: int | None = Field(default=None, alias="RunTimeTicks")
     people: list[dict[str, Any]] = Field(default_factory=list, alias="People")
+
+    @property
+    def runtime_minutes(self) -> int | None:
+        """Convert RunTimeTicks to minutes, or None if not set."""
+        if self.run_time_ticks is None:
+            return None
+        return self.run_time_ticks // 600_000_000
 
     @field_validator("studios", mode="before")
     @classmethod
