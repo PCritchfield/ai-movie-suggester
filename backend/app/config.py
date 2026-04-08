@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     # Permissions
     permission_cache_ttl_seconds: int = 300
 
+    # Watch history
+    watch_history_cache_ttl_seconds: int = 300
+
     # Sessions
     session_secure_cookie: bool = True
     max_sessions_per_user: int = 5
