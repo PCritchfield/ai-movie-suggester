@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -12,9 +13,11 @@ from fastapi.testclient import TestClient
 from app.auth.crypto import derive_keys
 from app.auth.dependencies import get_current_session
 from app.auth.models import SessionMeta
-from app.config import Settings
 from app.images.router import create_images_router
 from tests.conftest import TEST_SECRET, make_test_settings
+
+if TYPE_CHECKING:
+    from app.config import Settings
 
 _COOKIE_KEY, _ = derive_keys(TEST_SECRET)
 
