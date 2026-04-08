@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { PosterPlaceholder } from "./poster-placeholder";
 import type { SearchResultItem } from "@/lib/api/types";
@@ -13,16 +13,6 @@ interface MovieCardProps {
 export function MovieCard({ item, onClick }: MovieCardProps) {
   const [posterError, setPosterError] = useState(false);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        onClick();
-      }
-    },
-    [onClick]
-  );
-
   const altText = item.year ? `${item.title} (${item.year})` : item.title;
 
   return (
@@ -33,7 +23,6 @@ export function MovieCard({ item, onClick }: MovieCardProps) {
       <button
         type="button"
         onClick={onClick}
-        onKeyDown={handleKeyDown}
         className="w-full text-left min-h-[44px]"
         aria-label={`View details for ${item.title}`}
       >

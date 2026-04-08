@@ -84,14 +84,16 @@ describe("MovieCard", () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
-  it("calls onClick on Enter keypress", () => {
+  it("calls onClick on Enter keypress via native button", async () => {
+    const user = userEvent.setup();
     const onClick = vi.fn();
     render(<MovieCard item={makeItem()} onClick={onClick} />);
 
     const button = screen.getByRole("button", {
       name: /View details for Galaxy Quest/,
     });
-    fireEvent.keyDown(button, { key: "Enter" });
+    button.focus();
+    await user.keyboard("{Enter}");
     expect(onClick).toHaveBeenCalledOnce();
   });
 

@@ -135,6 +135,18 @@ describe("CardDetail", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("closes via backdrop click", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<CardDetail item={makeItem()} open={true} onClose={onClose} />);
+
+    // Radix Dialog overlay has data-state="open" on the backdrop
+    const overlay = document.querySelector("[data-state='open']");
+    expect(overlay).not.toBeNull();
+    await user.click(overlay!);
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("has role=dialog", () => {
     render(<CardDetail item={makeItem()} open={true} onClose={vi.fn()} />);
 

@@ -15,11 +15,13 @@ export function CardCarousel({ items, onCardClick }: CardCarouselProps) {
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    const scrollLeft = el.scrollLeft;
-    const cardWidth = el.scrollWidth / items.length;
-    const newIndex = Math.round(scrollLeft / cardWidth);
-    const clamped = Math.min(newIndex, items.length - 1);
+    if (!el || !el.firstElementChild) return;
+    const firstCard = el.firstElementChild as HTMLElement;
+    const cardWidth =
+      firstCard.offsetWidth + parseFloat(getComputedStyle(el).gap || "0");
+    if (cardWidth <= 0) return;
+    const newIndex = Math.round(el.scrollLeft / cardWidth);
+    const clamped = Math.min(Math.max(newIndex, 0), items.length - 1);
     setActiveIndex((prev) => (prev !== clamped ? clamped : prev));
   }, [items.length]);
 

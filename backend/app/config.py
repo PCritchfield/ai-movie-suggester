@@ -170,6 +170,10 @@ class Settings(BaseSettings):
         return str(self.cors_origin).rstrip("/")
 
     @property
-    def effective_jellyfin_web_url(self) -> str:
-        """Return jellyfin_web_url or fall back to jellyfin_url."""
-        return self.jellyfin_web_url or self.jellyfin_url
+    def effective_jellyfin_web_url(self) -> str | None:
+        """Return jellyfin_web_url if explicitly configured, else None.
+
+        No fallback to jellyfin_url — that may be a Docker-internal address
+        (e.g., http://jellyfin:8096) that users can't reach.
+        """
+        return self.jellyfin_web_url
