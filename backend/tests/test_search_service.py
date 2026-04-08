@@ -355,6 +355,133 @@ class TestSearchJellyfinWebUrl:
         assert result.results[0].jellyfin_web_url is None
 
 
+class TestSearchExcludeIds:
+    async def test_search_excludes_watched_ids(self) -> None:
+        """Items in exclude_ids are removed from results."""
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 10
+        vec_repo.search.return_value = [
+            _make_search_result("m1", 0.9),
+            _make_search_result("m2", 0.8),
+            _make_search_result("m3", 0.7),
+        ]
+
+        permissions = AsyncMock()
+        # Only m1 and m3 survive (m2 excluded before permission check)
+        permissions.filter_permitted.return_value = ["m1", "m3"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [
+            _make_library_item("m1"),
+            _make_library_item("m3"),
+        ]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        result = await service.search(
+            "test", limit=10, user_id="u1", token="tok", exclude_ids={"m2"}
+        )
+
+        # m2 should not appear in results
+        result_ids = {r.jellyfin_id for r in result.results}
+        assert "m2" not in result_ids
+        assert "m1" in result_ids
+        assert "m3" in result_ids
+
+        # m2 should not have been sent to permission filtering
+        candidate_ids = permissions.filter_permitted.call_args[0][2]
+        assert "m2" not in candidate_ids
+
+    async def test_search_exclude_ids_none_preserves_behavior(self) -> None:
+        """Passing exclude_ids=None behaves identically to no exclusion."""
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 10
+        vec_repo.search.return_value = [
+            _make_search_result("m1", 0.9),
+            _make_search_result("m2", 0.8),
+        ]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1", "m2"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [
+            _make_library_item("m1"),
+            _make_library_item("m2"),
+        ]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        result = await service.search(
+            "test", limit=10, user_id="u1", token="tok", exclude_ids=None
+        )
+
+        assert len(result.results) == 2
+        candidate_ids = permissions.filter_permitted.call_args[0][2]
+        assert "m1" in candidate_ids
+        assert "m2" in candidate_ids
+
+    async def test_search_exclude_ids_empty_set_preserves_behavior(self) -> None:
+        """Passing exclude_ids=set() behaves identically to no exclusion."""
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 10
+        vec_repo.search.return_value = [
+            _make_search_result("m1", 0.9),
+        ]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        result = await service.search(
+            "test", limit=10, user_id="u1", token="tok", exclude_ids=set()
+        )
+
+        assert len(result.results) == 1
+        candidate_ids = permissions.filter_permitted.call_args[0][2]
+        assert "m1" in candidate_ids
+
+
 class TestSearchResponseMetadata:
     async def test_response_includes_metadata_fields(self) -> None:
         ollama = AsyncMock()

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from app.config import Settings
     from app.ollama.chat_client import OllamaChatClient
     from app.search.service import SearchService
+    from app.watch_history.service import WatchHistoryService
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +53,14 @@ class ChatService:
         pause_event: asyncio.Event,
         settings: Settings,
         conversation_store: ConversationStore,
+        watch_history_service: WatchHistoryService | None = None,
     ) -> None:
         self._search_service = search_service
         self._chat_client = chat_client
         self._pause_event = pause_event
         self._settings = settings
         self._conversation_store = conversation_store
+        self._watch_history_service = watch_history_service
 
     async def stream(
         self,
@@ -106,12 +109,22 @@ class ChatService:
             self._conversation_store.add_turn(session_id, "user", query)
             turn_count = self._conversation_store.turn_count(session_id)
 
+        # Fetch watch history for exclusion (graceful degradation)
+        watched_ids: set[str] | None = None
+        if self._watch_history_service is not None:
+            try:
+                watch_data = await self._watch_history_service.get(token, user_id)
+                watched_ids = {e.jellyfin_id for e in watch_data.watched}
+            except Exception:
+                logger.warning("watch_history_unavailable user_id=%s", user_id)
+
         try:
             response = await self._search_service.search(
                 query=query,
                 limit=10,
                 user_id=user_id,
                 token=token,
+                exclude_ids=watched_ids,
             )
         except SearchUnavailableError:
             logger.warning("chat_search_unavailable query_len=%d", len(query))
