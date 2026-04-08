@@ -37,12 +37,14 @@ class SearchService:
         permission_service: PermissionService,
         library_store: LibraryStore,
         overfetch_multiplier: int = 3,
+        jellyfin_web_url: str | None = None,
     ) -> None:
         self._ollama = ollama_client
         self._vec_repo = vec_repo
         self._permissions = permission_service
         self._library = library_store
         self._overfetch = overfetch_multiplier
+        self._jellyfin_web_url = jellyfin_web_url
 
     async def search(
         self,
@@ -109,6 +111,11 @@ class SearchService:
             item = item_map.get(jid)
             if item is None:
                 continue
+            web_url: str | None = None
+            if self._jellyfin_web_url:
+                base = self._jellyfin_web_url.rstrip("/")
+                web_url = f"{base}/web/#!/details?id={jid}"
+
             results.append(
                 SearchResultItem(
                     jellyfin_id=jid,
@@ -120,6 +127,7 @@ class SearchService:
                     poster_url=f"/api/images/{jid}",
                     community_rating=item.community_rating,
                     runtime_minutes=item.runtime_minutes,
+                    jellyfin_web_url=web_url,
                 )
             )
 

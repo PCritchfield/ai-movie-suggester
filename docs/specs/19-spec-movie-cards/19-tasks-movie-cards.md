@@ -160,7 +160,7 @@ Render movie recommendation cards below the assistant's text response. Each card
   - Test integration: render CardCarousel with mock SearchResultItem[] data matching the shape from SSE metadata
   - Test renders nothing when `items` is an empty array (carousel should not appear)
 
-### [ ] 4.0 Card Detail Sheet
+### [x] 4.0 Card Detail Sheet
 
 Tapping a card opens a bottom sheet (mobile) or modal dialog (desktop) showing full movie details: full-size poster, title, year, all genres, complete overview, community rating, runtime, and a "View in Jellyfin" link. Dismissible via swipe-down, backdrop click, Escape, or close button. Fully accessible with focus trap.
 
@@ -173,19 +173,19 @@ Tapping a card opens a bottom sheet (mobile) or modal dialog (desktop) showing f
 
 #### 4.0 Tasks
 
-- [ ] 4.1 Add `JELLYFIN_WEB_URL: str | None = None` to the backend settings in `backend/app/config.py`. This is the public-facing Jellyfin URL for "View in Jellyfin" links (may differ from `JELLYFIN_URL` which could be a Docker-internal address like `http://jellyfin:8096`). Falls back to `JELLYFIN_URL` if not set. Document in `.env.example`.
-- [ ] 4.2 Add `jellyfin_web_url: str | None = None` to `SearchResultItem` in `backend/app/search/models.py`. Populate in `backend/app/search/service.py` as `f"{jellyfin_web_url}/web/#!/details?id={jid}"` where `jellyfin_web_url` comes from the new setting. Update TypeScript interface in `frontend/src/lib/api/types.ts` to add `jellyfin_web_url: string | null`.
-- [ ] 4.3 Write backend test confirming `jellyfin_web_url` is correctly constructed in search results — both when `JELLYFIN_WEB_URL` is set and when it falls back to `JELLYFIN_URL`.
-- [ ] 4.4 Install shadcn/ui Dialog component (`npx shadcn@latest add dialog`) or manually create `frontend/src/components/ui/dialog.tsx` using Radix UI Dialog primitive. This provides the accessible modal foundation with focus trap, Escape dismiss, and backdrop click built in.
-- [ ] 4.5 Create `frontend/src/components/chat/card-detail.tsx` — a `"use client"` component. Props: `item: SearchResultItem | null`, `open: boolean`, `onClose: () => void`. Renders:
+- [x] 4.1 Add `JELLYFIN_WEB_URL: str | None = None` to the backend settings in `backend/app/config.py`. This is the public-facing Jellyfin URL for "View in Jellyfin" links (may differ from `JELLYFIN_URL` which could be a Docker-internal address like `http://jellyfin:8096`). Falls back to `JELLYFIN_URL` if not set. Document in `.env.example`.
+- [x] 4.2 Add `jellyfin_web_url: str | None = None` to `SearchResultItem` in `backend/app/search/models.py`. Populate in `backend/app/search/service.py` as `f"{jellyfin_web_url}/web/#!/details?id={jid}"` where `jellyfin_web_url` comes from the new setting. Update TypeScript interface in `frontend/src/lib/api/types.ts` to add `jellyfin_web_url: string | null`.
+- [x] 4.3 Write backend test confirming `jellyfin_web_url` is correctly constructed in search results — both when `JELLYFIN_WEB_URL` is set and when it falls back to `JELLYFIN_URL`.
+- [x] 4.4 Install shadcn/ui Dialog component (`npx shadcn@latest add dialog`) or manually create `frontend/src/components/ui/dialog.tsx` using Radix UI Dialog primitive. This provides the accessible modal foundation with focus trap, Escape dismiss, and backdrop click built in.
+- [x] 4.5 Create `frontend/src/components/chat/card-detail.tsx` — a `"use client"` component. Props: `item: SearchResultItem | null`, `open: boolean`, `onClose: () => void`. Renders:
   - On desktop (768px+): shadcn Dialog (centered modal) with max-width ~md
   - On mobile (< 768px): Dialog styled as bottom sheet (positioned at bottom, rounded top corners, max-height ~85vh, overflow-y-auto)
   - Content: full-size poster image (with PosterPlaceholder fallback), title + year, all genres as pills (no 3-cap here), full overview text, community rating displayed as "★ 7.2/10" if present, runtime formatted as "1h 30m" for ≥60min or "45m" for <60min (never show "0h")
   - "View in Jellyfin" link (`<a href={item.jellyfin_web_url} target="_blank" rel="noopener noreferrer">`) styled as a primary button. Hidden if `jellyfin_web_url` is null.
   - Close button (X icon) in top-right corner
   - Accessibility: `aria-labelledby` referencing the title element ID, focus returns to triggering card on close
-- [ ] 4.6 Wire the detail sheet into `message-list.tsx` — add state `const [selectedMovie, setSelectedMovie] = useState<SearchResultItem | null>(null)`. Pass `onCardClick={setSelectedMovie}` to `CardCarousel`. Render `<CardDetail item={selectedMovie} open={selectedMovie !== null} onClose={() => setSelectedMovie(null)} />` once at the end of the message list (not per-message).
-- [ ] 4.7 Write `frontend/src/components/chat/__tests__/card-detail.test.tsx`:
+- [x] 4.6 Wire the detail sheet into `message-list.tsx` — add state `const [selectedMovie, setSelectedMovie] = useState<SearchResultItem | null>(null)`. Pass `onCardClick={setSelectedMovie}` to `CardCarousel`. Render `<CardDetail item={selectedMovie} open={selectedMovie !== null} onClose={() => setSelectedMovie(null)} />` once at the end of the message list (not per-message).
+- [x] 4.7 Write `frontend/src/components/chat/__tests__/card-detail.test.tsx`:
   - Test renders all fields when item has full data (title, year, genres, overview, rating, runtime, jellyfin_web_url)
   - Test hides "View in Jellyfin" link when `jellyfin_web_url` is null
   - Test hides community rating when null, hides runtime when null

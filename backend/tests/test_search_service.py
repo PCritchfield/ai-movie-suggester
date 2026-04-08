@@ -288,6 +288,73 @@ class TestSearchOkStatus:
         assert result.status == "ok"
 
 
+class TestSearchJellyfinWebUrl:
+    async def test_jellyfin_web_url_populated_when_configured(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 10
+        vec_repo.search.return_value = [_make_search_result("m1", 0.8)]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        service._jellyfin_web_url = "https://jellyfin.example.com"
+        result = await service.search("test", limit=10, user_id="u1", token="tok")
+
+        assert len(result.results) == 1
+        assert (
+            result.results[0].jellyfin_web_url
+            == "https://jellyfin.example.com/web/#!/details?id=m1"
+        )
+
+    async def test_jellyfin_web_url_none_when_not_configured(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = _make_embedding_result()
+
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 10
+        vec_repo.search.return_value = [_make_search_result("m1", 0.8)]
+
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1"]
+
+        library = AsyncMock()
+        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        # No jellyfin_web_url set (default None)
+        result = await service.search("test", limit=10, user_id="u1", token="tok")
+
+        assert len(result.results) == 1
+        assert result.results[0].jellyfin_web_url is None
+
+
 class TestSearchResponseMetadata:
     async def test_response_includes_metadata_fields(self) -> None:
         ollama = AsyncMock()

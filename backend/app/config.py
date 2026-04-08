@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Required
     jellyfin_url: str
     jellyfin_timeout: float = 10.0
+    jellyfin_web_url: str | None = None
     session_secret: Annotated[str, Field(min_length=32)]
 
     # Ollama

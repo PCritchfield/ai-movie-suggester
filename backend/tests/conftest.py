@@ -40,6 +40,8 @@ def make_search_result_item(
         year=year,
         score=score,
         poster_url=poster_url or f"/api/images/{jid}",
+        community_rating=7.4,
+        runtime_minutes=102,
     )
 
 

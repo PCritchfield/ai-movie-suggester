@@ -220,12 +220,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Create search service and mount router
         from app.search.service import SearchService
 
+        jellyfin_web_url = settings.jellyfin_web_url or settings.jellyfin_url
         search_service = SearchService(
             ollama_client=ollama_client,
             vec_repo=vec_repo,
             permission_service=permission_service,
             library_store=library_store,
             overfetch_multiplier=settings.search_overfetch_multiplier,
+            jellyfin_web_url=jellyfin_web_url,
         )
         app.state.search_service = search_service
         search_router = create_search_router(

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -10,6 +10,7 @@ import type {
   SearchResultItem,
 } from "@/lib/api/types";
 import { CardCarousel } from "./card-carousel";
+import { CardDetail } from "./card-detail";
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -111,6 +112,9 @@ export function MessageList({
 }: MessageListProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  const [selectedMovie, setSelectedMovie] = useState<SearchResultItem | null>(
+    null
+  );
 
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
@@ -168,7 +172,7 @@ export function MessageList({
                   {msg.recommendations && msg.recommendations.length > 0 && (
                     <CardCarousel
                       items={msg.recommendations}
-                      onCardClick={onCardClick ?? (() => {})}
+                      onCardClick={onCardClick ?? setSelectedMovie}
                     />
                   )}
                   {msg.error && (
@@ -197,6 +201,11 @@ export function MessageList({
           </div>
         ))}
       </div>
+      <CardDetail
+        item={selectedMovie}
+        open={selectedMovie !== null}
+        onClose={() => setSelectedMovie(null)}
+      />
     </div>
   );
 }
