@@ -162,6 +162,50 @@ class TestErrorPropagation:
         with pytest.raises(JellyfinConnectionError):
             await service.get("tok-1", "user-1")
 
+    @pytest.mark.asyncio
+    async def test_partial_fetch_failure_not_cached(self) -> None:
+        """Partial fetch failure: favorites fails, nothing cached."""
+        client = AsyncMock()
+        client.get_watched_items.return_value = [_make_entry("w1")]
+        client.get_favorite_items.side_effect = JellyfinConnectionError("down")
+        service = WatchHistoryService(jellyfin_client=client)
+
+        with pytest.raises(JellyfinConnectionError):
+            await service.get("tok-1", "user-1")
+
+        # Nothing should be cached — next call must re-fetch both
+        client.get_watched_items.reset_mock()
+        client.get_favorite_items.reset_mock()
+        client.get_favorite_items.side_effect = None
+        client.get_favorite_items.return_value = []
+        await service.get("tok-1", "user-1")
+        client.get_watched_items.assert_awaited_once()
+        client.get_favorite_items.assert_awaited_once()
+
+
+class TestCrossUserIsolation:
+    @pytest.mark.asyncio
+    async def test_different_users_get_independent_cache_entries(self) -> None:
+        """user-1 and user-2 have separate cache entries — no cross-user leakage."""
+        client = AsyncMock()
+        user1_watched = [_make_entry("u1-movie")]
+        user2_watched = [_make_entry("u2-movie")]
+
+        async def _watched(token: str, user_id: str) -> list:
+            return user1_watched if user_id == "user-1" else user2_watched
+
+        client.get_watched_items.side_effect = _watched
+        client.get_favorite_items.return_value = []
+
+        service = WatchHistoryService(jellyfin_client=client)
+        data1 = await service.get("tok-1", "user-1")
+        data2 = await service.get("tok-2", "user-2")
+
+        assert client.get_watched_items.await_count == 2
+        assert data1.watched[0].jellyfin_id == "u1-movie"
+        assert data2.watched[0].jellyfin_id == "u2-movie"
+        assert data1 is not data2
+
 
 class TestEviction:
     @pytest.mark.asyncio

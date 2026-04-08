@@ -14,7 +14,7 @@ from app.chat.prompts import (
     get_system_prompt,
 )
 from app.chat.sanitize import check_injection_patterns, sanitize_user_input
-from app.jellyfin.errors import JellyfinAuthError, JellyfinConnectionError
+from app.jellyfin.errors import JellyfinError
 from app.ollama.errors import (
     OllamaConnectionError,
     OllamaStreamError,
@@ -125,7 +125,7 @@ class ChatService:
             try:
                 watch_data = await self._watch_history_service.get(token, user_id)
                 watched_ids = {e.jellyfin_id for e in watch_data.watched}
-            except (JellyfinAuthError, JellyfinConnectionError):
+            except JellyfinError:
                 logger.warning("watch_history_unavailable user_id=%s", user_id)
 
         try:
