@@ -71,9 +71,7 @@ export function CardDetail({ item, open, onClose }: CardDetailProps) {
         {/* Metadata row: rating + runtime */}
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           {item.community_rating != null && (
-            <span>
-              {"\u2605"} {item.community_rating.toFixed(1)}/10
-            </span>
+            <span>★ {item.community_rating.toFixed(1)}/10</span>
           )}
           {item.runtime_minutes != null && (
             <span>{formatRuntime(item.runtime_minutes)}</span>

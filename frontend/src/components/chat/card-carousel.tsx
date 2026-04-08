@@ -19,7 +19,8 @@ export function CardCarousel({ items, onCardClick }: CardCarouselProps) {
     const scrollLeft = el.scrollLeft;
     const cardWidth = el.scrollWidth / items.length;
     const newIndex = Math.round(scrollLeft / cardWidth);
-    setActiveIndex(Math.min(newIndex, items.length - 1));
+    const clamped = Math.min(newIndex, items.length - 1);
+    setActiveIndex((prev) => (prev !== clamped ? clamped : prev));
   }, [items.length]);
 
   useEffect(() => {

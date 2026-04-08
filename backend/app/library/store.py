@@ -110,9 +110,11 @@ class LibraryStore:
         await self._db.execute(_CREATE_INDEX_HASH)
         await self._db.execute(_CREATE_INDEX_SYNCED)
 
-        # Migration: add deleted_at column if table predates Spec 08
+        # Read column set AFTER CREATE TABLE so migrations see the full schema
         cursor = await self._db.execute("PRAGMA table_info(library_items)")
         existing_columns = {row[1] for row in await cursor.fetchall()}
+
+        # Migration: add deleted_at column if table predates Spec 08
         if "deleted_at" not in existing_columns:
             await self._db.execute(
                 "ALTER TABLE library_items ADD COLUMN deleted_at INTEGER"
@@ -123,13 +125,6 @@ class LibraryStore:
         await self._db.execute(_CREATE_EMBEDDING_QUEUE)
         await self._db.execute(_CREATE_INDEX_EMBEDDING_QUEUE)
 
-        # Migration: add runtime_minutes column if table predates Spec 19
-        if "runtime_minutes" not in existing_columns:
-            await self._db.execute(
-                "ALTER TABLE library_items ADD COLUMN runtime_minutes INTEGER"
-            )
-            await self._db.commit()
-
         # Migration: add last_attempted_at column if table predates Spec 10
         eq_cursor = await self._db.execute("PRAGMA table_info(embedding_queue)")
         eq_columns = {row[1] for row in await eq_cursor.fetchall()}
@@ -138,6 +133,14 @@ class LibraryStore:
                 "ALTER TABLE embedding_queue ADD COLUMN last_attempted_at INTEGER"
             )
             await self._db.commit()
+
+        # Migration: add runtime_minutes column if table predates Spec 19
+        if "runtime_minutes" not in existing_columns:
+            await self._db.execute(
+                "ALTER TABLE library_items ADD COLUMN runtime_minutes INTEGER"
+            )
+            await self._db.commit()
+
         await self._db.execute(_CREATE_SYNC_RUNS)
         await self._db.execute(_CREATE_INDEX_SYNC_RUNS_STARTED)
         await self._db.commit()

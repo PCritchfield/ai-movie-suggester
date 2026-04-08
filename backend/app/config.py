@@ -87,7 +87,6 @@ class Settings(BaseSettings):
 
     # Library sync
     jellyfin_api_key: SecretStr | None = None
-    library_db_path: str = "data/library.db"
     library_sync_page_size: int = 200
 
     # Sync engine

@@ -126,15 +126,12 @@ def build_composite_text(item: LibraryItem) -> CompositeTextResult:
         A CompositeTextResult with the built text, template version,
         and embedding source.
     """
-    runtime_minutes = (
-        item.run_time_ticks // 600_000_000 if item.run_time_ticks is not None else None
-    )
     text = build_sections(
         title=item.name,
         overview=item.overview,
         genres=item.genres,
         production_year=item.production_year,
-        runtime_minutes=runtime_minutes,
+        runtime_minutes=item.runtime_minutes,
     )
 
     if len(text) > _LENGTH_WARNING_THRESHOLD:

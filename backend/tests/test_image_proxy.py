@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 from fastapi import FastAPI
@@ -33,15 +33,24 @@ def _make_session_meta() -> SessionMeta:
     )
 
 
+def _make_mock_jf_client(http_client: AsyncMock | None = None) -> MagicMock:
+    """Create a mock JellyfinClient with a mock _client attribute."""
+    jf = MagicMock()
+    jf._client = http_client or AsyncMock()
+    return jf
+
+
 def _make_image_app(
     *,
     session_store: AsyncMock | None = None,
     settings: object | None = None,
+    http_client: AsyncMock | None = None,
 ) -> tuple[FastAPI, TestClient]:
     settings = settings or make_test_settings()
     app = FastAPI()
     app.state.session_store = session_store or AsyncMock()
     app.state.settings = settings
+    app.state.jellyfin_client = _make_mock_jf_client(http_client)
 
     images_router = create_images_router(settings=settings)
     app.include_router(images_router)
@@ -59,7 +68,8 @@ class TestImageProxyValidId:
         session_store = AsyncMock()
         session_store.get_token.return_value = "jf-token"
 
-        mock_response = httpx.Response(
+        mock_http = AsyncMock()
+        mock_http.get.return_value = httpx.Response(
             200,
             content=b"\xff\xd8\xff\xe0fake-jpeg-bytes",
             headers={
@@ -68,18 +78,8 @@ class TestImageProxyValidId:
             },
         )
 
-        _, client = _make_image_app(session_store=session_store)
-
-        with patch("app.images.router.httpx.AsyncClient") as mock_client_cls:
-            mock_client_instance = AsyncMock()
-            mock_client_instance.get.return_value = mock_response
-            mock_client_instance.__aenter__ = AsyncMock(
-                return_value=mock_client_instance
-            )
-            mock_client_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client_instance
-
-            resp = client.get(f"/api/images/{_VALID_HEX_ID}")
+        _, client = _make_image_app(session_store=session_store, http_client=mock_http)
+        resp = client.get(f"/api/images/{_VALID_HEX_ID}")
 
         assert resp.status_code == 200
         assert resp.content == b"\xff\xd8\xff\xe0fake-jpeg-bytes"
@@ -96,7 +96,6 @@ class TestImageProxyInvalidId:
 
     def test_uppercase_hex_returns_422(self) -> None:
         _, client = _make_image_app()
-        # Regex requires lowercase hex only
         resp = client.get(f"/api/images/{'A' * 32}")
         assert resp.status_code == 422
 
@@ -123,10 +122,10 @@ class TestImageProxyUnauthenticated:
         app.state.session_store = AsyncMock()
         app.state.settings = settings
         app.state.cookie_key = _COOKIE_KEY
+        app.state.jellyfin_client = _make_mock_jf_client()
 
         images_router = create_images_router(settings=settings)
         app.include_router(images_router)
-        # Do NOT override get_current_session
         client = TestClient(app)
         resp = client.get(f"/api/images/{_VALID_HEX_ID}")
         assert resp.status_code == 401
@@ -137,58 +136,33 @@ class TestImageProxyJellyfinErrors:
         session_store = AsyncMock()
         session_store.get_token.return_value = "jf-token"
 
-        mock_response = httpx.Response(404)
-        _, client = _make_image_app(session_store=session_store)
+        mock_http = AsyncMock()
+        mock_http.get.return_value = httpx.Response(404)
 
-        with patch("app.images.router.httpx.AsyncClient") as mock_client_cls:
-            mock_client_instance = AsyncMock()
-            mock_client_instance.get.return_value = mock_response
-            mock_client_instance.__aenter__ = AsyncMock(
-                return_value=mock_client_instance
-            )
-            mock_client_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client_instance
-
-            resp = client.get(f"/api/images/{_VALID_HEX_ID}")
-
+        _, client = _make_image_app(session_store=session_store, http_client=mock_http)
+        resp = client.get(f"/api/images/{_VALID_HEX_ID}")
         assert resp.status_code == 404
 
     def test_jellyfin_unreachable_returns_502(self) -> None:
         session_store = AsyncMock()
         session_store.get_token.return_value = "jf-token"
 
-        _, client = _make_image_app(session_store=session_store)
+        mock_http = AsyncMock()
+        mock_http.get.side_effect = httpx.ConnectError("unreachable")
 
-        with patch("app.images.router.httpx.AsyncClient") as mock_client_cls:
-            mock_client_instance = AsyncMock()
-            mock_client_instance.get.side_effect = httpx.ConnectError("unreachable")
-            mock_client_instance.__aenter__ = AsyncMock(
-                return_value=mock_client_instance
-            )
-            mock_client_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client_instance
-
-            resp = client.get(f"/api/images/{_VALID_HEX_ID}")
-
+        _, client = _make_image_app(session_store=session_store, http_client=mock_http)
+        resp = client.get(f"/api/images/{_VALID_HEX_ID}")
         assert resp.status_code == 502
 
     def test_jellyfin_timeout_returns_502(self) -> None:
         session_store = AsyncMock()
         session_store.get_token.return_value = "jf-token"
 
-        _, client = _make_image_app(session_store=session_store)
+        mock_http = AsyncMock()
+        mock_http.get.side_effect = httpx.TimeoutException("timeout")
 
-        with patch("app.images.router.httpx.AsyncClient") as mock_client_cls:
-            mock_client_instance = AsyncMock()
-            mock_client_instance.get.side_effect = httpx.TimeoutException("timeout")
-            mock_client_instance.__aenter__ = AsyncMock(
-                return_value=mock_client_instance
-            )
-            mock_client_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client_instance
-
-            resp = client.get(f"/api/images/{_VALID_HEX_ID}")
-
+        _, client = _make_image_app(session_store=session_store, http_client=mock_http)
+        resp = client.get(f"/api/images/{_VALID_HEX_ID}")
         assert resp.status_code == 502
 
 
@@ -197,7 +171,8 @@ class TestImageProxyHeaderForwarding:
         session_store = AsyncMock()
         session_store.get_token.return_value = "jf-token"
 
-        mock_response = httpx.Response(
+        mock_http = AsyncMock()
+        mock_http.get.return_value = httpx.Response(
             200,
             content=b"image-data",
             headers={
@@ -208,21 +183,10 @@ class TestImageProxyHeaderForwarding:
             },
         )
 
-        _, client = _make_image_app(session_store=session_store)
-
-        with patch("app.images.router.httpx.AsyncClient") as mock_client_cls:
-            mock_client_instance = AsyncMock()
-            mock_client_instance.get.return_value = mock_response
-            mock_client_instance.__aenter__ = AsyncMock(
-                return_value=mock_client_instance
-            )
-            mock_client_instance.__aexit__ = AsyncMock(return_value=False)
-            mock_client_cls.return_value = mock_client_instance
-
-            resp = client.get(f"/api/images/{_VALID_HEX_ID}")
+        _, client = _make_image_app(session_store=session_store, http_client=mock_http)
+        resp = client.get(f"/api/images/{_VALID_HEX_ID}")
 
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
         assert resp.headers["content-length"] == "10"
         assert "x-jellyfin-internal" not in resp.headers
-        # server header from Jellyfin should not leak through

@@ -44,7 +44,9 @@ class SearchService:
         self._permissions = permission_service
         self._library = library_store
         self._overfetch = overfetch_multiplier
-        self._jellyfin_web_url = jellyfin_web_url
+        self._jellyfin_web_url = (
+            jellyfin_web_url.rstrip("/") if jellyfin_web_url else None
+        )
 
     async def search(
         self,
@@ -113,8 +115,7 @@ class SearchService:
                 continue
             web_url: str | None = None
             if self._jellyfin_web_url:
-                base = self._jellyfin_web_url.rstrip("/")
-                web_url = f"{base}/web/#!/details?id={jid}"
+                web_url = f"{self._jellyfin_web_url}/web/#!/details?id={jid}"
 
             results.append(
                 SearchResultItem(

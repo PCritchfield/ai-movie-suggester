@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 
 from app.auth.dependencies import get_current_session
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 def create_images_router(settings: Settings) -> APIRouter:
     """Build the images APIRouter for proxying Jellyfin poster images."""
     router = APIRouter(prefix="/api", tags=["images"])
+    jellyfin_base = settings.jellyfin_url.rstrip("/")
 
     @router.get(
         "/images/{jellyfin_id}",
@@ -36,22 +37,21 @@ def create_images_router(settings: Settings) -> APIRouter:
         request: Request,
         jellyfin_id: str = Path(pattern=r"^[a-f0-9]{32}$"),  # noqa: B008
         session: SessionMeta = Depends(get_current_session),  # noqa: B008
-    ) -> StreamingResponse:
+    ) -> Response:
         """Proxy a Jellyfin poster image for the given item."""
         session_store = request.app.state.session_store
         token = await session_store.get_token(session.session_id)
         if token is None:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        jellyfin_url = settings.jellyfin_url.rstrip("/")
-        image_url = f"{jellyfin_url}/Items/{jellyfin_id}/Images/Primary"
+        image_url = f"{jellyfin_base}/Items/{jellyfin_id}/Images/Primary"
+        http_client: httpx.AsyncClient = request.app.state.jellyfin_client._client
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    image_url,
-                    headers={"Authorization": f'MediaBrowser Token="{token}"'},
-                )
+            resp = await http_client.get(
+                image_url,
+                headers={"Authorization": f'MediaBrowser Token="{token}"'},
+            )
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
             logger.warning("image_proxy_upstream_error id=%s", jellyfin_id)
             raise HTTPException(status_code=502, detail="Jellyfin unreachable") from exc
@@ -72,8 +72,8 @@ def create_images_router(settings: Settings) -> APIRouter:
         if "content-length" in resp.headers:
             headers["Content-Length"] = resp.headers["content-length"]
 
-        return StreamingResponse(
-            iter([resp.content]),
+        return Response(
+            content=resp.content,
             media_type=content_type,
             headers=headers,
         )
