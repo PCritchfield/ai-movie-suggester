@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from app.chat.models import ChatErrorCode, SSEEventType
@@ -27,6 +26,7 @@ if TYPE_CHECKING:
 
     from app.chat.conversation_store import ConversationStore
     from app.config import Settings
+    from app.jellyfin.models import WatchHistoryEntry
     from app.library.store import LibraryStore
     from app.ollama.chat_client import OllamaChatClient
     from app.search.service import SearchService
@@ -234,17 +234,15 @@ class ChatService:
         if self._library_store is None:
             return None
 
-        # Sort by last_played_date descending, take top 10 recent + 5 favorites
-        recent_sorted = sorted(
-            watch_data.watched,
-            key=lambda e: e.last_played_date or datetime.min,
-            reverse=True,
-        )[:10]
-        fav_sorted = sorted(
-            watch_data.favorites,
-            key=lambda e: e.last_played_date or datetime.min,
-            reverse=True,
-        )[:5]
+        # Sort by last_played_date descending, take top 10 recent + 5 favorites.
+        # Use epoch 0 as fallback to avoid naive/aware datetime comparison errors.
+        def _sort_key(e: WatchHistoryEntry) -> float:
+            if e.last_played_date is None:
+                return 0.0
+            return e.last_played_date.timestamp()
+
+        recent_sorted = sorted(watch_data.watched, key=_sort_key, reverse=True)[:10]
+        fav_sorted = sorted(watch_data.favorites, key=_sort_key, reverse=True)[:5]
 
         # Deduplicate IDs for a single batch lookup
         recent_ids = [e.jellyfin_id for e in recent_sorted]

@@ -506,7 +506,7 @@ def _make_watch_history_mock(
         for jid in (watched_ids or [])
     ]
     mock = AsyncMock()
-    mock.get.return_value = WatchData(watched=entries, favorites=[])
+    mock.get.return_value = WatchData(watched=tuple(entries), favorites=())
     return mock
 
 

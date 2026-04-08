@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,8 +26,8 @@ _MAX_CACHE_ENTRIES = 500
 class WatchData:
     """Cached watch history for a single user."""
 
-    watched: list[WatchHistoryEntry] = field(default_factory=list)
-    favorites: list[WatchHistoryEntry] = field(default_factory=list)
+    watched: tuple[WatchHistoryEntry, ...] = ()
+    favorites: tuple[WatchHistoryEntry, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +71,7 @@ class WatchHistoryService:
             self._jf_client.get_favorite_items(token, user_id),
         )
 
-        data = WatchData(watched=watched, favorites=favorites)
+        data = WatchData(watched=tuple(watched), favorites=tuple(favorites))
         self._cache[user_id] = _CacheEntry(
             data=data,
             expires_at=time.monotonic() + self._cache_ttl,

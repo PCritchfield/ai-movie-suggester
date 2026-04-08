@@ -492,8 +492,10 @@ class TestBuildChatMessagesWithWatchHistory:
         )
         # All should fit: system + 2 history + watch_history + movie_context + query = 6
         assert len(messages) == 6
-        # Verify watch history is present
-        wh_msgs = [m for m in messages if "<watch-history>" in m.get("content", "")]
+        # Verify watch history is present (starts with tag, not just contains it)
+        wh_msgs = [
+            m for m in messages if m.get("content", "").startswith("<watch-history>")
+        ]
         assert len(wh_msgs) == 1
         # Verify movie context is present
         ctx_msgs = [
@@ -522,8 +524,10 @@ class TestBuildChatMessagesWithWatchHistory:
             context_token_budget=tight_budget,
             watch_history_context=huge_wh,
         )
-        # Watch history should be omitted — no message should contain it
-        wh_msgs = [m for m in messages if "<watch-history>" in m.get("content", "")]
+        # Watch history should be omitted — no message should start with its tag
+        wh_msgs = [
+            m for m in messages if m.get("content", "").startswith("<watch-history>")
+        ]
         assert len(wh_msgs) == 0
 
     def test_context_token_budget_required(self) -> None:
