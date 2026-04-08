@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from app.chat.models import ChatErrorCode, SSEEventType
@@ -13,6 +14,7 @@ from app.chat.prompts import (
     get_system_prompt,
 )
 from app.chat.sanitize import check_injection_patterns, sanitize_user_input
+from app.jellyfin.errors import JellyfinAuthError, JellyfinConnectionError
 from app.ollama.errors import (
     OllamaConnectionError,
     OllamaStreamError,
@@ -123,7 +125,7 @@ class ChatService:
             try:
                 watch_data = await self._watch_history_service.get(token, user_id)
                 watched_ids = {e.jellyfin_id for e in watch_data.watched}
-            except Exception:
+            except (JellyfinAuthError, JellyfinConnectionError):
                 logger.warning("watch_history_unavailable user_id=%s", user_id)
 
         try:
@@ -227,10 +229,10 @@ class ChatService:
         """Resolve watch history IDs to titles and format for prompt context.
 
         Returns the formatted watch history block, or None if empty.
+        Caller must ensure ``self._library_store`` is not None before calling.
         """
-        from datetime import datetime
-
-        assert self._library_store is not None  # noqa: S101
+        if self._library_store is None:
+            return None
 
         # Sort by last_played_date descending, take top 10 recent + 5 favorites
         recent_sorted = sorted(

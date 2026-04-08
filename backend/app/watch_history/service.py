@@ -7,6 +7,7 @@ on each fetch — never stored in the cache.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -65,8 +66,10 @@ class WatchHistoryService:
             return entry.data
 
         logger.debug("watch_history_cache_miss user_id=%s", user_id)
-        watched = await self._jf_client.get_watched_items(token, user_id)
-        favorites = await self._jf_client.get_favorite_items(token, user_id)
+        watched, favorites = await asyncio.gather(
+            self._jf_client.get_watched_items(token, user_id),
+            self._jf_client.get_favorite_items(token, user_id),
+        )
 
         data = WatchData(watched=watched, favorites=favorites)
         self._cache[user_id] = _CacheEntry(

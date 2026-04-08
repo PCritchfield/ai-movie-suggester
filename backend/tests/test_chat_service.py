@@ -555,8 +555,10 @@ class TestChatServiceWatchHistory:
         chat_client = AsyncMock()
         chat_client.chat_stream = _fake_stream
 
+        from app.jellyfin.errors import JellyfinConnectionError
+
         watch_mock = AsyncMock()
-        watch_mock.get.side_effect = ConnectionError("Jellyfin unreachable")
+        watch_mock.get.side_effect = JellyfinConnectionError("Jellyfin unreachable")
 
         service = _make_chat_service(
             search_service=search,
