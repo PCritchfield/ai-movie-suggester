@@ -143,6 +143,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.permission_service = permission_service
 
+        # Watch history service (stateless in-memory cache, no init()/close())
+        from app.watch_history.service import WatchHistoryService
+
+        watch_history_service = WatchHistoryService(
+            jellyfin_client=jf_client,
+            cache_ttl_seconds=settings.watch_history_cache_ttl_seconds,
+        )
+        app.state.watch_history_service = watch_history_service
+
         # Create sync JellyfinClient if API key is configured
         sync_jf_client: JellyfinClient | None = None
         if settings.jellyfin_api_key is not None:
@@ -210,6 +219,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cookie_key=cookie_key,
             limiter=limiter,
             permission_service=permission_service,
+            watch_history_service=watch_history_service,
         )
         app.include_router(auth_router)
 
@@ -270,6 +280,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             pause_event=embedding_pause_event,
             settings=settings,
             conversation_store=conversation_store,
+            watch_history_service=watch_history_service,
+            library_store=library_store,
         )
         app.state.chat_service = chat_service
 

@@ -54,6 +54,7 @@ class SearchService:
         limit: int,
         user_id: str,
         token: str,
+        exclude_ids: set[str] | None = None,
     ) -> SearchResponse:
         """Execute the full search pipeline.
 
@@ -62,6 +63,8 @@ class SearchService:
             limit: Maximum number of results to return.
             user_id: Jellyfin user ID for permission filtering.
             token: Decrypted Jellyfin access token.
+            exclude_ids: Optional set of Jellyfin item IDs to exclude
+                from results (e.g. already-watched items).
 
         Returns:
             SearchResponse with results, metadata, and status.
@@ -95,6 +98,9 @@ class SearchService:
             embedding_result.vector, limit=fetch_limit
         )
         total_candidates = len(candidates)
+
+        if exclude_ids:
+            candidates = [c for c in candidates if c.jellyfin_id not in exclude_ids]
 
         candidate_ids = [c.jellyfin_id for c in candidates]
         permitted_ids = await self._permissions.filter_permitted(

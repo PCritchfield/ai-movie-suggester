@@ -37,6 +37,7 @@ def _make_chat_service(
     chat_client: AsyncMock | None = None,
     pause_event: asyncio.Event | None = None,
     conversation_store: ConversationStore | None = None,
+    watch_history_service: AsyncMock | None = None,
 ) -> ChatService:
     settings = make_test_settings()
     _search = search_service or AsyncMock()
@@ -54,6 +55,7 @@ def _make_chat_service(
         pause_event=_pause,
         settings=settings,
         conversation_store=_conv,
+        watch_history_service=watch_history_service,
     )
 
 
@@ -480,3 +482,129 @@ class TestChatServiceInjectionLogging:
         assert not any(
             "chat_injection_detected" in record.message for record in caplog.records
         )
+
+
+# ---------------------------------------------------------------------------
+# Watch history integration (Spec 20, Task 2.0)
+# ---------------------------------------------------------------------------
+
+
+def _make_watch_history_mock(
+    watched_ids: list[str] | None = None,
+) -> AsyncMock:
+    """Create a mock WatchHistoryService that returns WatchData."""
+    from app.jellyfin.models import WatchHistoryEntry
+    from app.watch_history.service import WatchData
+
+    entries = [
+        WatchHistoryEntry(
+            jellyfin_id=jid,
+            last_played_date=None,
+            play_count=1,
+            is_favorite=False,
+        )
+        for jid in (watched_ids or [])
+    ]
+    mock = AsyncMock()
+    mock.get.return_value = WatchData(watched=tuple(entries), favorites=())
+    return mock
+
+
+class TestChatServiceWatchHistory:
+    async def test_chat_passes_watched_ids_to_search(self) -> None:
+        """When watch history is available, exclude_ids is passed to search."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fake_stream(messages):
+            yield "Response"
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fake_stream
+
+        watch_mock = _make_watch_history_mock(watched_ids=["w1", "w2"])
+
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            watch_history_service=watch_mock,
+        )
+
+        events = await _collect_events(
+            service,
+            query="test",
+            user_id="uid-1",
+            token="jf-token",
+            session_id="test-session",
+        )
+
+        assert events[-1]["type"] == "done"
+        watch_mock.get.assert_awaited_once_with("jf-token", "uid-1")
+        search.search.assert_awaited_once()
+        call_kwargs = search.search.call_args.kwargs
+        assert call_kwargs["exclude_ids"] == {"w1", "w2"}
+
+    async def test_chat_degrades_when_watch_history_fails(self) -> None:
+        """When watch history fetch fails, search proceeds with exclude_ids=None."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fake_stream(messages):
+            yield "Response"
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fake_stream
+
+        from app.jellyfin.errors import JellyfinConnectionError
+
+        watch_mock = AsyncMock()
+        watch_mock.get.side_effect = JellyfinConnectionError("Jellyfin unreachable")
+
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            watch_history_service=watch_mock,
+        )
+
+        events = await _collect_events(
+            service,
+            query="test",
+            user_id="uid-1",
+            token="jf-token",
+            session_id="test-session",
+        )
+
+        assert events[-1]["type"] == "done"
+        search.search.assert_awaited_once()
+        call_kwargs = search.search.call_args.kwargs
+        assert call_kwargs["exclude_ids"] is None
+
+    async def test_chat_works_without_watch_history_service(self) -> None:
+        """When watch_history_service is None, search gets exclude_ids=None."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+
+        async def _fake_stream(messages):
+            yield "Response"
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fake_stream
+
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            watch_history_service=None,
+        )
+
+        events = await _collect_events(
+            service,
+            query="test",
+            user_id="uid-1",
+            token="jf-token",
+            session_id="test-session",
+        )
+
+        assert events[-1]["type"] == "done"
+        search.search.assert_awaited_once()
+        call_kwargs = search.search.call_args.kwargs
+        assert call_kwargs["exclude_ids"] is None

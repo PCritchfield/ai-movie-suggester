@@ -7,8 +7,13 @@ import logging
 from typing import TYPE_CHECKING
 
 from app.chat.models import ChatErrorCode, SSEEventType
-from app.chat.prompts import build_chat_messages, get_system_prompt
+from app.chat.prompts import (
+    build_chat_messages,
+    format_watch_history_context,
+    get_system_prompt,
+)
 from app.chat.sanitize import check_injection_patterns, sanitize_user_input
+from app.jellyfin.errors import JellyfinError
 from app.ollama.errors import (
     OllamaConnectionError,
     OllamaStreamError,
@@ -21,8 +26,11 @@ if TYPE_CHECKING:
 
     from app.chat.conversation_store import ConversationStore
     from app.config import Settings
+    from app.jellyfin.models import WatchHistoryEntry
+    from app.library.store import LibraryStore
     from app.ollama.chat_client import OllamaChatClient
     from app.search.service import SearchService
+    from app.watch_history.service import WatchData, WatchHistoryService
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +60,16 @@ class ChatService:
         pause_event: asyncio.Event,
         settings: Settings,
         conversation_store: ConversationStore,
+        watch_history_service: WatchHistoryService | None = None,
+        library_store: LibraryStore | None = None,
     ) -> None:
         self._search_service = search_service
         self._chat_client = chat_client
         self._pause_event = pause_event
         self._settings = settings
         self._conversation_store = conversation_store
+        self._watch_history_service = watch_history_service
+        self._library_store = library_store
 
     async def stream(
         self,
@@ -106,12 +118,23 @@ class ChatService:
             self._conversation_store.add_turn(session_id, "user", query)
             turn_count = self._conversation_store.turn_count(session_id)
 
+        # Fetch watch history for exclusion + prompt context (graceful degradation)
+        watched_ids: set[str] | None = None
+        watch_data: WatchData | None = None
+        if self._watch_history_service is not None:
+            try:
+                watch_data = await self._watch_history_service.get(token, user_id)
+                watched_ids = {e.jellyfin_id for e in watch_data.watched}
+            except JellyfinError:
+                logger.warning("watch_history_unavailable user_id=%s", user_id)
+
         try:
             response = await self._search_service.search(
                 query=query,
                 limit=10,
                 user_id=user_id,
                 token=token,
+                exclude_ids=watched_ids,
             )
         except SearchUnavailableError:
             logger.warning("chat_search_unavailable query_len=%d", len(query))
@@ -133,6 +156,13 @@ class ChatService:
             "turn_count": turn_count,
         }
 
+        # Resolve watch history titles for prompt context
+        watch_history_context: str | None = None
+        if watch_data is not None and self._library_store is not None:
+            watch_history_context = await self._resolve_watch_history_context(
+                watch_data
+            )
+
         system_prompt = get_system_prompt(self._settings.chat_system_prompt)
         messages = build_chat_messages(
             query=query,
@@ -140,6 +170,7 @@ class ChatService:
             system_prompt=system_prompt,
             history=history,
             context_token_budget=self._settings.conversation_context_budget,
+            watch_history_context=watch_history_context,
         )
 
         # Clear pause event so embedding worker yields to chat
@@ -193,3 +224,48 @@ class ChatService:
             }
         finally:
             self._pause_event.set()
+
+    async def _resolve_watch_history_context(self, watch_data: WatchData) -> str | None:
+        """Resolve watch history IDs to titles and format for prompt context.
+
+        Returns the formatted watch history block, or None if empty.
+        Caller must ensure ``self._library_store`` is not None before calling.
+        """
+        if self._library_store is None:
+            return None
+
+        # Sort by last_played_date descending, take top 10 recent + 5 favorites.
+        # Use epoch 0 as fallback to avoid naive/aware datetime comparison errors.
+        def _sort_key(e: WatchHistoryEntry) -> float:
+            if e.last_played_date is None:
+                return 0.0
+            return e.last_played_date.timestamp()
+
+        recent_sorted = sorted(watch_data.watched, key=_sort_key, reverse=True)[:10]
+        fav_sorted = sorted(watch_data.favorites, key=_sort_key, reverse=True)[:5]
+
+        # Deduplicate IDs for a single batch lookup
+        recent_ids = [e.jellyfin_id for e in recent_sorted]
+        fav_ids = [e.jellyfin_id for e in fav_sorted]
+        all_ids = list(dict.fromkeys(recent_ids + fav_ids))
+
+        if not all_ids:
+            return None
+
+        items = await self._library_store.get_many(all_ids)
+        title_map = {
+            item.jellyfin_id: (
+                f"{item.title} ({item.production_year})"
+                if item.production_year
+                else item.title
+            )
+            for item in items
+        }
+
+        recent_titles = [title_map[jid] for jid in recent_ids if jid in title_map]
+        fav_titles = [title_map[jid] for jid in fav_ids if jid in title_map]
+
+        result = format_watch_history_context(
+            recent_titles, fav_titles, len(watch_data.watched)
+        )
+        return result or None

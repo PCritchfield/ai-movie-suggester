@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from app.auth.session_store import SessionStore
     from app.config import Settings
     from app.permissions.service import PermissionService
+    from app.watch_history.service import WatchHistoryService
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def create_auth_router(
     cookie_key: bytes,
     limiter: Limiter | None = None,
     permission_service: PermissionService | None = None,
+    watch_history_service: WatchHistoryService | None = None,
 ) -> APIRouter:
     """Build the auth APIRouter with closures over service dependencies."""
     router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -182,6 +184,10 @@ def create_auth_router(
         # Invalidate permission cache for the user
         if permission_service is not None:
             permission_service.invalidate_user_cache(session.user_id)
+
+        # Invalidate watch history cache for the user
+        if watch_history_service is not None:
+            watch_history_service.invalidate(session.user_id)
 
         # Best-effort Jellyfin token revocation
         try:
