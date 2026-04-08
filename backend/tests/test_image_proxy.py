@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from app.auth.crypto import derive_keys
 from app.auth.dependencies import get_current_session
 from app.auth.models import SessionMeta
+from app.config import Settings
 from app.images.router import create_images_router
 from tests.conftest import TEST_SECRET, make_test_settings
 
@@ -43,7 +44,7 @@ def _make_mock_jf_client(http_client: AsyncMock | None = None) -> MagicMock:
 def _make_image_app(
     *,
     session_store: AsyncMock | None = None,
-    settings: object | None = None,
+    settings: Settings | None = None,
     http_client: AsyncMock | None = None,
 ) -> tuple[FastAPI, TestClient]:
     settings = settings or make_test_settings()
