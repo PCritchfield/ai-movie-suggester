@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -74,7 +75,11 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> Iterator[TestClient]:
 
     asyncio.get_event_loop().run_until_complete(store.init())
 
-    with TestClient(app) as client:
+    # Patch out the constant-time login floor so tests don't pay 0.5s each
+    with (
+        patch("app.auth.router.asyncio.sleep", return_value=None),
+        TestClient(app) as client,
+    ):
         yield client  # type: ignore[misc]
     asyncio.get_event_loop().run_until_complete(store.close())
 
@@ -156,6 +161,78 @@ class TestLoginErrors:
         )
         assert resp.status_code == 502
         assert resp.json()["detail"] == "Jellyfin server is unreachable"
+
+
+class TestLoginTimingFloor:
+    """Verify the constant-time floor prevents timing side-channels."""
+
+    def test_sleep_called_on_fast_auth_failure(
+        self, mock_jf: AsyncMock, tmp_path: object
+    ) -> None:
+        """Auth failure completes fast — sleep should pad to the floor."""
+        import asyncio
+        import pathlib
+        from unittest.mock import AsyncMock as AsyncMockLocal
+        from unittest.mock import MagicMock
+
+        from fastapi import FastAPI
+
+        from app.auth.router import create_auth_router
+        from app.auth.service import AuthService
+        from app.chat.conversation_store import ConversationStore
+        from app.config import Settings
+
+        db_path = pathlib.Path(str(tmp_path)) / "timing_sessions.db"
+        settings = Settings(
+            jellyfin_url="http://jellyfin-test:8096",
+            session_secret=TEST_SECRET,
+            session_secure_cookie=False,
+            log_level="debug",
+        )  # type: ignore[call-arg]
+        store = SessionStore(str(db_path), TEST_COLUMN_KEY)
+        service = AuthService(
+            session_store=store,
+            jellyfin_client=mock_jf,
+            session_expiry_hours=settings.session_expiry_hours,
+            max_sessions_per_user=settings.max_sessions_per_user,
+        )
+        app = FastAPI()
+        router = create_auth_router(
+            auth_service=service,
+            session_store=store,
+            settings=settings,
+            cookie_key=TEST_COOKIE_KEY,
+        )
+        app.include_router(router)
+        app.state.session_store = store
+        app.state.cookie_key = TEST_COOKIE_KEY
+        app.state.jellyfin_client = mock_jf
+        conv = ConversationStore(max_turns=10, ttl_seconds=7200, max_sessions=100)
+        app.state.conversation_store = conv
+        chat_mock = MagicMock()
+        chat_mock.purge_session = conv.purge_session
+        app.state.chat_service = chat_mock
+
+        asyncio.get_event_loop().run_until_complete(store.init())
+
+        mock_jf.authenticate.side_effect = JellyfinAuthError("bad")
+        sleep_mock = AsyncMockLocal(return_value=None)
+
+        with (
+            patch("app.auth.router.asyncio.sleep", sleep_mock),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/auth/login",
+                json={"username": "alice", "password": "wrong"},
+            )
+        assert resp.status_code == 401
+        # sleep must have been called with a positive remainder
+        sleep_mock.assert_called_once()
+        pad_duration = sleep_mock.call_args[0][0]
+        assert 0 < pad_duration <= 0.5
+
+        asyncio.get_event_loop().run_until_complete(store.close())
 
 
 class TestMe:
