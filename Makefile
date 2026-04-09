@@ -1,4 +1,4 @@
-.PHONY: dev dev-full dev-ui build test lint clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection
+.PHONY: dev dev-full dev-ui build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection
 
 # Default dev target — full stack with Ollama
 dev: dev-full
@@ -24,6 +24,9 @@ test:
 lint:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend ruff check .
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run lint
+
+# CI: build prod images then run tests (ensures prod Dockerfile isn't broken)
+ci: build test lint
 
 # View logs
 logs:
