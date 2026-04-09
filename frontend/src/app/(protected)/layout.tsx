@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProtectedLayoutData } from "@/lib/auth/get-protected-layout-data";
 import { AuthProvider } from "@/lib/auth/auth-context";
+import { InstallBanner } from "@/components/install-banner";
 
 export default async function ProtectedLayout({
   children,
@@ -20,6 +21,7 @@ export default async function ProtectedLayout({
       serverName={result.user.serverName}
     >
       {children}
+      <InstallBanner />
     </AuthProvider>
   );
 }
