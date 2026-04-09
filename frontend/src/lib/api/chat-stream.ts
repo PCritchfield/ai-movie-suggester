@@ -48,6 +48,11 @@ export async function* parseSSEStream(
       }
     }
   } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // cancel() may reject if stream already closed — safe to ignore
+    }
     reader.releaseLock();
   }
 }

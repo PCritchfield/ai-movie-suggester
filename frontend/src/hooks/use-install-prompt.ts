@@ -77,6 +77,7 @@ export function useInstallPrompt(): UseInstallPromptReturn {
   }, [deferredPrompt]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const handler = () => setTriggered(true);
     window.addEventListener("pwa-trigger", handler);
     return () => window.removeEventListener("pwa-trigger", handler);

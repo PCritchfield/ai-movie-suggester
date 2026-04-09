@@ -28,32 +28,31 @@ export function ChatInput({ onSend, isStreaming }: ChatInputProps) {
     }
   }, []);
 
+  const doSend = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const text = textarea.value.trim();
+    if (!text || isStreaming) return;
+    onSend(text);
+    resetTextarea();
+  }, [isStreaming, onSend, resetTextarea]);
+
   const handleSubmit = useCallback(
     (e: FormEvent) => {
       e.preventDefault();
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      const text = textarea.value.trim();
-      if (!text || isStreaming) return;
-      onSend(text);
-      resetTextarea();
+      doSend();
     },
-    [isStreaming, onSend, resetTextarea]
+    [doSend]
   );
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-        const text = textarea.value.trim();
-        if (!text || isStreaming) return;
-        onSend(text);
-        resetTextarea();
+        doSend();
       }
     },
-    [isStreaming, onSend, resetTextarea]
+    [doSend]
   );
 
   const handleInput = useCallback(() => {
