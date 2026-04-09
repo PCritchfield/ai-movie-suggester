@@ -7,6 +7,7 @@ The dev environment (`docker-compose.dev.yml`) uses named volumes to persist ins
 | Volume | Mount | Contents |
 |--------|-------|----------|
 | `backend-venv` | `/app/.venv` | Python virtualenv (uv) |
+| `backend-data` | `/app/data` | SQLite databases (library.db, sessions.db) |
 | `frontend-node-modules` | `/app/node_modules` | npm packages |
 | `frontend-next-cache` | `/app/.next` | Next.js build cache |
 
@@ -23,8 +24,11 @@ When lockfiles change (`uv.lock` or `package-lock.json`) -- for example after pu
 
 ### Nuclear option (removes all dev volumes)
 
+> **Warning:** `down -v` removes **all** named volumes including `backend-data`, which contains your SQLite databases (`library.db`, `sessions.db`). This means you will lose your library index, embeddings, and active sessions. Only use this if you are prepared to re-sync from Jellyfin.
+
 ```bash
-docker compose down -v && docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
 ### Targeted removal
@@ -35,7 +39,7 @@ Remove only the affected volume(s):
 # Stop containers first
 docker compose down
 
-# Remove specific volumes
+# Remove specific volumes (dependency caches only — leave backend-data alone)
 docker volume rm ai-movie-suggester_backend-venv
 docker volume rm ai-movie-suggester_frontend-node-modules
 docker volume rm ai-movie-suggester_frontend-next-cache

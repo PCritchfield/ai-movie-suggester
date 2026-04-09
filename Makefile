@@ -26,7 +26,10 @@ lint:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run lint
 
 # CI: build prod images then run tests (ensures prod Dockerfile isn't broken)
-ci: build test lint
+ci:
+	$(MAKE) build
+	$(MAKE) test
+	$(MAKE) lint
 
 # View logs
 logs:
