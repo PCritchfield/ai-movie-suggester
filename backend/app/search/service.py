@@ -163,11 +163,10 @@ class SearchService:
     async def _determine_status(self) -> SearchStatus:
         """Check embedding completeness and return status (cached 30s)."""
         now = time.monotonic()
-        cache_valid = (
+        if (
             self._status_cache is not None
             and (now - self._status_cache_time) < self._status_cache_ttl
-        )
-        if cache_valid:
+        ):
             return self._status_cache
 
         vec_count = await self._vec_repo.count()
