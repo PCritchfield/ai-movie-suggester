@@ -118,7 +118,7 @@ class TestChatRequiresAuth:
 class TestChatRateLimit:
     def test_exceeding_rate_limit_returns_429(self) -> None:
         """Requests beyond chat_rate_limit/minute return 429."""
-        settings = make_test_settings(chat_rate_limit=2)
+        settings = make_test_settings(chat_rate_limit="2/minute")
         limiter = create_limiter()
 
         session_store = AsyncMock()

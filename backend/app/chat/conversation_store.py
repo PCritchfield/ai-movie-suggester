@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
+
+from app.utils import hash_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class ConversationStore:
 
     def _session_hash(self, session_id: str) -> str:
         """Return first 8 chars of SHA-256 hash for safe logging."""
-        return hashlib.sha256(session_id.encode()).hexdigest()[:8]
+        return hash_for_log(session_id)
 
     def _evict_lru_if_needed(self) -> None:
         """Evict the least-recently-used session if at capacity."""

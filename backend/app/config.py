@@ -12,6 +12,7 @@ from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _logger = logging.getLogger(__name__)
+_RATE_LIMIT_RE = r"^\d+/(second|minute|hour|day)$"
 
 
 class Settings(BaseSettings):
@@ -82,7 +83,7 @@ class Settings(BaseSettings):
     max_sessions_per_user: int = 5
     session_db_path: str = "data/sessions.db"
     trusted_proxy_ips: str = "127.0.0.1"
-    login_rate_limit: str = "5/minute"
+    login_rate_limit: Annotated[str, Field(pattern=_RATE_LIMIT_RE)] = "5/minute"
 
     # Security
     cors_origin: AnyHttpUrl = AnyHttpUrl("http://localhost:3000")
@@ -106,7 +107,7 @@ class Settings(BaseSettings):
 
     # Search
     search_overfetch_multiplier: Annotated[int, Field(ge=1, le=10)] = 3
-    search_rate_limit: int = 10
+    search_rate_limit: Annotated[str, Field(pattern=_RATE_LIMIT_RE)] = "10/minute"
 
     # Conversation memory
     conversation_max_turns: Annotated[int, Field(ge=1, le=100)] = 10
@@ -140,7 +141,7 @@ class Settings(BaseSettings):
     chat_system_prompt: str | None = None
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     session_expiry_hours: int = 24
-    chat_rate_limit: int = 10
+    chat_rate_limit: Annotated[str, Field(pattern=_RATE_LIMIT_RE)] = "10/minute"
 
     @model_validator(mode="after")
     def _validate_cors_origin(self) -> Settings:

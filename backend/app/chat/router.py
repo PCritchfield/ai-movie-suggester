@@ -34,11 +34,7 @@ def create_chat_router(
 ) -> APIRouter:
     """Build the chat APIRouter with rate limiting from settings."""
     router = APIRouter(prefix="/api", tags=["chat"])
-    _limit = (
-        limiter.limit(f"{settings.chat_rate_limit}/minute")
-        if limiter
-        else (lambda f: f)
-    )
+    _limit = limiter.limit(settings.chat_rate_limit) if limiter else (lambda f: f)
 
     @router.post(
         "/chat",
