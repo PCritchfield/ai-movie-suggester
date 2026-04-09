@@ -24,11 +24,7 @@ def create_search_router(
 ) -> APIRouter:
     """Build the search APIRouter with rate limiting from settings."""
     router = APIRouter(prefix="/api", tags=["search"])
-    _limit = (
-        limiter.limit(f"{settings.search_rate_limit}/minute")
-        if limiter
-        else (lambda f: f)
-    )
+    _limit = limiter.limit(settings.search_rate_limit) if limiter else (lambda f: f)
 
     @router.post(
         "/search",

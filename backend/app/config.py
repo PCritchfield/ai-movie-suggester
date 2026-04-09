@@ -106,7 +106,7 @@ class Settings(BaseSettings):
 
     # Search
     search_overfetch_multiplier: Annotated[int, Field(ge=1, le=10)] = 3
-    search_rate_limit: int = 10
+    search_rate_limit: str = "10/minute"
 
     # Conversation memory
     conversation_max_turns: Annotated[int, Field(ge=1, le=100)] = 10
@@ -140,7 +140,7 @@ class Settings(BaseSettings):
     chat_system_prompt: str | None = None
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     session_expiry_hours: int = 24
-    chat_rate_limit: int = 10
+    chat_rate_limit: str = "10/minute"
 
     @model_validator(mode="after")
     def _validate_cors_origin(self) -> Settings:

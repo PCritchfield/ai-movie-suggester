@@ -26,7 +26,7 @@ def test_settings_loads_defaults() -> None:
     assert s.tmdb_api_key is None
     assert s.log_level == "info"
     assert s.session_expiry_hours == 24
-    assert s.chat_rate_limit == 10
+    assert s.chat_rate_limit == "10/minute"
 
 
 def test_settings_requires_jellyfin_url() -> None:

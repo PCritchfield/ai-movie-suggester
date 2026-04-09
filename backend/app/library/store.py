@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 import aiosqlite
 
 from app.library.models import LibraryItemRow, UpsertResult
+from app.vectors.models import FAILED, PENDING, PROCESSING
 
 if TYPE_CHECKING:
     from app.sync.models import SyncResult, SyncRunRow
@@ -441,9 +442,9 @@ class LibraryStore:
                 params = [(jid, now) for jid in batch]
                 await self._conn.executemany(
                     "INSERT INTO embedding_queue (jellyfin_id, enqueued_at, status)"
-                    " VALUES (?, ?, 'pending')"
+                    f" VALUES (?, ?, '{PENDING}')"
                     " ON CONFLICT(jellyfin_id) DO UPDATE SET"
-                    " status='pending', enqueued_at=excluded.enqueued_at,"
+                    f" status='{PENDING}', enqueued_at=excluded.enqueued_at,"
                     " retry_count=0, error_message=NULL,"
                     " last_attempted_at=NULL",
                     params,
@@ -459,7 +460,7 @@ class LibraryStore:
     async def count_pending_embeddings(self) -> int:
         """Return the number of items with 'pending' status in the queue."""
         cursor = await self._conn.execute(
-            "SELECT COUNT(*) FROM embedding_queue WHERE status = 'pending'"
+            f"SELECT COUNT(*) FROM embedding_queue WHERE status = '{PENDING}'"
         )
         row = await cursor.fetchone()
         return row[0] if row else 0
@@ -561,7 +562,7 @@ class LibraryStore:
         cutoff = now - cooldown_seconds
         cursor = await self._conn.execute(
             "SELECT jellyfin_id, retry_count FROM embedding_queue"
-            " WHERE status = 'pending'"
+            f" WHERE status = '{PENDING}'"
             " AND (last_attempted_at IS NULL OR last_attempted_at < ?)"
             " AND retry_count <= ?"
             " ORDER BY enqueued_at ASC"
@@ -583,8 +584,8 @@ class LibraryStore:
         now = int(time.time())
         placeholders = ",".join("?" * len(ids))
         cursor = await self._conn.execute(
-            f"UPDATE embedding_queue SET status='processing', last_attempted_at=?"
-            f" WHERE jellyfin_id IN ({placeholders}) AND status='pending'",
+            f"UPDATE embedding_queue SET status='{PROCESSING}', last_attempted_at=?"
+            f" WHERE jellyfin_id IN ({placeholders}) AND status='{PENDING}'",
             [now, *ids],
         )
         await self._conn.commit()
@@ -610,7 +611,7 @@ class LibraryStore:
         """Record a failed embedding attempt — increment retry, stay pending."""
         now = int(time.time())
         await self._conn.execute(
-            "UPDATE embedding_queue SET status='pending',"
+            f"UPDATE embedding_queue SET status='{PENDING}',"
             " retry_count=retry_count+1, error_message=?,"
             " last_attempted_at=?"
             " WHERE jellyfin_id=?",
@@ -622,7 +623,7 @@ class LibraryStore:
         """Mark an item as permanently failed — no further retries."""
         now = int(time.time())
         await self._conn.execute(
-            "UPDATE embedding_queue SET status='failed',"
+            f"UPDATE embedding_queue SET status='{FAILED}',"
             " error_message=?, last_attempted_at=?"
             " WHERE jellyfin_id=?",
             (reason, now, jellyfin_id),
@@ -636,7 +637,7 @@ class LibraryStore:
         process was interrupted. Returns the number of rows reset.
         """
         cursor = await self._conn.execute(
-            "UPDATE embedding_queue SET status='pending' WHERE status='processing'"
+            f"UPDATE embedding_queue SET status='{PENDING}' WHERE status='{PROCESSING}'"
         )
         await self._conn.commit()
         return cursor.rowcount
@@ -645,7 +646,7 @@ class LibraryStore:
         """Return details for all permanently failed queue items."""
         cursor = await self._conn.execute(
             "SELECT jellyfin_id, error_message, retry_count, last_attempted_at"
-            " FROM embedding_queue WHERE status='failed'"
+            f" FROM embedding_queue WHERE status='{FAILED}'"
         )
         rows = await cursor.fetchall()
         return [
@@ -664,7 +665,7 @@ class LibraryStore:
             "SELECT status, COUNT(*) FROM embedding_queue GROUP BY status"
         )
         rows = await cursor.fetchall()
-        counts: dict[str, int] = {"pending": 0, "processing": 0, "failed": 0}
+        counts: dict[str, int] = {PENDING: 0, PROCESSING: 0, FAILED: 0}
         for row in rows:
             if row[0] in counts:
                 counts[row[0]] = row[1]
