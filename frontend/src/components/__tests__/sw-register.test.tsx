@@ -4,7 +4,6 @@ import { SwRegister } from "../sw-register";
 
 describe("SwRegister", () => {
   const registerMock = vi.fn().mockResolvedValue(undefined);
-  const originalEnv = process.env.NODE_ENV;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -15,12 +14,12 @@ describe("SwRegister", () => {
   });
 
   afterEach(() => {
-    process.env.NODE_ENV = originalEnv;
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
   it("registers /sw.js in production", () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
 
     render(<SwRegister />);
 
