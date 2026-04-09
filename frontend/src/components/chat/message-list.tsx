@@ -122,14 +122,14 @@ export function MessageList({
       el.scrollTop + el.clientHeight < el.scrollHeight - threshold;
   }, []);
 
-  // Auto-scroll to bottom on new messages/streaming updates
+  // Auto-scroll to bottom when message count changes (not on every content chunk)
   useEffect(() => {
     if (userScrolledUpRef.current) return;
     const el = scrollContainerRef.current;
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages]);
+  }, [messages.length]);
 
   return (
     <div

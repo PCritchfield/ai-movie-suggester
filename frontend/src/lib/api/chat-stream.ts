@@ -48,6 +48,7 @@ export async function* parseSSEStream(
       }
     }
   } finally {
+    await reader.cancel();
     reader.releaseLock();
   }
 }
