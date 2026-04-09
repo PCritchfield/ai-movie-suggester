@@ -26,6 +26,7 @@ from app.ollama.errors import (
 from app.search.models import DOCUMENT_PREFIX
 
 if TYPE_CHECKING:
+    from app.chat.service import ChatPauseCounter
     from app.config import Settings
     from app.library.models import LibraryItemRow
     from app.library.store import LibraryStore
@@ -51,16 +52,18 @@ class EmbeddingWorker:
         ollama_client: OllamaEmbeddingClient,
         settings: Settings,
         sync_event: asyncio.Event,
-        pause_event: asyncio.Event | None = None,
+        pause_counter: ChatPauseCounter | None = None,
     ) -> None:
         self._library_store = library_store
         self._vec_repo = vec_repo
         self._ollama_client = ollama_client
         self._settings = settings
         self._sync_event = sync_event
-        self._pause_event = pause_event or asyncio.Event()
-        if pause_event is None:
-            self._pause_event.set()  # Default: not paused
+        if pause_counter is None:
+            from app.chat.service import ChatPauseCounter
+
+            pause_counter = ChatPauseCounter()  # Default: never paused
+        self._pause_counter = pause_counter
         self._lock = asyncio.Lock()
 
         # State tracking
@@ -185,7 +188,7 @@ class EmbeddingWorker:
         cooldown = self._settings.embedding_cooldown_seconds
         max_retries = self._settings.embedding_max_retries
 
-        if not self._pause_event.is_set():
+        if self._pause_counter.is_paused:
             logger.info("embedding_cycle_skip reason=chat_priority")
             return
 
@@ -257,7 +260,7 @@ class EmbeddingWorker:
                 len(ordered_ids),
             )
             for jid in ordered_ids:
-                if not self._pause_event.is_set():
+                if self._pause_counter.is_paused:
                     logger.info("embedding_fallback_skip reason=chat_priority")
                     break
                 retry_count, text, content_hash = item_data[jid]

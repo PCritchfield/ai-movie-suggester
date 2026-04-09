@@ -4,37 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from app.library.models import LibraryItemRow
-from app.ollama.models import EmbeddingResult
 from app.search.service import SearchService
-from app.vectors.models import SearchResult
-
-_NOW = 1700000000
-
-
-def _make_embedding_result() -> EmbeddingResult:
-    return EmbeddingResult(vector=[0.1] * 768, dimensions=768, model="nomic-embed-text")
-
-
-def _make_search_result(jid: str, score: float = 0.7) -> SearchResult:
-    return SearchResult(jellyfin_id=jid, score=score, content_hash="hash")
-
-
-def _make_library_item(jid: str, title: str = "Movie") -> LibraryItemRow:
-    return LibraryItemRow(
-        jellyfin_id=jid,
-        title=title,
-        overview="Overview.",
-        production_year=2020,
-        genres=["Drama"],
-        tags=[],
-        studios=[],
-        community_rating=7.0,
-        people=[],
-        content_hash="hash",
-        synced_at=_NOW,
-        runtime_minutes=120,
-    )
+from tests.factories import make_embedding_result, make_library_item, make_search_result
 
 
 def _make_service(
@@ -52,7 +23,7 @@ def _make_service(
     """
     if ollama is None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
     if vec_repo is None:
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
@@ -81,7 +52,7 @@ def _make_service(
 class TestSearchPrependsQueryPrefix:
     async def test_embed_called_with_search_query_prefix(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
@@ -127,18 +98,18 @@ class TestSearchAppliesOverfetchMultiplier:
 class TestSearchEnrichesWithMetadata:
     async def test_results_have_metadata_fields(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
-        vec_repo.search.return_value = [_make_search_result("m1", 0.8)]
+        vec_repo.search.return_value = [make_search_result("m1", 0.8)]
 
         permissions = AsyncMock()
         permissions.filter_permitted.return_value = ["m1"]
 
         library = AsyncMock()
         library.get_many.return_value = [
-            _make_library_item("m1", "Galaxy Quest"),
+            make_library_item("m1", "Galaxy Quest"),
         ]
         library.get_queue_counts.return_value = {
             "pending": 0,
@@ -168,12 +139,12 @@ class TestSearchEnrichesWithMetadata:
 class TestSearchTruncatesToLimit:
     async def test_no_more_than_limit_results(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
         vec_repo.search.return_value = [
-            _make_search_result(f"m{i}", 0.9 - i * 0.1) for i in range(6)
+            make_search_result(f"m{i}", 0.9 - i * 0.1) for i in range(6)
         ]
 
         permissions = AsyncMock()
@@ -181,7 +152,7 @@ class TestSearchTruncatesToLimit:
 
         library = AsyncMock()
         library.get_many.return_value = [
-            _make_library_item(f"m{i}")
+            make_library_item(f"m{i}")
             for i in range(3)  # only 3 requested
         ]
         library.get_queue_counts.return_value = {
@@ -228,17 +199,17 @@ class TestSearchNoEmbeddingsStatus:
 class TestSearchPartialEmbeddingsStatus:
     async def test_returns_partial_when_queue_has_pending(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 50  # some embeddings exist
-        vec_repo.search.return_value = [_make_search_result("m1")]
+        vec_repo.search.return_value = [make_search_result("m1")]
 
         permissions = AsyncMock()
         permissions.filter_permitted.return_value = ["m1"]
 
         library = AsyncMock()
-        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_many.return_value = [make_library_item("m1")]
         library.get_queue_counts.return_value = {
             "pending": 5,
             "processing": 0,
@@ -260,17 +231,17 @@ class TestSearchPartialEmbeddingsStatus:
 class TestSearchOkStatus:
     async def test_returns_ok_when_fully_embedded(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 100
-        vec_repo.search.return_value = [_make_search_result("m1")]
+        vec_repo.search.return_value = [make_search_result("m1")]
 
         permissions = AsyncMock()
         permissions.filter_permitted.return_value = ["m1"]
 
         library = AsyncMock()
-        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_many.return_value = [make_library_item("m1")]
         library.get_queue_counts.return_value = {
             "pending": 0,
             "processing": 0,
@@ -291,17 +262,17 @@ class TestSearchOkStatus:
 class TestSearchJellyfinWebUrl:
     async def test_jellyfin_web_url_populated_when_configured(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
-        vec_repo.search.return_value = [_make_search_result("m1", 0.8)]
+        vec_repo.search.return_value = [make_search_result("m1", 0.8)]
 
         permissions = AsyncMock()
         permissions.filter_permitted.return_value = ["m1"]
 
         library = AsyncMock()
-        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_many.return_value = [make_library_item("m1")]
         library.get_queue_counts.return_value = {
             "pending": 0,
             "processing": 0,
@@ -325,17 +296,17 @@ class TestSearchJellyfinWebUrl:
 
     async def test_jellyfin_web_url_none_when_not_configured(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
-        vec_repo.search.return_value = [_make_search_result("m1", 0.8)]
+        vec_repo.search.return_value = [make_search_result("m1", 0.8)]
 
         permissions = AsyncMock()
         permissions.filter_permitted.return_value = ["m1"]
 
         library = AsyncMock()
-        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_many.return_value = [make_library_item("m1")]
         library.get_queue_counts.return_value = {
             "pending": 0,
             "processing": 0,
@@ -359,14 +330,14 @@ class TestSearchExcludeIds:
     async def test_search_excludes_watched_ids(self) -> None:
         """Items in exclude_ids are removed from results."""
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
         vec_repo.search.return_value = [
-            _make_search_result("m1", 0.9),
-            _make_search_result("m2", 0.8),
-            _make_search_result("m3", 0.7),
+            make_search_result("m1", 0.9),
+            make_search_result("m2", 0.8),
+            make_search_result("m3", 0.7),
         ]
 
         permissions = AsyncMock()
@@ -375,8 +346,8 @@ class TestSearchExcludeIds:
 
         library = AsyncMock()
         library.get_many.return_value = [
-            _make_library_item("m1"),
-            _make_library_item("m3"),
+            make_library_item("m1"),
+            make_library_item("m3"),
         ]
         library.get_queue_counts.return_value = {
             "pending": 0,
@@ -407,13 +378,13 @@ class TestSearchExcludeIds:
     async def test_search_exclude_ids_none_preserves_behavior(self) -> None:
         """Passing exclude_ids=None behaves identically to no exclusion."""
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
         vec_repo.search.return_value = [
-            _make_search_result("m1", 0.9),
-            _make_search_result("m2", 0.8),
+            make_search_result("m1", 0.9),
+            make_search_result("m2", 0.8),
         ]
 
         permissions = AsyncMock()
@@ -421,8 +392,8 @@ class TestSearchExcludeIds:
 
         library = AsyncMock()
         library.get_many.return_value = [
-            _make_library_item("m1"),
-            _make_library_item("m2"),
+            make_library_item("m1"),
+            make_library_item("m2"),
         ]
         library.get_queue_counts.return_value = {
             "pending": 0,
@@ -448,19 +419,19 @@ class TestSearchExcludeIds:
     async def test_search_exclude_ids_empty_set_preserves_behavior(self) -> None:
         """Passing exclude_ids=set() behaves identically to no exclusion."""
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 10
         vec_repo.search.return_value = [
-            _make_search_result("m1", 0.9),
+            make_search_result("m1", 0.9),
         ]
 
         permissions = AsyncMock()
         permissions.filter_permitted.return_value = ["m1"]
 
         library = AsyncMock()
-        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_many.return_value = [make_library_item("m1")]
         library.get_queue_counts.return_value = {
             "pending": 0,
             "processing": 0,
@@ -485,14 +456,14 @@ class TestSearchExcludeIds:
 class TestSearchResponseMetadata:
     async def test_response_includes_metadata_fields(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.count.return_value = 100
         vec_repo.search.return_value = [
-            _make_search_result("m1", 0.9),
-            _make_search_result("m2", 0.8),
-            _make_search_result("m3", 0.7),
+            make_search_result("m1", 0.9),
+            make_search_result("m2", 0.8),
+            make_search_result("m3", 0.7),
         ]
 
         permissions = AsyncMock()
@@ -500,8 +471,8 @@ class TestSearchResponseMetadata:
 
         library = AsyncMock()
         library.get_many.return_value = [
-            _make_library_item("m1"),
-            _make_library_item("m3"),
+            make_library_item("m1"),
+            make_library_item("m3"),
         ]
         library.get_queue_counts.return_value = {
             "pending": 0,

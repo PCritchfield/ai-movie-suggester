@@ -87,10 +87,8 @@ def create_chat_router(
         session: SessionMeta = Depends(get_current_session),  # noqa: B008
     ) -> Response:
         """Clear the current user's conversation history."""
-        conversation_store = request.app.state.conversation_store
-        lock = conversation_store.get_lock(session.session_id)
-        async with lock:
-            conversation_store.clear_history(session.session_id)
+        chat_service = request.app.state.chat_service
+        await chat_service.clear_history(session.session_id)
         return Response(status_code=204)
 
     return router

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -79,6 +81,23 @@ def create_auth_router(
     async def login(
         request: Request, body: LoginRequest, response: Response
     ) -> LoginResponse:
+        # Constant-time floor: all login responses take at least this long,
+        # preventing timing side-channels that leak username existence.
+        _LOGIN_MIN_DURATION = 0.5  # seconds  # noqa: N806
+        _start = time.monotonic()
+
+        try:
+            result = await _login_inner(body, response)
+        finally:
+            elapsed = time.monotonic() - _start
+            remaining = _LOGIN_MIN_DURATION - elapsed
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+
+        return result
+
+    async def _login_inner(body: LoginRequest, response: Response) -> LoginResponse:
+        """Core login logic, extracted so the timing floor wraps all paths."""
         try:
             session_id, csrf_token, login_resp = await auth_service.login(
                 body.username, body.password
@@ -177,8 +196,8 @@ def create_auth_router(
 
         await session_store.delete(session_id)
         # Cascade: purge conversation memory for this session
-        conversation_store = request.app.state.conversation_store
-        conversation_store.purge_session(session_id)
+        chat_service = request.app.state.chat_service
+        chat_service.purge_session(session_id)
         logger.info("user_logout user_id=%s", session.user_id)
 
         # Invalidate permission cache for the user

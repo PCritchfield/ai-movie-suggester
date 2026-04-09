@@ -25,6 +25,7 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> Iterator[TestClient]:
     """Create a minimal test app with auth routes (no CSRF middleware)."""
     import asyncio
     import pathlib
+    from unittest.mock import MagicMock
 
     from fastapi import FastAPI
 
@@ -61,9 +62,15 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> Iterator[TestClient]:
     app.state.session_store = store
     app.state.cookie_key = TEST_COOKIE_KEY
     app.state.jellyfin_client = mock_jf
-    app.state.conversation_store = ConversationStore(
+    conversation_store = ConversationStore(
         max_turns=10, ttl_seconds=7200, max_sessions=100
     )
+    app.state.conversation_store = conversation_store
+
+    # chat_service mock — logout handler delegates purge_session through it
+    chat_service_mock = MagicMock()
+    chat_service_mock.purge_session = conversation_store.purge_session
+    app.state.chat_service = chat_service_mock
 
     asyncio.get_event_loop().run_until_complete(store.init())
 

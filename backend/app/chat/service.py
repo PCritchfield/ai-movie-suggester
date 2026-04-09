@@ -35,6 +35,34 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class ChatPauseCounter:
+    """Reference-counted GPU pause signal for concurrent chat requests.
+
+    Replaces the binary ``asyncio.Event`` to handle concurrent chat
+    correctly.  When ``active_count > 0`` the embedding worker should
+    yield the GPU.
+    """
+
+    def __init__(self) -> None:
+        self._count: int = 0
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        """Signal that a chat request is active."""
+        async with self._lock:
+            self._count += 1
+
+    async def release(self) -> None:
+        """Signal that a chat request has finished."""
+        async with self._lock:
+            self._count = max(0, self._count - 1)
+
+    @property
+    def is_paused(self) -> bool:
+        """True when any chat request is active."""
+        return self._count > 0
+
+
 class ChatService:
     """Orchestrates the chat pipeline: search -> prompt -> stream.
 
@@ -44,20 +72,21 @@ class ChatService:
     - done event (stream complete)
     - error event (on failure — may be first if search is unavailable)
 
-    Concurrency note: ``pause_event`` is a binary ``asyncio.Event`` shared
-    with ``EmbeddingWorker``.  Under concurrent chat requests the
-    clear/set calls can race (request B's ``clear()`` vs request A's
-    ``finally: set()``).  The per-IP rate limiter (default 10 req/min)
-    makes true concurrency unlikely on consumer hardware.  If concurrent
-    chat becomes common, replace the event with a reference counter or
-    ``asyncio.Semaphore``.
+    Concurrency note: ``pause_counter`` is a reference-counted
+    ``ChatPauseCounter`` shared with ``EmbeddingWorker``.  Each chat
+    request increments the counter on entry and decrements it on exit
+    (including error paths).  The embedding worker checks
+    ``is_paused`` and yields the GPU when any chat is active.  This is
+    safe under concurrent chat requests — unlike the previous binary
+    ``asyncio.Event``, request B's release cannot cancel request A's
+    pause.
     """
 
     def __init__(
         self,
         search_service: SearchService,
         chat_client: OllamaChatClient,
-        pause_event: asyncio.Event,
+        pause_counter: ChatPauseCounter,
         settings: Settings,
         conversation_store: ConversationStore,
         watch_history_service: WatchHistoryService | None = None,
@@ -65,11 +94,21 @@ class ChatService:
     ) -> None:
         self._search_service = search_service
         self._chat_client = chat_client
-        self._pause_event = pause_event
+        self._pause_counter = pause_counter
         self._settings = settings
         self._conversation_store = conversation_store
         self._watch_history_service = watch_history_service
         self._library_store = library_store
+
+    async def clear_history(self, session_id: str) -> None:
+        """Clear conversation history for a session (service-mediated)."""
+        lock = self._conversation_store.get_lock(session_id)
+        async with lock:
+            self._conversation_store.clear_history(session_id)
+
+    def purge_session(self, session_id: str) -> None:
+        """Remove all conversation data for a session (logout/eviction)."""
+        self._conversation_store.purge_session(session_id)
 
     async def stream(
         self,
@@ -173,8 +212,8 @@ class ChatService:
             watch_history_context=watch_history_context,
         )
 
-        # Clear pause event so embedding worker yields to chat
-        self._pause_event.clear()
+        # Increment pause counter so embedding worker yields to chat
+        await self._pause_counter.acquire()
         try:
             assistant_chunks: list[str] = []
             async with asyncio.timeout(120.0):
@@ -223,7 +262,7 @@ class ChatService:
                 ),
             }
         finally:
-            self._pause_event.set()
+            await self._pause_counter.release()
 
     async def _resolve_watch_history_context(self, watch_data: WatchData) -> str | None:
         """Resolve watch history IDs to titles and format for prompt context.
