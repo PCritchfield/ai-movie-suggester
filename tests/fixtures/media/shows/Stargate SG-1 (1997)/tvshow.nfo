@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Stargate SG-1</title>
+  <year>1997</year>
+  <plot>A secret military team uses an ancient alien portal to travel to distant planets, encountering new civilizations and powerful enemies. The team must defend Earth from the Goa'uld, a parasitic alien race posing as gods across the galaxy.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Adventure</genre>
+  <genre>Action</genre>
+  <actor>
+    <name>Richard Dean Anderson</name>
+    <role>Colonel Jack O'Neill</role>
+  </actor>
+  <actor>
+    <name>Amanda Tapping</name>
+    <role>Captain Samantha Carter</role>
+  </actor>
+  <actor>
+    <name>Michael Shanks</name>
+    <role>Dr. Daniel Jackson</role>
+  </actor>
+  <actor>
+    <name>Christopher Judge</name>
+    <role>Teal'c</role>
+  </actor>
+  <studio>Showtime</studio>
+  <rating>8.4</rating>
+  <status>Ended</status>
+</tvshow>

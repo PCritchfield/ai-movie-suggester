@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Blade Runner</title>
+  <year>1982</year>
+  <plot>In a dystopian 2019 Los Angeles drenched in perpetual rain and neon, a weary detective hunts down rogue bioengineered replicants who have returned to Earth seeking more life from their creator. A brooding meditation on memory, identity, and what it means to be human, set against one of cinema's most iconic cityscapes.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Noir</genre>
+  <director>Ridley Scott</director>
+  <actor>
+    <name>Harrison Ford</name>
+    <role>Rick Deckard</role>
+  </actor>
+  <actor>
+    <name>Rutger Hauer</name>
+    <role>Roy Batty</role>
+  </actor>
+  <actor>
+    <name>Sean Young</name>
+    <role>Rachael</role>
+  </actor>
+  <studio>Warner Bros.</studio>
+  <rating>8.1</rating>
+  <runtime>117</runtime>
+</movie>

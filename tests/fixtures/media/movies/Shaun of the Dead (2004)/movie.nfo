@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Shaun of the Dead</title>
+  <year>2004</year>
+  <plot>A directionless London electronics salesman is so absorbed in his failing relationship and pub routine that he barely notices the zombie apocalypse unfolding around him. Armed with a cricket bat and a plan to wait things out at his favorite pub, he stumbles through the undead hordes in a pitch-perfect blend of romantic comedy and gore.</plot>
+  <genre>Horror</genre>
+  <genre>Comedy</genre>
+  <director>Edgar Wright</director>
+  <actor>
+    <name>Simon Pegg</name>
+    <role>Shaun</role>
+  </actor>
+  <actor>
+    <name>Nick Frost</name>
+    <role>Ed</role>
+  </actor>
+  <actor>
+    <name>Kate Ashfield</name>
+    <role>Liz</role>
+  </actor>
+  <studio>Universal Pictures</studio>
+  <rating>7.9</rating>
+  <runtime>99</runtime>
+</movie>

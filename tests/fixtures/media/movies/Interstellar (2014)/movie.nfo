@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Interstellar</title>
+  <year>2014</year>
+  <plot>With Earth's crops failing and humanity facing extinction, a former pilot leads a desperate mission through a wormhole near Saturn to find a habitable planet in another galaxy. The journey bends time and space, forcing him to choose between saving the world and ever seeing his children again.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Drama</genre>
+  <director>Christopher Nolan</director>
+  <actor>
+    <name>Matthew McConaughey</name>
+    <role>Cooper</role>
+  </actor>
+  <actor>
+    <name>Anne Hathaway</name>
+    <role>Brand</role>
+  </actor>
+  <actor>
+    <name>Jessica Chastain</name>
+    <role>Murph</role>
+  </actor>
+  <studio>Paramount Pictures</studio>
+  <rating>8.7</rating>
+  <runtime>169</runtime>
+</movie>

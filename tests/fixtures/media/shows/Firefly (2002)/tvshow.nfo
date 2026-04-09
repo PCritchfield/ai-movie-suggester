@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Firefly</title>
+  <year>2002</year>
+  <plot>The crew of the Serenity, a small transport ship, take on any job legal or otherwise to survive on the fringes of a star system governed by the authoritarian Alliance. Captain Mal Reynolds and his ragtag crew navigate smuggling runs, bar fights, and the occasional existential threat in a frontier where the Old West meets outer space.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Western</genre>
+  <genre>Adventure</genre>
+  <actor>
+    <name>Nathan Fillion</name>
+    <role>Captain Malcolm Reynolds</role>
+  </actor>
+  <actor>
+    <name>Gina Torres</name>
+    <role>Zoe Washburne</role>
+  </actor>
+  <actor>
+    <name>Alan Tudyk</name>
+    <role>Hoban "Wash" Washburne</role>
+  </actor>
+  <actor>
+    <name>Morena Baccarin</name>
+    <role>Inara Serra</role>
+  </actor>
+  <studio>Fox</studio>
+  <rating>9.0</rating>
+  <status>Ended</status>
+</tvshow>

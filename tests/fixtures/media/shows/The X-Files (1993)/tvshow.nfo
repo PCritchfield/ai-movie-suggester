@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>The X-Files</title>
+  <year>1993</year>
+  <plot>FBI agents Fox Mulder and Dana Scully investigate unsolved cases involving paranormal phenomena, government conspiracies, and unexplained events. Mulder's belief in the extraterrestrial clashes with Scully's scientific skepticism as they uncover a vast shadow conspiracy hiding the truth about alien life on Earth.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Mystery</genre>
+  <genre>Thriller</genre>
+  <actor>
+    <name>David Duchovny</name>
+    <role>Fox Mulder</role>
+  </actor>
+  <actor>
+    <name>Gillian Anderson</name>
+    <role>Dana Scully</role>
+  </actor>
+  <actor>
+    <name>Mitch Pileggi</name>
+    <role>Walter Skinner</role>
+  </actor>
+  <studio>Fox</studio>
+  <rating>8.6</rating>
+  <status>Ended</status>
+</tvshow>
