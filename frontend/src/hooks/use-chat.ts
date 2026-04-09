@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { sendChatMessage, parseSSEStream } from "@/lib/api/chat-stream";
 import { apiDelete } from "@/lib/api/client";
+import { TRIGGERED_KEY } from "@/hooks/use-install-prompt";
 import type {
   ChatMessage,
   SearchResultItem,
@@ -202,6 +203,18 @@ export function useChat(): UseChatReturn {
     };
   }, [stopFlushTimer]);
 
+  /** Write the PWA install trigger flag once on first successful chat exchange. */
+  function writeTriggerIfNeeded(): void {
+    if (!bufferRef.current) return;
+    try {
+      if (localStorage.getItem(TRIGGERED_KEY) === "true") return;
+      localStorage.setItem(TRIGGERED_KEY, "true");
+      window.dispatchEvent(new Event("pwa-trigger"));
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
   const processStream = useCallback(
     async (
       userMessageId: string,
@@ -253,6 +266,7 @@ export function useChat(): UseChatReturn {
                   content: bufferRef.current,
                 },
               });
+              writeTriggerIfNeeded();
               isStreamingRef.current = false;
               return;
             case "error":
@@ -289,6 +303,7 @@ export function useChat(): UseChatReturn {
             content: bufferRef.current,
           },
         });
+        writeTriggerIfNeeded();
         isStreamingRef.current = false;
       } catch (err) {
         stopFlushTimer();

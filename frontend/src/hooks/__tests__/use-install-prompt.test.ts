@@ -56,6 +56,7 @@ describe("useInstallPrompt", () => {
 
   describe("Android / beforeinstallprompt", () => {
     it("captures beforeinstallprompt event and enables prompt", async () => {
+      localStorage.setItem("pwa-chat-triggered", "true");
       const { result } = renderHook(() => useInstallPrompt());
 
       // Before event fires, platform is unsupported (no proof of Android yet)
@@ -78,6 +79,7 @@ describe("useInstallPrompt", () => {
     });
 
     it("calls prompt() on the deferred event", async () => {
+      localStorage.setItem("pwa-chat-triggered", "true");
       const { result } = renderHook(() => useInstallPrompt());
 
       const promptFn = vi.fn().mockResolvedValue(undefined);
@@ -103,6 +105,7 @@ describe("useInstallPrompt", () => {
 
   describe("iOS Safari detection", () => {
     it("detects iOS Safari and sets platform to ios", () => {
+      localStorage.setItem("pwa-chat-triggered", "true");
       mockUserAgent(
         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
       );
@@ -115,6 +118,7 @@ describe("useInstallPrompt", () => {
     });
 
     it("detects iPad with maxTouchPoints as iOS", () => {
+      localStorage.setItem("pwa-chat-triggered", "true");
       mockUserAgent(
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
       );
@@ -140,6 +144,7 @@ describe("useInstallPrompt", () => {
 
   describe("dismissal persistence", () => {
     it("persists dismissal to localStorage", async () => {
+      localStorage.setItem("pwa-chat-triggered", "true");
       mockUserAgent(
         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
       );
@@ -181,6 +186,70 @@ describe("useInstallPrompt", () => {
 
       expect(result.current.canPrompt).toBe(false);
       expect(result.current.platform).toBe("unsupported");
+    });
+  });
+
+  describe("chat trigger gating", () => {
+    it("canPrompt is false on iOS Safari when trigger flag is absent", () => {
+      mockUserAgent(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+      );
+      mockPlatform("iPhone");
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.platform).toBe("ios");
+      expect(result.current.canPrompt).toBe(false);
+    });
+
+    it("canPrompt is true on iOS Safari when trigger flag is present", () => {
+      localStorage.setItem("pwa-chat-triggered", "true");
+      mockUserAgent(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+      );
+      mockPlatform("iPhone");
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.platform).toBe("ios");
+      expect(result.current.canPrompt).toBe(true);
+    });
+
+    it("canPrompt is false on Android when beforeinstallprompt fired but trigger flag is absent", async () => {
+      const { result } = renderHook(() => useInstallPrompt());
+
+      const mockEvent = new Event("beforeinstallprompt");
+      Object.assign(mockEvent, {
+        prompt: vi.fn().mockResolvedValue(undefined),
+        userChoice: Promise.resolve({ outcome: "dismissed" as const }),
+      });
+
+      await act(async () => {
+        window.dispatchEvent(mockEvent);
+      });
+
+      expect(result.current.platform).toBe("android");
+      expect(result.current.canPrompt).toBe(false);
+    });
+
+    it("canPrompt transitions to true when pwa-trigger DOM event fires", async () => {
+      mockUserAgent(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+      );
+      mockPlatform("iPhone");
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      // Before trigger — should be false
+      expect(result.current.canPrompt).toBe(false);
+
+      // Simulate chat page writing the flag and dispatching the event
+      localStorage.setItem("pwa-chat-triggered", "true");
+      await act(async () => {
+        window.dispatchEvent(new Event("pwa-trigger"));
+      });
+
+      expect(result.current.canPrompt).toBe(true);
     });
   });
 });

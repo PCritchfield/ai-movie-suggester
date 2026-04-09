@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const DISMISSED_KEY = "pwa-install-dismissed";
+export const TRIGGERED_KEY = "pwa-chat-triggered";
 
 type Platform = "android" | "ios" | "unsupported";
 
@@ -51,12 +52,22 @@ function isDismissed(): boolean {
   }
 }
 
+function isTriggered(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(TRIGGERED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 export function useInstallPrompt(): UseInstallPromptReturn {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [dismissed, setDismissed] = useState(
     () => isStandalone() || isDismissed()
   );
+  const [triggered, setTriggered] = useState(() => isTriggered());
 
   // Platform is derived: iOS detected statically, Android confirmed by event
   const platform = useMemo<Platform>(() => {
@@ -64,6 +75,12 @@ export function useInstallPrompt(): UseInstallPromptReturn {
     if (deferredPrompt) return "android";
     return "unsupported";
   }, [deferredPrompt]);
+
+  useEffect(() => {
+    const handler = () => setTriggered(true);
+    window.addEventListener("pwa-trigger", handler);
+    return () => window.removeEventListener("pwa-trigger", handler);
+  }, []);
 
   useEffect(() => {
     if (dismissed || detectIos()) return;
@@ -102,7 +119,7 @@ export function useInstallPrompt(): UseInstallPromptReturn {
   }, []);
 
   const canPrompt =
-    !dismissed && (platform === "ios" || deferredPrompt !== null);
+    !dismissed && triggered && (platform === "ios" || deferredPrompt !== null);
 
   return { canPrompt, platform, prompt, dismiss };
 }
