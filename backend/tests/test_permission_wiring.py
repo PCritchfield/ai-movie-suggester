@@ -98,9 +98,15 @@ async def auth_app_with_perms(
     app.state.cookie_key = TEST_COOKIE_KEY
     app.state.jellyfin_client = jf_client
     app.state.permission_service = perm_service
-    app.state.conversation_store = ConversationStore(
+    conversation_store = ConversationStore(
         max_turns=10, ttl_seconds=7200, max_sessions=100
     )
+    app.state.conversation_store = conversation_store
+
+    # chat_service mock — logout handler delegates purge_session through it
+    chat_service_mock = MagicMock()
+    chat_service_mock.purge_session = conversation_store.purge_session
+    app.state.chat_service = chat_service_mock
 
     await store.init()
 

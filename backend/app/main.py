@@ -251,12 +251,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         images_router = create_images_router(settings=settings, limiter=limiter)
         app.include_router(images_router)
 
-        # Create chat client, service, pause event, and mount router.
-        # NOTE: embedding_pause_event is created here (before the async
-        # lifespan block) because EmbeddingWorker receives it during
-        # startup below. Both consumers must share the same instance.
+        # Create chat client, service, pause counter, and mount router.
+        # NOTE: pause_counter is created here because EmbeddingWorker
+        # receives it during startup below.  Both consumers must share
+        # the same instance.
         from app.chat.router import create_chat_router
-        from app.chat.service import ChatService
+        from app.chat.service import ChatPauseCounter, ChatService
         from app.ollama.chat_client import OllamaChatClient
 
         chat_ollama_timeout = httpx.Timeout(
@@ -270,14 +270,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.ollama_chat_client = ollama_chat_client
 
-        embedding_pause_event = asyncio.Event()
-        embedding_pause_event.set()
-        app.state.embedding_pause_event = embedding_pause_event
+        pause_counter = ChatPauseCounter()
+        app.state.pause_counter = pause_counter
 
         chat_service = ChatService(
             search_service=search_service,
             chat_client=ollama_chat_client,
-            pause_event=embedding_pause_event,
+            pause_counter=pause_counter,
             settings=settings,
             conversation_store=conversation_store,
             watch_history_service=watch_history_service,
@@ -380,7 +379,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ollama_client=ollama_client,
             settings=settings,
             sync_event=embedding_event,
-            pause_event=embedding_pause_event,
+            pause_counter=pause_counter,
         )
         await embedding_worker.startup()
         app.state.embedding_worker = embedding_worker

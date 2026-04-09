@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from unittest.mock import AsyncMock
 
 from app.chat.conversation_store import ConversationStore
-from app.chat.service import ChatService
+from app.chat.service import ChatPauseCounter, ChatService
 from app.ollama.errors import OllamaConnectionError
 from app.search.models import SearchResponse, SearchResultItem, SearchStatus
 from tests.conftest import make_search_result_item, make_test_settings
@@ -35,15 +34,14 @@ def _make_search_response(
 def _make_chat_service(
     search_service: AsyncMock | None = None,
     chat_client: AsyncMock | None = None,
-    pause_event: asyncio.Event | None = None,
+    pause_counter: ChatPauseCounter | None = None,
     conversation_store: ConversationStore | None = None,
     watch_history_service: AsyncMock | None = None,
 ) -> ChatService:
     settings = make_test_settings()
     _search = search_service or AsyncMock()
     _chat = chat_client or AsyncMock()
-    _pause = pause_event or asyncio.Event()
-    _pause.set()  # default: embedding not paused
+    _pause = pause_counter or ChatPauseCounter()
     _conv = conversation_store or ConversationStore(
         max_turns=settings.conversation_max_turns,
         ttl_seconds=settings.conversation_ttl_minutes * 60,
@@ -52,7 +50,7 @@ def _make_chat_service(
     return ChatService(
         search_service=_search,
         chat_client=_chat,
-        pause_event=_pause,
+        pause_counter=_pause,
         settings=settings,
         conversation_store=_conv,
         watch_history_service=watch_history_service,
@@ -215,7 +213,7 @@ class TestChatServiceErrors:
 
 class TestChatServicePauseSignaling:
     async def test_chat_service_signals_pause(self) -> None:
-        """Pause event is cleared before chat and set after (happy path)."""
+        """Pause counter is acquired before chat and released after (happy path)."""
         search = AsyncMock()
         search.search.return_value = _make_search_response()
 
@@ -225,13 +223,12 @@ class TestChatServicePauseSignaling:
         chat_client = AsyncMock()
         chat_client.chat_stream = _fake_stream
 
-        pause_event = asyncio.Event()
-        pause_event.set()  # Start unpaused
+        pause_counter = ChatPauseCounter()
 
         service = _make_chat_service(
             search_service=search,
             chat_client=chat_client,
-            pause_event=pause_event,
+            pause_counter=pause_counter,
         )
 
         events = await _collect_events(
@@ -242,12 +239,12 @@ class TestChatServicePauseSignaling:
             session_id="test-session",
         )
 
-        # After stream completes, pause event should be set (unpaused)
-        assert pause_event.is_set()
+        # After stream completes, counter should be back to 0 (not paused)
+        assert not pause_counter.is_paused
         assert events[-1] == {"type": "done"}
 
     async def test_chat_service_signals_pause_on_error(self) -> None:
-        """Pause event is restored even when chat stream errors."""
+        """Pause counter is released even when chat stream errors."""
         search = AsyncMock()
         search.search.return_value = _make_search_response()
 
@@ -258,13 +255,12 @@ class TestChatServicePauseSignaling:
         chat_client = AsyncMock()
         chat_client.chat_stream = _fail_stream
 
-        pause_event = asyncio.Event()
-        pause_event.set()
+        pause_counter = ChatPauseCounter()
 
         service = _make_chat_service(
             search_service=search,
             chat_client=chat_client,
-            pause_event=pause_event,
+            pause_counter=pause_counter,
         )
 
         events = await _collect_events(
@@ -275,8 +271,8 @@ class TestChatServicePauseSignaling:
             session_id="test-session",
         )
 
-        # Even after error, pause event should be restored
-        assert pause_event.is_set()
+        # Even after error, counter should be back to 0 (not paused)
+        assert not pause_counter.is_paused
         assert events[1]["type"] == "error"
 
 

@@ -50,13 +50,23 @@ def _make_chat_app(
     app.state.settings = settings
     app.state.limiter = None
 
-    # Chat service mock
-    app.state.chat_service = chat_service or AsyncMock()
-
     # Conversation store (real, in-memory)
-    app.state.conversation_store = ConversationStore(
+    conversation_store = ConversationStore(
         max_turns=10, ttl_seconds=7200, max_sessions=100
     )
+    app.state.conversation_store = conversation_store
+
+    # Chat service mock — wire clear_history/purge_session to real store
+    svc = chat_service or AsyncMock()
+
+    async def _clear_history(session_id: str) -> None:
+        lock = conversation_store.get_lock(session_id)
+        async with lock:
+            conversation_store.clear_history(session_id)
+
+    svc.clear_history = _clear_history
+    svc.purge_session = conversation_store.purge_session
+    app.state.chat_service = svc
 
     chat_router = create_chat_router(settings=settings, limiter=None)
     app.include_router(chat_router)

@@ -47,6 +47,9 @@ class SearchService:
         self._jellyfin_web_url = (
             jellyfin_web_url.rstrip("/") if jellyfin_web_url else None
         )
+        self._status_cache: SearchStatus | None = None
+        self._status_cache_time: float = 0.0
+        self._status_cache_ttl: float = 30.0  # seconds
 
     async def search(
         self,
@@ -158,13 +161,26 @@ class SearchService:
         )
 
     async def _determine_status(self) -> SearchStatus:
-        """Check embedding completeness and return status."""
+        """Check embedding completeness and return status (cached 30s)."""
+        now = time.monotonic()
+        if (
+            self._status_cache is not None
+            and (now - self._status_cache_time) < self._status_cache_ttl
+        ):
+            return self._status_cache
+
         vec_count = await self._vec_repo.count()
         if vec_count == 0:
-            return SearchStatus.NO_EMBEDDINGS
+            status = SearchStatus.NO_EMBEDDINGS
+        else:
+            queue_counts = await self._library.get_queue_counts()
+            pending = queue_counts.get("pending", 0) > 0
+            processing = queue_counts.get("processing", 0) > 0
+            if pending or processing:
+                status = SearchStatus.PARTIAL_EMBEDDINGS
+            else:
+                status = SearchStatus.OK
 
-        queue_counts = await self._library.get_queue_counts()
-        if queue_counts.get("pending", 0) > 0 or queue_counts.get("processing", 0) > 0:
-            return SearchStatus.PARTIAL_EMBEDDINGS
-
-        return SearchStatus.OK
+        self._status_cache = status
+        self._status_cache_time = now
+        return status

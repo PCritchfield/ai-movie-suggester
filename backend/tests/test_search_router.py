@@ -12,13 +12,11 @@ from fastapi.testclient import TestClient
 from app.auth.crypto import derive_keys, fernet_encrypt
 from app.auth.dependencies import get_current_session
 from app.auth.models import SessionMeta
-from app.library.models import LibraryItemRow
 from app.ollama.errors import OllamaConnectionError
-from app.ollama.models import EmbeddingResult
 from app.search.router import create_search_router
 from app.search.service import SearchService
-from app.vectors.models import SearchResult
 from tests.conftest import TEST_SECRET, make_test_settings
+from tests.factories import make_embedding_result, make_library_item, make_search_result
 
 _COOKIE_KEY, _ = derive_keys(TEST_SECRET)
 _SESSION_ID = "test-session-id-search"
@@ -38,35 +36,6 @@ def _make_session_meta() -> SessionMeta:
 
 def _encrypted_cookie() -> str:
     return fernet_encrypt(_COOKIE_KEY, _SESSION_ID).decode("utf-8")
-
-
-def _make_embedding_result() -> EmbeddingResult:
-    return EmbeddingResult(
-        vector=[0.1] * 768,
-        dimensions=768,
-        model="nomic-embed-text",
-    )
-
-
-def _make_search_result(jid: str, score: float = 0.7) -> SearchResult:
-    return SearchResult(jellyfin_id=jid, score=score, content_hash="hash")
-
-
-def _make_library_item(jid: str, title: str = "Test Movie") -> LibraryItemRow:
-    return LibraryItemRow(
-        jellyfin_id=jid,
-        title=title,
-        overview="A test movie.",
-        production_year=2020,
-        genres=["Drama"],
-        tags=[],
-        studios=[],
-        community_rating=7.5,
-        people=[],
-        content_hash="hash",
-        synced_at=_NOW,
-        runtime_minutes=120,
-    )
 
 
 def _make_search_app(
@@ -116,12 +85,12 @@ def _make_search_app(
 class TestSearchReturnsResults:
     def test_valid_query_returns_results(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.search.return_value = [
-            _make_search_result("movie-1", 0.8),
-            _make_search_result("movie-2", 0.6),
+            make_search_result("movie-1", 0.8),
+            make_search_result("movie-2", 0.6),
         ]
         vec_repo.count.return_value = 10
 
@@ -130,8 +99,8 @@ class TestSearchReturnsResults:
 
         library = AsyncMock()
         library.get_many.return_value = [
-            _make_library_item("movie-1", "Galaxy Quest"),
-            _make_library_item("movie-2", "Spaceballs"),
+            make_library_item("movie-1", "Galaxy Quest"),
+            make_library_item("movie-2", "Spaceballs"),
         ]
         library.get_queue_counts.return_value = {
             "pending": 0,
@@ -169,15 +138,15 @@ class TestSearchReturnsResults:
 class TestSearchPermissionFiltering:
     def test_results_only_contain_permitted_items(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.search.return_value = [
-            _make_search_result("allowed-1", 0.9),
-            _make_search_result("forbidden-1", 0.8),
-            _make_search_result("allowed-2", 0.7),
-            _make_search_result("forbidden-2", 0.6),
-            _make_search_result("allowed-3", 0.5),
+            make_search_result("allowed-1", 0.9),
+            make_search_result("forbidden-1", 0.8),
+            make_search_result("allowed-2", 0.7),
+            make_search_result("forbidden-2", 0.6),
+            make_search_result("allowed-3", 0.5),
         ]
         vec_repo.count.return_value = 10
 
@@ -190,9 +159,9 @@ class TestSearchPermissionFiltering:
 
         library = AsyncMock()
         library.get_many.return_value = [
-            _make_library_item("allowed-1"),
-            _make_library_item("allowed-2"),
-            _make_library_item("allowed-3"),
+            make_library_item("allowed-1"),
+            make_library_item("allowed-2"),
+            make_library_item("allowed-3"),
         ]
         library.get_queue_counts.return_value = {
             "pending": 0,
@@ -261,12 +230,12 @@ class TestSearchInvalidQuery:
 class TestSearchResponseMetadata:
     def test_response_includes_metadata(self) -> None:
         ollama = AsyncMock()
-        ollama.embed.return_value = _make_embedding_result()
+        ollama.embed.return_value = make_embedding_result()
 
         vec_repo = AsyncMock()
         vec_repo.search.return_value = [
-            _make_search_result("m1", 0.9),
-            _make_search_result("m2", 0.8),
+            make_search_result("m1", 0.9),
+            make_search_result("m2", 0.8),
         ]
         vec_repo.count.return_value = 10
 
@@ -274,7 +243,7 @@ class TestSearchResponseMetadata:
         permissions.filter_permitted.return_value = ["m1"]  # m2 filtered
 
         library = AsyncMock()
-        library.get_many.return_value = [_make_library_item("m1")]
+        library.get_many.return_value = [make_library_item("m1")]
         library.get_queue_counts.return_value = {
             "pending": 0,
             "processing": 0,

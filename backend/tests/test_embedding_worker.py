@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.chat.service import ChatPauseCounter
 from app.embedding.worker import EmbeddingWorker
-from app.library.models import LibraryItemRow
 from app.library.store import LibraryStore
 from app.ollama.client import OllamaEmbeddingClient
 from app.ollama.errors import (
@@ -21,54 +21,33 @@ from app.ollama.errors import (
     OllamaModelError,
     OllamaTimeoutError,
 )
-from app.ollama.models import EmbeddingResult
 from app.vectors.repository import SqliteVecRepository
 from tests.conftest import make_test_settings
+from tests.factories import make_embedding_result, make_library_item
 
 if TYPE_CHECKING:
     from app.config import Settings
+    from app.library.models import LibraryItemRow
 
 # ---------------------------------------------------------------------------
-# Factories
+# Local convenience wrapper — embedding worker tests use different defaults
 # ---------------------------------------------------------------------------
 
 
-_DEFAULT_GENRES = ["Comedy", "Sci-Fi"]
-
-
-def _make_row(
-    jellyfin_id: str = "jf-001",
-    title: str = "Galaxy Quest",
-    overview: str | None = "A comedy about sci-fi actors in space.",
-    production_year: int | None = 1999,
-    genres: list[str] | None = None,
-    content_hash: str = "abc123",
-) -> LibraryItemRow:
-    return LibraryItemRow(
-        jellyfin_id=jellyfin_id,
-        title=title,
-        overview=overview,
-        production_year=production_year,
-        genres=_DEFAULT_GENRES if genres is None else genres,
-        tags=[],
-        studios=[],
-        community_rating=7.4,
-        people=["Tim Allen", "Sigourney Weaver"],
-        content_hash=content_hash,
-        synced_at=1700000000,
-    )
-
-
-def _make_vector(seed: float = 0.1, dims: int = 768) -> list[float]:
-    return [seed + i * 0.001 for i in range(dims)]
-
-
-def _make_embedding_result(seed: float = 0.1, dims: int = 768) -> EmbeddingResult:
-    return EmbeddingResult(
-        vector=_make_vector(seed, dims),
-        dimensions=dims,
-        model="nomic-embed-text",
-    )
+def _make_row(**overrides: object) -> LibraryItemRow:
+    """Thin wrapper around ``make_library_item`` with worker-specific defaults."""
+    defaults: dict[str, object] = {
+        "jellyfin_id": "jf-001",
+        "title": "Galaxy Quest",
+        "overview": "A comedy about sci-fi actors in space.",
+        "production_year": 1999,
+        "genres": ["Comedy", "Sci-Fi"],
+        "community_rating": 7.4,
+        "people": ["Tim Allen", "Sigourney Weaver"],
+        "content_hash": "abc123",
+    }
+    defaults.update(overrides)
+    return make_library_item(**defaults)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -107,10 +86,8 @@ def sync_event() -> asyncio.Event:
 
 
 @pytest.fixture
-def pause_event() -> asyncio.Event:
-    event = asyncio.Event()
-    event.set()  # Default: not paused (embedding allowed)
-    return event
+def pause_counter() -> ChatPauseCounter:
+    return ChatPauseCounter()  # Default: not paused (count=0)
 
 
 @pytest.fixture
@@ -120,7 +97,7 @@ def worker(
     mock_ollama: AsyncMock,
     settings: Settings,
     sync_event: asyncio.Event,
-    pause_event: asyncio.Event,
+    pause_counter: ChatPauseCounter,
 ) -> EmbeddingWorker:
     return EmbeddingWorker(
         library_store=mock_library_store,
@@ -128,7 +105,7 @@ def worker(
         ollama_client=mock_ollama,
         settings=settings,
         sync_event=sync_event,
-        pause_event=pause_event,
+        pause_counter=pause_counter,
     )
 
 
@@ -209,7 +186,7 @@ class TestProcessCycleHappyPath:
         mock_library_store.claim_batch.return_value = 3
         mock_library_store.get_many.return_value = rows
         mock_ollama.embed_batch.return_value = [
-            _make_embedding_result(seed=i * 0.1) for i in range(3)
+            make_embedding_result(seed=i * 0.1) for i in range(3)
         ]
         mock_library_store.mark_embedded_many.return_value = 3
 
@@ -301,7 +278,7 @@ class TestBatchFallback:
         mock_library_store.claim_batch.return_value = 2
         mock_library_store.get_many.return_value = rows
         mock_ollama.embed_batch.side_effect = OllamaError("batch failed")
-        mock_ollama.embed.return_value = _make_embedding_result()
+        mock_ollama.embed.return_value = make_embedding_result()
 
         await worker.process_cycle()
 
@@ -630,7 +607,7 @@ class TestMissingItem:
         # get_many returns only jf-002 (jf-001 deleted between claim and fetch)
         row2 = _make_row(jellyfin_id="jf-002", content_hash="h2")
         mock_library_store.get_many.return_value = [row2]
-        mock_ollama.embed_batch.return_value = [_make_embedding_result()]
+        mock_ollama.embed_batch.return_value = [make_embedding_result()]
         mock_library_store.mark_embedded_many.return_value = 1
 
         await worker.process_cycle()
@@ -654,16 +631,16 @@ class TestMissingItem:
 # ---------------------------------------------------------------------------
 
 
-class TestPauseEvent:
+class TestPauseCounter:
     async def test_embedding_worker_skips_on_pause(
         self,
         worker: EmbeddingWorker,
         mock_library_store: AsyncMock,
-        pause_event: asyncio.Event,
+        pause_counter: ChatPauseCounter,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Cleared pause_event -> process_cycle skips before queue fetch."""
-        pause_event.clear()
+        """Paused counter -> process_cycle skips before queue fetch."""
+        await pause_counter.acquire()  # count=1 -> paused
 
         import logging
 
@@ -678,23 +655,23 @@ class TestPauseEvent:
         worker: EmbeddingWorker,
         mock_library_store: AsyncMock,
         mock_ollama: AsyncMock,
-        pause_event: asyncio.Event,
+        pause_counter: ChatPauseCounter,
     ) -> None:
-        """Clear then set pause_event -> next cycle processes normally."""
+        """Acquire then release counter -> next cycle processes normally."""
         # First: paused -> skip
-        pause_event.clear()
+        await pause_counter.acquire()
         await worker.process_cycle()
         mock_library_store.get_retryable_items.assert_not_awaited()
 
         # Second: unpaused -> normal processing
-        pause_event.set()
+        await pause_counter.release()
         rows = [_make_row(jellyfin_id="jf-001", content_hash="h1")]
         items = [("jf-001", 0)]
         mock_ollama.health.return_value = True
         mock_library_store.get_retryable_items.return_value = items
         mock_library_store.claim_batch.return_value = 1
         mock_library_store.get_many.return_value = rows
-        mock_ollama.embed_batch.return_value = [_make_embedding_result()]
+        mock_ollama.embed_batch.return_value = [make_embedding_result()]
         mock_library_store.mark_embedded_many.return_value = 1
 
         await worker.process_cycle()
@@ -707,9 +684,9 @@ class TestPauseEvent:
         mock_library_store: AsyncMock,
         mock_vec_repo: AsyncMock,
         mock_ollama: AsyncMock,
-        pause_event: asyncio.Event,
+        pause_counter: ChatPauseCounter,
     ) -> None:
-        """Pause event cleared during fallback loop -> loop exits early."""
+        """Pause counter acquired during fallback loop -> loop exits early."""
         rows = [
             _make_row(jellyfin_id="jf-001", content_hash="h1"),
             _make_row(jellyfin_id="jf-002", content_hash="h2"),
@@ -723,16 +700,16 @@ class TestPauseEvent:
         mock_library_store.get_many.return_value = rows
 
         # Batch embed fails -> triggers fallback loop
-        # Side effect: clear pause_event when embed_batch is called
-        def _clear_pause(*args, **kwargs):
-            pause_event.clear()
+        # Side effect: acquire pause_counter when embed_batch is called
+        async def _pause_and_fail(*args, **kwargs):
+            await pause_counter.acquire()
             raise OllamaError("batch failed")
 
-        mock_ollama.embed_batch.side_effect = _clear_pause
+        mock_ollama.embed_batch.side_effect = _pause_and_fail
 
         await worker.process_cycle()
 
         # Batch was attempted
         mock_ollama.embed_batch.assert_awaited_once()
-        # Individual embed was NOT called because pause was cleared
+        # Individual embed was NOT called because counter is paused
         mock_ollama.embed.assert_not_awaited()
