@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: base — Python + uv + dependency manifests
 # =============================================================================
-FROM python:3.12-slim AS base
+FROM python:3.12.13-slim AS base
 
 WORKDIR /app
 
@@ -14,6 +14,7 @@ COPY pyproject.toml uv.lock ./
 # Requires bind mount at /app — use docker-compose.dev.yml, not standalone
 # =============================================================================
 FROM base AS dev
+# Dev runs as root for bind-mount compatibility (see #43)
 
 RUN uv sync --frozen --extra dev
 
@@ -27,12 +28,12 @@ FROM base AS prod
 
 RUN uv sync --frozen --no-dev
 
-COPY app/ ./app/
-
 RUN mkdir -p /app/data && \
     addgroup --system --gid 1001 appgroup && \
     adduser --system --uid 1001 --ingroup appgroup appuser && \
-    chown -R appuser:appgroup /app
+    chown appuser:appgroup /app /app/data
+
+COPY --chown=appuser:appgroup app/ ./app/
 
 USER appuser
 ENV HOME=/app
