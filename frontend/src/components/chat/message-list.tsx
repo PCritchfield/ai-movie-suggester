@@ -122,7 +122,7 @@ export function MessageList({
       el.scrollTop + el.clientHeight < el.scrollHeight - threshold;
   }, []);
 
-  // Auto-scroll to bottom when message count changes (not on every content chunk)
+  // Auto-scroll to bottom when message count changes
   useEffect(() => {
     if (userScrolledUpRef.current) return;
     const el = scrollContainerRef.current;
@@ -130,6 +130,21 @@ export function MessageList({
       el.scrollTop = el.scrollHeight;
     }
   }, [messages.length]);
+
+  // Throttled scroll-follow during streaming (once per animation frame)
+  useEffect(() => {
+    if (!isStreaming || userScrolledUpRef.current) return;
+    let rafId: number;
+    const tick = () => {
+      const el = scrollContainerRef.current;
+      if (el && !userScrolledUpRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isStreaming]);
 
   return (
     <div
