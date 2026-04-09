@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { sendChatMessage, parseSSEStream } from "@/lib/api/chat-stream";
 import { apiDelete } from "@/lib/api/client";
+import { TRIGGERED_KEY } from "@/hooks/use-install-prompt";
 import type {
   ChatMessage,
   SearchResultItem,
@@ -253,6 +254,14 @@ export function useChat(): UseChatReturn {
                   content: bufferRef.current,
                 },
               });
+              if (bufferRef.current && !localStorage.getItem(TRIGGERED_KEY)) {
+                try {
+                  localStorage.setItem(TRIGGERED_KEY, "true");
+                  window.dispatchEvent(new Event("pwa-trigger"));
+                } catch {
+                  /* storage unavailable */
+                }
+              }
               isStreamingRef.current = false;
               return;
             case "error":
@@ -289,6 +298,14 @@ export function useChat(): UseChatReturn {
             content: bufferRef.current,
           },
         });
+        if (bufferRef.current && !localStorage.getItem(TRIGGERED_KEY)) {
+          try {
+            localStorage.setItem(TRIGGERED_KEY, "true");
+            window.dispatchEvent(new Event("pwa-trigger"));
+          } catch {
+            /* storage unavailable */
+          }
+        }
         isStreamingRef.current = false;
       } catch (err) {
         stopFlushTimer();
