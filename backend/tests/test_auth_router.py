@@ -67,8 +67,8 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> Iterator[TestClient]:
 
     asyncio.get_event_loop().run_until_complete(store.init())
 
-    client = TestClient(app)
-    yield client  # type: ignore[misc]
+    with TestClient(app) as client:
+        yield client  # type: ignore[misc]
     asyncio.get_event_loop().run_until_complete(store.close())
 
 

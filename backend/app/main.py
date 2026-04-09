@@ -294,16 +294,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Store settings on app.state for routers that need them
         app.state.settings = settings
 
+        # Shared HTTP client for health checks (startup + /health endpoint)
+        health_client = httpx.AsyncClient()
+        app.state.health_client = health_client
+
         # Startup connectivity checks
-        async with httpx.AsyncClient() as check_client:
-            jf_status, ollama_healthy = await asyncio.gather(
-                _check_service(
-                    check_client,
-                    f"{settings.jellyfin_url}/health",
-                    _logger,
-                ),
-                ollama_client.health(),
-            )
+        jf_status, ollama_healthy = await asyncio.gather(
+            _check_service(
+                health_client,
+                f"{settings.jellyfin_url}/health",
+                _logger,
+            ),
+            ollama_client.health(),
+        )
         ol: ServiceStatus = "ok" if ollama_healthy else "error"
         _logger.info("startup checks: jellyfin=%s ollama=%s", jf_status, ol)
         if jf_status == "error":
@@ -317,7 +320,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
         # Schedule periodic cleanup
-        cleanup_interval = settings.session_expiry_hours * 3600 / 4
+        cleanup_interval = min(settings.session_expiry_hours * 3600 / 4, 6 * 3600)
 
         async def _periodic_cleanup() -> None:
             while True:
@@ -334,7 +337,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Schedule periodic conversation memory cleanup (TTL eviction)
         async def _periodic_conversation_cleanup() -> None:
             while True:
-                await asyncio.sleep(300)  # 5 minutes
+                conv_cleanup_interval = max(
+                    60, settings.conversation_ttl_minutes * 60 // 4
+                )
+                await asyncio.sleep(conv_cleanup_interval)
                 try:
                     conversation_store.cleanup()
                 except Exception:
@@ -414,6 +420,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await chat_ollama_http.aclose()
         await ollama_http.aclose()
         await http_client.aclose()
+        await health_client.aclose()
 
     application = FastAPI(
         title="ai-movie-suggester",
@@ -425,15 +432,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         """Service health: checks Jellyfin and Ollama connectivity."""
-        async with httpx.AsyncClient() as check_client:
-            jf_status, ollama_healthy = await asyncio.gather(
-                _check_service(
-                    check_client,
-                    f"{settings.jellyfin_url}/health",
-                    _logger,
-                ),
-                application.state.ollama_client.health(),
-            )
+        jf_status, ollama_healthy = await asyncio.gather(
+            _check_service(
+                application.state.health_client,
+                f"{settings.jellyfin_url}/health",
+                _logger,
+            ),
+            application.state.ollama_client.health(),
+        )
         ol_status: ServiceStatus = "ok" if ollama_healthy else "error"
         # Report real embedding count from vec_repo (if initialised)
         try:

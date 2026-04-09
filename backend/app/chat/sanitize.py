@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 
+from app.chat.prompts import TAG_CONTEXT, TAG_HISTORY, TAG_QUERY, TAG_SYSTEM
+
 __all__ = ["sanitize_user_input", "check_injection_patterns"]
 
 # Build translation table: map control chars to None (delete them)
@@ -47,7 +49,7 @@ INJECTION_PATTERNS: dict[str, re.Pattern[str]] = {
         re.IGNORECASE,
     ),
     "delimiter_escape": re.compile(
-        r"</(?:system-instructions|movie-context|user-query)>",
+        rf"</(?:{TAG_SYSTEM}|{TAG_CONTEXT}|{TAG_QUERY}|{TAG_HISTORY})>",
         re.IGNORECASE,
     ),
 }
