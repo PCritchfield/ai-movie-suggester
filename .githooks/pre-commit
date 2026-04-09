@@ -11,10 +11,10 @@ if [ -n "$PYTHON_FILES" ]; then
   # Strip backend/ prefix — ruff runs from the backend directory
   BACKEND_REL=$(echo "$PYTHON_FILES" | sed 's|^backend/||')
   cd backend
-  uv run ruff check --fix $BACKEND_REL
-  uv run ruff format $BACKEND_REL
+  echo "$BACKEND_REL" | tr '\n' '\0' | xargs -0 uv run ruff check --fix
+  echo "$BACKEND_REL" | tr '\n' '\0' | xargs -0 uv run ruff format
   cd ..
-  echo $PYTHON_FILES | xargs git add
+  echo "$PYTHON_FILES" | tr '\n' '\0' | xargs -0 git add
 fi
 
 # Frontend: eslint + prettier on staged TS/TSX files
@@ -24,8 +24,8 @@ if [ -n "$TS_FILES" ]; then
   # Strip frontend/ prefix — tools run from the frontend directory
   FRONTEND_REL=$(echo "$TS_FILES" | sed 's|^frontend/||')
   cd frontend
-  npx eslint --fix $FRONTEND_REL
-  npx prettier --write $FRONTEND_REL
+  echo "$FRONTEND_REL" | tr '\n' '\0' | xargs -0 npx eslint --fix
+  echo "$FRONTEND_REL" | tr '\n' '\0' | xargs -0 npx prettier --write
   cd ..
-  echo $TS_FILES | xargs git add
+  echo "$TS_FILES" | tr '\n' '\0' | xargs -0 git add
 fi
