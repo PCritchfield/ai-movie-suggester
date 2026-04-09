@@ -203,6 +203,17 @@ export function useChat(): UseChatReturn {
     };
   }, [stopFlushTimer]);
 
+  /** Write the PWA install trigger flag once on first successful chat exchange. */
+  function writeTriggerIfNeeded(): void {
+    if (!bufferRef.current || localStorage.getItem(TRIGGERED_KEY)) return;
+    try {
+      localStorage.setItem(TRIGGERED_KEY, "true");
+      window.dispatchEvent(new Event("pwa-trigger"));
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
   const processStream = useCallback(
     async (
       userMessageId: string,
@@ -254,14 +265,7 @@ export function useChat(): UseChatReturn {
                   content: bufferRef.current,
                 },
               });
-              if (bufferRef.current && !localStorage.getItem(TRIGGERED_KEY)) {
-                try {
-                  localStorage.setItem(TRIGGERED_KEY, "true");
-                  window.dispatchEvent(new Event("pwa-trigger"));
-                } catch {
-                  /* storage unavailable */
-                }
-              }
+              writeTriggerIfNeeded();
               isStreamingRef.current = false;
               return;
             case "error":
@@ -298,14 +302,7 @@ export function useChat(): UseChatReturn {
             content: bufferRef.current,
           },
         });
-        if (bufferRef.current && !localStorage.getItem(TRIGGERED_KEY)) {
-          try {
-            localStorage.setItem(TRIGGERED_KEY, "true");
-            window.dispatchEvent(new Event("pwa-trigger"));
-          } catch {
-            /* storage unavailable */
-          }
-        }
+        writeTriggerIfNeeded();
         isStreamingRef.current = false;
       } catch (err) {
         stopFlushTimer();

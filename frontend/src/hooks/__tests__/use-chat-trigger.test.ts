@@ -15,8 +15,7 @@ vi.mock("@/lib/api/client", () => ({
 }));
 
 import { sendChatMessage, parseSSEStream } from "@/lib/api/chat-stream";
-
-const TRIGGERED_KEY = "pwa-chat-triggered";
+import { TRIGGERED_KEY } from "@/hooks/use-install-prompt";
 
 /**
  * Helper: create a mock async generator from an array of SSE events.
