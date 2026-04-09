@@ -205,8 +205,9 @@ export function useChat(): UseChatReturn {
 
   /** Write the PWA install trigger flag once on first successful chat exchange. */
   function writeTriggerIfNeeded(): void {
-    if (!bufferRef.current || localStorage.getItem(TRIGGERED_KEY)) return;
+    if (!bufferRef.current) return;
     try {
+      if (localStorage.getItem(TRIGGERED_KEY) === "true") return;
       localStorage.setItem(TRIGGERED_KEY, "true");
       window.dispatchEvent(new Event("pwa-trigger"));
     } catch {

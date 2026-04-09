@@ -1,4 +1,4 @@
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useChat } from "../use-chat";
 import type { SSEEvent } from "@/lib/api/types";
@@ -61,12 +61,11 @@ describe("useChat — install banner trigger", () => {
 
     const { result } = renderHook(() => useChat());
 
-    await act(async () => {
+    act(() => {
       result.current.sendMessage("recommend something");
-      // Allow microtasks to flush (stream processing)
-      await vi.waitFor(() => {
-        expect(result.current.isStreaming).toBe(false);
-      });
+    });
+    await waitFor(() => {
+      expect(result.current.isStreaming).toBe(false);
     });
 
     expect(localStorage.getItem(TRIGGERED_KEY)).toBe("true");
@@ -83,11 +82,11 @@ describe("useChat — install banner trigger", () => {
 
     const { result } = renderHook(() => useChat());
 
-    await act(async () => {
+    act(() => {
       result.current.sendMessage("recommend something");
-      await vi.waitFor(() => {
-        expect(result.current.isStreaming).toBe(false);
-      });
+    });
+    await waitFor(() => {
+      expect(result.current.isStreaming).toBe(false);
     });
 
     expect(listener).toHaveBeenCalledOnce();
@@ -104,11 +103,11 @@ describe("useChat — install banner trigger", () => {
 
     const { result } = renderHook(() => useChat());
 
-    await act(async () => {
+    act(() => {
       result.current.sendMessage("first message");
-      await vi.waitFor(() => {
-        expect(result.current.isStreaming).toBe(false);
-      });
+    });
+    await waitFor(() => {
+      expect(result.current.isStreaming).toBe(false);
     });
 
     expect(localStorage.getItem(TRIGGERED_KEY)).toBe("true");
@@ -122,11 +121,11 @@ describe("useChat — install banner trigger", () => {
       { type: "done" },
     ]);
 
-    await act(async () => {
+    act(() => {
       result.current.sendMessage("second message");
-      await vi.waitFor(() => {
-        expect(result.current.isStreaming).toBe(false);
-      });
+    });
+    await waitFor(() => {
+      expect(result.current.isStreaming).toBe(false);
     });
 
     // setItem should NOT have been called with the trigger key
@@ -150,11 +149,11 @@ describe("useChat — install banner trigger", () => {
 
     const { result } = renderHook(() => useChat());
 
-    await act(async () => {
+    act(() => {
       result.current.sendMessage("recommend something");
-      await vi.waitFor(() => {
-        expect(result.current.isStreaming).toBe(false);
-      });
+    });
+    await waitFor(() => {
+      expect(result.current.isStreaming).toBe(false);
     });
 
     expect(localStorage.getItem(TRIGGERED_KEY)).toBeNull();
@@ -165,11 +164,11 @@ describe("useChat — install banner trigger", () => {
 
     const { result } = renderHook(() => useChat());
 
-    await act(async () => {
+    act(() => {
       result.current.sendMessage("recommend something");
-      await vi.waitFor(() => {
-        expect(result.current.isStreaming).toBe(false);
-      });
+    });
+    await waitFor(() => {
+      expect(result.current.isStreaming).toBe(false);
     });
 
     expect(localStorage.getItem(TRIGGERED_KEY)).toBeNull();
