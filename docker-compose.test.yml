@@ -2,12 +2,13 @@
 # Usage: docker compose -p ai-movie-suggester-test -f docker-compose.test.yml up -d
 services:
   jellyfin:
-    image: jellyfin/jellyfin:10.11.7
+    image: jellyfin/jellyfin:10.11.6
     ports:
       - "127.0.0.1:8096:8096"
     volumes:
       - jellyfin-test-config:/config
       - jellyfin-test-cache:/cache
+      - ./tests/fixtures/media:/media:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8096/health"]
       interval: 10s
