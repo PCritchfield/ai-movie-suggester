@@ -38,8 +38,8 @@ def dep_app(tmp_path: object) -> Iterator[TestClient]:
         return {"user_id": session.user_id, "username": session.username}  # type: ignore[union-attr]
 
     asyncio.get_event_loop().run_until_complete(store.init())
-    client = TestClient(app)
-    yield client  # type: ignore[misc]
+    with TestClient(app) as client:
+        yield client  # type: ignore[misc]
     asyncio.get_event_loop().run_until_complete(store.close())
 
 

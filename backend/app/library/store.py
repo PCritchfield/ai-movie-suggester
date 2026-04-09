@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 import aiosqlite
 
 from app.library.models import LibraryItemRow, UpsertResult
+from app.vectors.models import FAILED, PENDING, PROCESSING
 
 if TYPE_CHECKING:
     from app.sync.models import SyncResult, SyncRunRow
@@ -438,15 +439,14 @@ class LibraryStore:
         try:
             for i in range(0, len(ids), _BATCH_SIZE):
                 batch = ids[i : i + _BATCH_SIZE]
-                params = [(jid, now) for jid in batch]
                 await self._conn.executemany(
                     "INSERT INTO embedding_queue (jellyfin_id, enqueued_at, status)"
-                    " VALUES (?, ?, 'pending')"
+                    " VALUES (?, ?, ?)"
                     " ON CONFLICT(jellyfin_id) DO UPDATE SET"
-                    " status='pending', enqueued_at=excluded.enqueued_at,"
+                    " status=?, enqueued_at=excluded.enqueued_at,"
                     " retry_count=0, error_message=NULL,"
                     " last_attempted_at=NULL",
-                    params,
+                    [(jid, now, PENDING, PENDING) for jid in batch],
                 )
                 total += len(batch)
         except Exception:
@@ -459,7 +459,8 @@ class LibraryStore:
     async def count_pending_embeddings(self) -> int:
         """Return the number of items with 'pending' status in the queue."""
         cursor = await self._conn.execute(
-            "SELECT COUNT(*) FROM embedding_queue WHERE status = 'pending'"
+            "SELECT COUNT(*) FROM embedding_queue WHERE status = ?",
+            (PENDING,),
         )
         row = await cursor.fetchone()
         return row[0] if row else 0
@@ -561,12 +562,12 @@ class LibraryStore:
         cutoff = now - cooldown_seconds
         cursor = await self._conn.execute(
             "SELECT jellyfin_id, retry_count FROM embedding_queue"
-            " WHERE status = 'pending'"
+            " WHERE status = ?"
             " AND (last_attempted_at IS NULL OR last_attempted_at < ?)"
             " AND retry_count <= ?"
             " ORDER BY enqueued_at ASC"
             " LIMIT ?",
-            (cutoff, max_retries, batch_size),
+            (PENDING, cutoff, max_retries, batch_size),
         )
         rows = await cursor.fetchall()
         return [(row[0], row[1]) for row in rows]
@@ -583,9 +584,9 @@ class LibraryStore:
         now = int(time.time())
         placeholders = ",".join("?" * len(ids))
         cursor = await self._conn.execute(
-            f"UPDATE embedding_queue SET status='processing', last_attempted_at=?"
-            f" WHERE jellyfin_id IN ({placeholders}) AND status='pending'",
-            [now, *ids],
+            "UPDATE embedding_queue SET status=?, last_attempted_at=?"
+            f" WHERE jellyfin_id IN ({placeholders}) AND status=?",
+            [PROCESSING, now, *ids, PENDING],
         )
         await self._conn.commit()
         return cursor.rowcount
@@ -610,11 +611,11 @@ class LibraryStore:
         """Record a failed embedding attempt — increment retry, stay pending."""
         now = int(time.time())
         await self._conn.execute(
-            "UPDATE embedding_queue SET status='pending',"
+            "UPDATE embedding_queue SET status=?,"
             " retry_count=retry_count+1, error_message=?,"
             " last_attempted_at=?"
             " WHERE jellyfin_id=?",
-            (error_message, now, jellyfin_id),
+            (PENDING, error_message, now, jellyfin_id),
         )
         await self._conn.commit()
 
@@ -622,10 +623,10 @@ class LibraryStore:
         """Mark an item as permanently failed — no further retries."""
         now = int(time.time())
         await self._conn.execute(
-            "UPDATE embedding_queue SET status='failed',"
+            "UPDATE embedding_queue SET status=?,"
             " error_message=?, last_attempted_at=?"
             " WHERE jellyfin_id=?",
-            (reason, now, jellyfin_id),
+            (FAILED, reason, now, jellyfin_id),
         )
         await self._conn.commit()
 
@@ -636,7 +637,8 @@ class LibraryStore:
         process was interrupted. Returns the number of rows reset.
         """
         cursor = await self._conn.execute(
-            "UPDATE embedding_queue SET status='pending' WHERE status='processing'"
+            "UPDATE embedding_queue SET status=? WHERE status=?",
+            (PENDING, PROCESSING),
         )
         await self._conn.commit()
         return cursor.rowcount
@@ -645,7 +647,8 @@ class LibraryStore:
         """Return details for all permanently failed queue items."""
         cursor = await self._conn.execute(
             "SELECT jellyfin_id, error_message, retry_count, last_attempted_at"
-            " FROM embedding_queue WHERE status='failed'"
+            " FROM embedding_queue WHERE status=?",
+            (FAILED,),
         )
         rows = await cursor.fetchall()
         return [
@@ -664,7 +667,7 @@ class LibraryStore:
             "SELECT status, COUNT(*) FROM embedding_queue GROUP BY status"
         )
         rows = await cursor.fetchall()
-        counts: dict[str, int] = {"pending": 0, "processing": 0, "failed": 0}
+        counts: dict[str, int] = {PENDING: 0, PROCESSING: 0, FAILED: 0}
         for row in rows:
             if row[0] in counts:
                 counts[row[0]] = row[1]

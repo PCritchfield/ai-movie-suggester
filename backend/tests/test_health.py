@@ -31,7 +31,12 @@ def test_health_reports_ok_when_services_reachable(client) -> None:
     """When Jellyfin responds 200 and Ollama health returns True, reports 'ok'."""
     mock_response = httpx.Response(200)
     with (
-        patch("app.main.httpx.AsyncClient") as mock_client_cls,
+        patch.object(
+            client.app.state.health_client,
+            "get",
+            new_callable=AsyncMock,
+            return_value=mock_response,
+        ),
         patch.object(
             client.app.state.ollama_client,
             "health",
@@ -39,11 +44,6 @@ def test_health_reports_ok_when_services_reachable(client) -> None:
             return_value=True,
         ),
     ):
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_cls.return_value = mock_client
         response = client.get("/health")
     data = response.json()
     assert data["jellyfin"] == "ok"
@@ -67,7 +67,12 @@ def test_health_ollama_ok_when_health_returns_true(client) -> None:
     """When OllamaEmbeddingClient.health() returns True, ollama reports 'ok'."""
     mock_response = httpx.Response(200)
     with (
-        patch("app.main.httpx.AsyncClient") as mock_client_cls,
+        patch.object(
+            client.app.state.health_client,
+            "get",
+            new_callable=AsyncMock,
+            return_value=mock_response,
+        ),
         patch.object(
             client.app.state.ollama_client,
             "health",
@@ -75,11 +80,6 @@ def test_health_ollama_ok_when_health_returns_true(client) -> None:
             return_value=True,
         ),
     ):
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_cls.return_value = mock_client
         response = client.get("/health")
     data = response.json()
     assert data["ollama"] == "ok"
