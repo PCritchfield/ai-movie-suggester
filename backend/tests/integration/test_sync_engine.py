@@ -126,7 +126,7 @@ async def test_synced_items_have_metadata(
     assert len(all_ids) >= EXPECTED_TOTAL
 
     # Fetch a batch — get_many returns LibraryItemRow objects
-    sample_ids = list(all_ids)[:5]
+    sample_ids = sorted(all_ids)[:5]
     items = await library_store.get_many(sample_ids)
 
     found_rich_item = False

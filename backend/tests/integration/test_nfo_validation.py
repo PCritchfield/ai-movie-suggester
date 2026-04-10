@@ -22,16 +22,6 @@ _MOVIE_NFOS = sorted(_MEDIA_ROOT.glob("movies/*/movie.nfo"))
 _SHOW_NFOS = sorted(_MEDIA_ROOT.glob("shows/*/tvshow.nfo"))
 _EPISODE_NFOS = sorted(_MEDIA_ROOT.glob("shows/*/Season 01/*.nfo"))
 
-# Guard against empty fixture directory (silent zero-test pass)
-assert len(_MOVIE_NFOS) >= EXPECTED_MOVIES, (
-    f"Expected {EXPECTED_MOVIES} movie NFOs, found {len(_MOVIE_NFOS)}. "
-    f"Is tests/fixtures/media/ populated?"
-)
-assert len(_SHOW_NFOS) >= EXPECTED_SHOWS, (
-    f"Expected {EXPECTED_SHOWS} show NFOs, found {len(_SHOW_NFOS)}. "
-    f"Is tests/fixtures/media/ populated?"
-)
-
 # Minimum plot length to ensure embedding quality
 _MIN_PLOT_LENGTH = 50
 
@@ -65,6 +55,23 @@ _EPISODE_REQUIRED = [
 def _nfo_id(path: Path) -> str:
     """Human-readable test ID from file path."""
     return str(path.relative_to(_MEDIA_ROOT))
+
+
+@pytest.mark.integration
+def test_fixture_counts_match_expected() -> None:
+    """Guard: fixture directory has the expected number of NFO files.
+
+    Prevents silent zero-test pass if fixtures are missing (e.g. fresh
+    clone without media files). Runs only with -m integration.
+    """
+    assert len(_MOVIE_NFOS) >= EXPECTED_MOVIES, (
+        f"Expected {EXPECTED_MOVIES} movie NFOs, found {len(_MOVIE_NFOS)}. "
+        f"Is tests/fixtures/media/ populated?"
+    )
+    assert len(_SHOW_NFOS) >= EXPECTED_SHOWS, (
+        f"Expected {EXPECTED_SHOWS} show NFOs, found {len(_SHOW_NFOS)}. "
+        f"Is tests/fixtures/media/ populated?"
+    )
 
 
 @pytest.mark.integration

@@ -256,7 +256,7 @@ _SCAN_POLL_TIMEOUT = 120
 async def populated_library(
     jellyfin: JellyfinInstance,
     admin_auth_token: str,
-    test_users: dict[str, str],
+    test_users: dict[str, str],  # noqa: ARG001 — forces user provisioning before library setup
 ) -> int:
     """Add Movies and Shows libraries from fixture media, trigger scan, poll.
 
