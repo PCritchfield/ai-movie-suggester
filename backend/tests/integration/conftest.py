@@ -5,12 +5,15 @@ integration tests (tests/Jellyfin.Server.Integration.Tests/AuthHelper.cs).
 """
 
 import asyncio
+import logging
 import os
 import warnings
 from typing import NamedTuple
 
 import httpx
 import pytest_asyncio
+
+_logger = logging.getLogger(__name__)
 
 
 class JellyfinInstance(NamedTuple):
@@ -234,3 +237,108 @@ async def test_users(
             created[username] = resp.json()["Id"]
 
     return created
+
+
+# Expected fixture counts — update if fixtures are added/removed
+EXPECTED_MOVIES = 25
+EXPECTED_SHOWS = 10
+EXPECTED_TOTAL = EXPECTED_MOVIES + EXPECTED_SHOWS
+
+# Scan polling config
+_SCAN_POLL_INTERVAL = 2
+_SCAN_POLL_TIMEOUT = 120
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped fixture — adds libraries and waits for scan completion
+# ---------------------------------------------------------------------------
+@pytest_asyncio.fixture(scope="session")
+async def populated_library(
+    jellyfin: JellyfinInstance,
+    admin_auth_token: str,
+    test_users: dict[str, str],
+) -> int:
+    """Add Movies and Shows libraries from fixture media, trigger scan, poll.
+
+    Returns the total item count discovered after scan completion.
+    Idempotent — skips library creation if libraries already exist.
+    """
+    base = jellyfin.url
+    headers = _auth_headers(admin_auth_token)
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Check existing libraries
+        resp = await client.get(f"{base}/Library/VirtualFolders", headers=headers)
+        resp.raise_for_status()
+        existing = {lib["Name"] for lib in resp.json()}
+
+        # Add Movies library if missing
+        # Note: paths must be a query parameter, not body — Jellyfin
+        # ignores PathInfos in the JSON body for this endpoint.
+        if "Movies" not in existing:
+            resp = await client.post(
+                f"{base}/Library/VirtualFolders",
+                params={
+                    "name": "Movies",
+                    "collectionType": "movies",
+                    "refreshLibrary": "false",
+                    "paths": "/media/movies",
+                },
+                headers=headers,
+            )
+            if resp.status_code not in (200, 204):
+                _logger.warning(
+                    "Movies library creation returned %d: %s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+
+        # Add Shows library if missing
+        if "Shows" not in existing:
+            resp = await client.post(
+                f"{base}/Library/VirtualFolders",
+                params={
+                    "name": "Shows",
+                    "collectionType": "tvshows",
+                    "refreshLibrary": "false",
+                    "paths": "/media/shows",
+                },
+                headers=headers,
+            )
+            if resp.status_code not in (200, 204):
+                _logger.warning(
+                    "Shows library creation returned %d: %s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+
+        # Trigger library scan
+        resp = await client.post(f"{base}/Library/Refresh", headers=headers)
+        resp.raise_for_status()
+
+        # Poll for scan completion
+        elapsed = 0.0
+        total_count = 0
+        while elapsed < _SCAN_POLL_TIMEOUT:
+            await asyncio.sleep(_SCAN_POLL_INTERVAL)
+            elapsed += _SCAN_POLL_INTERVAL
+
+            resp = await client.get(
+                f"{base}/Items",
+                params={
+                    "Recursive": "true",
+                    "IncludeItemTypes": "Movie,Series",
+                },
+                headers=headers,
+            )
+            if resp.is_success:
+                total_count = resp.json().get("TotalRecordCount", 0)
+                if total_count >= EXPECTED_TOTAL:
+                    _logger.info("library scan complete: %d items found", total_count)
+                    return total_count
+
+        msg = (
+            f"Library scan did not reach {EXPECTED_TOTAL} items "
+            f"within {_SCAN_POLL_TIMEOUT}s (got {total_count})"
+        )
+        raise TimeoutError(msg)
