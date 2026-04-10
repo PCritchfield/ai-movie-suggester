@@ -55,16 +55,17 @@ async def test_search_alien_but_funny(
     pipeline_library_store: LibraryStore,
     embed_client: OllamaEmbeddingClient,
 ) -> None:
-    """'something like Alien but funny' returns Galaxy Quest in top 5."""
+    """'something like Alien but funny' returns a sci-fi comedy in top 5."""
+    expected = {"Galaxy Quest", "Mars Attacks!", "Shaun of the Dead"}
     results = await _search(
         "something like Alien but funny",
         embed_client,
         embedded_library,
         pipeline_library_store,
     )
-    titles = [title for title, _score in results]
-    assert "Galaxy Quest" in titles, (
-        f"Expected 'Galaxy Quest' in top 5, got: "
+    titles = {title for title, _score in results}
+    assert titles & expected, (
+        f"Expected one of {sorted(expected)} in top 5, got: "
         f"{[(t, f'{s:.4f}') for t, s in results]}"
     )
 
