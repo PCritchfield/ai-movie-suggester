@@ -1,4 +1,4 @@
-.PHONY: dev dev-full dev-ui build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline
+.PHONY: dev dev-full dev-ui build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down
 
 # Default dev target — full stack with Ollama
 dev: dev-full
@@ -82,10 +82,27 @@ test-integration-full:
 # Pipeline validation (requires Ollama running locally)
 # ---------------------------------------------------------------------------
 
+# Start pipeline infrastructure: Jellyfin test container + Ollama health check
+# Ollama must be started separately (ollama serve, or Docker sidecar on Linux)
+pipeline-up:
+	@$(MAKE) jellyfin-up
+	@echo "Checking Ollama at http://localhost:11434/ ..."
+	@curl -sf http://localhost:11434/ > /dev/null 2>&1 \
+		&& echo "Ollama is running" \
+		|| { echo "WARNING: Ollama not reachable at http://localhost:11434/"; \
+		     echo "  macOS:  ollama serve"; \
+		     echo "  Linux:  docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d ollama"; \
+		     echo "Start Ollama, then run: make validate-pipeline"; exit 1; }
+	@echo "Pipeline infrastructure ready — run: make validate-pipeline"
+
+# Stop pipeline infrastructure
+pipeline-down:
+	@$(MAKE) jellyfin-down
+
 # Full RAG pipeline validation: embed → search → chat against real Ollama
 # Checks Ollama health BEFORE starting Jellyfin to fail fast
 validate-pipeline:
-	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama with: ollama serve"; exit 1; }
+	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama first, or run: make pipeline-up"; exit 1; }
 	@$(MAKE) jellyfin-up && cd backend && JELLYFIN_TEST_URL=http://localhost:8096 uv run pytest -m pipeline -v ; ret=$$?; cd .. && $(MAKE) jellyfin-down; exit $$ret
 
 # ---------------------------------------------------------------------------
