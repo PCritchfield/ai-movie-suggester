@@ -73,7 +73,7 @@ async def sync_settings(
     # We need the admin user ID — authenticate to get it
     async with httpx.AsyncClient(timeout=10.0) as http:
         client = JellyfinClient(base_url=jellyfin.url, http_client=http)
-        auth = await client.authenticate("root", TEST_ADMIN_PASS)
+        auth = await client.authenticate(jellyfin.admin_user, TEST_ADMIN_PASS)
     return _make_sync_settings(jellyfin.url, admin_auth_token, auth.user_id)
 
 

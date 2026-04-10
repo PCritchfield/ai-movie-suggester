@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.integration.conftest import EXPECTED_MOVIES, EXPECTED_SHOWS
+
 # Fixture media lives at repo root, not inside backend/
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _MEDIA_ROOT = _REPO_ROOT / "tests" / "fixtures" / "media"
@@ -19,6 +21,16 @@ _MEDIA_ROOT = _REPO_ROOT / "tests" / "fixtures" / "media"
 _MOVIE_NFOS = sorted(_MEDIA_ROOT.glob("movies/*/movie.nfo"))
 _SHOW_NFOS = sorted(_MEDIA_ROOT.glob("shows/*/tvshow.nfo"))
 _EPISODE_NFOS = sorted(_MEDIA_ROOT.glob("shows/*/Season 01/*.nfo"))
+
+# Guard against empty fixture directory (silent zero-test pass)
+assert len(_MOVIE_NFOS) >= EXPECTED_MOVIES, (
+    f"Expected {EXPECTED_MOVIES} movie NFOs, found {len(_MOVIE_NFOS)}. "
+    f"Is tests/fixtures/media/ populated?"
+)
+assert len(_SHOW_NFOS) >= EXPECTED_SHOWS, (
+    f"Expected {EXPECTED_SHOWS} show NFOs, found {len(_SHOW_NFOS)}. "
+    f"Is tests/fixtures/media/ populated?"
+)
 
 # Minimum plot length to ensure embedding quality
 _MIN_PLOT_LENGTH = 50

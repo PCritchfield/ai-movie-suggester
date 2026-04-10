@@ -266,7 +266,7 @@ async def populated_library(
     base = jellyfin.url
     headers = _auth_headers(admin_auth_token)
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=_SCAN_POLL_TIMEOUT + 30) as client:
         # Check existing libraries
         resp = await client.get(f"{base}/Library/VirtualFolders", headers=headers)
         resp.raise_for_status()
