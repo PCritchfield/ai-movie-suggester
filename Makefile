@@ -1,4 +1,4 @@
-.PHONY: dev dev-full dev-ui build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection
+.PHONY: dev dev-full dev-ui build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline
 
 # Default dev target — full stack with Ollama
 dev: dev-full
@@ -17,7 +17,7 @@ build:
 
 # Run all tests
 test:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend pytest -m "not integration"
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend pytest -m "not integration and not pipeline"
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm test
 
 # Lint both runtimes
@@ -70,13 +70,23 @@ jellyfin-down:
 # Run integration tests (requires Jellyfin via jellyfin-up)
 # Runs on host (same as CI) — Jellyfin is on localhost:8096
 test-integration:
-	cd backend && JELLYFIN_TEST_URL=http://localhost:8096 uv run pytest -m integration -v
+	cd backend && JELLYFIN_TEST_URL=http://localhost:8096 uv run pytest -m "integration and not pipeline" -v
 
 # Full cycle: start Jellyfin, run integration tests, teardown (unconditional)
 # WARNING: This MUST remain a single logical line. Make runs each recipe line
 # in a separate shell — splitting this would break unconditional teardown.
 test-integration-full:
 	@$(MAKE) jellyfin-up && $(MAKE) test-integration; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
+
+# ---------------------------------------------------------------------------
+# Pipeline validation (requires Ollama running locally)
+# ---------------------------------------------------------------------------
+
+# Full RAG pipeline validation: embed → search → chat against real Ollama
+# Checks Ollama health BEFORE starting Jellyfin to fail fast
+validate-pipeline:
+	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama with: ollama serve"; exit 1; }
+	@$(MAKE) jellyfin-up && cd backend && JELLYFIN_TEST_URL=http://localhost:8096 uv run pytest -m pipeline -v ; ret=$$?; cd .. && $(MAKE) jellyfin-down; exit $$ret
 
 # ---------------------------------------------------------------------------
 # Adversarial injection test harness
