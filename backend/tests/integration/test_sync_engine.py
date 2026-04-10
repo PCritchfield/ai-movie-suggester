@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import httpx
 import pytest
 import pytest_asyncio
+from pydantic import SecretStr
 
 from app.config import Settings
 from app.jellyfin.client import JellyfinClient
@@ -58,7 +59,7 @@ def _make_sync_settings(
         jellyfin_url=jellyfin_url,
         session_secret="a" * 32 + "-test-not-real-secret-12345678",
         session_secure_cookie=False,
-        jellyfin_api_key=admin_token,
+        jellyfin_api_key=SecretStr(admin_token),
         jellyfin_admin_user_id=admin_user_id,
         log_level="debug",
     )  # type: ignore[call-arg]

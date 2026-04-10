@@ -11,6 +11,7 @@ import warnings
 from typing import NamedTuple
 
 import httpx
+import pytest
 import pytest_asyncio
 
 _logger = logging.getLogger(__name__)
@@ -286,6 +287,13 @@ async def populated_library(
                 },
                 headers=headers,
             )
+            if resp.status_code == 400:
+                pytest.skip(
+                    "Jellyfin cannot access /media/movies — "
+                    "fixture media not mounted (CI service containers "
+                    "don't support bind mounts). Run locally with "
+                    "make test-integration-full."
+                )
             if resp.status_code not in (200, 204):
                 _logger.warning(
                     "Movies library creation returned %d: %s",
