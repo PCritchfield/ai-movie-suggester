@@ -21,10 +21,14 @@ from app.ollama.chat_client import OllamaChatClient
 from app.ollama.client import OllamaEmbeddingClient
 from app.search.service import SearchService
 from tests.integration.conftest import JELLYFIN_TEST_URL
-from tests.pipeline.conftest import CHAT_MODEL, EMBED_MODEL, OLLAMA_HOST
+from tests.pipeline.conftest import (
+    CHAT_MODEL,
+    EMBED_MODEL,
+    OLLAMA_HOST,
+    make_pipeline_settings,
+)
 
 if TYPE_CHECKING:
-    from app.config import Settings
     from app.library.store import LibraryStore
     from app.vectors.repository import SqliteVecRepository
 
@@ -63,24 +67,6 @@ def _make_permit_all_permission_service() -> AsyncMock:
     return mock
 
 
-def _make_pipeline_settings(jellyfin_url: str) -> Settings:
-    """Minimal Settings for ChatService (no real Jellyfin calls needed)."""
-    from pydantic import SecretStr
-
-    from app.config import Settings
-
-    return Settings(
-        jellyfin_url=jellyfin_url,
-        session_secret="a" * 32 + "-test-not-real-secret-12345678",
-        session_secure_cookie=False,
-        jellyfin_api_key=SecretStr("not-used-in-chat"),
-        jellyfin_admin_user_id="not-used-in-chat",
-        ollama_host=OLLAMA_HOST,
-        ollama_chat_model=CHAT_MODEL,
-        log_level="debug",
-    )  # type: ignore[call-arg]
-
-
 @pytest.mark.pipeline
 async def test_chat_round_trip_references_fixtures(
     embedded_library: SqliteVecRepository,
@@ -91,7 +77,9 @@ async def test_chat_round_trip_references_fixtures(
         "No fixture titles found — is tests/fixtures/media/ populated?"
     )
 
-    settings = _make_pipeline_settings(JELLYFIN_TEST_URL)
+    settings = make_pipeline_settings(
+        JELLYFIN_TEST_URL, "not-used-in-chat", "not-used-in-chat"
+    )
 
     async with httpx.AsyncClient(timeout=300.0) as http:
         embed_client = OllamaEmbeddingClient(

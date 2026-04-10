@@ -25,6 +25,7 @@ from app.vectors.repository import SqliteVecRepository
 
 # Import fixtures from integration conftest — pytest needs module-level names
 # to discover fixtures from sibling directories.
+from tests.conftest import TEST_SECRET
 from tests.integration.conftest import (  # noqa: F401
     TEST_ADMIN_PASS,
 )
@@ -93,7 +94,7 @@ async def _ensure_models(_check_ollama: None) -> None:
             _logger.info("Pulling model %s (this may take a while)...", model)
             pull_resp = await client.post(
                 f"{OLLAMA_HOST}/api/pull",
-                json={"name": model},
+                json={"name": model, "stream": False},
                 timeout=600.0,
             )
             pull_resp.raise_for_status()
@@ -141,6 +142,30 @@ async def pipeline_vec_repo(
 
 
 # ---------------------------------------------------------------------------
+# Shared helper: build Settings for pipeline tests
+# ---------------------------------------------------------------------------
+def make_pipeline_settings(
+    jellyfin_url: str,
+    admin_token: str,
+    admin_user_id: str,
+) -> Settings:
+    """Build minimal Settings for pipeline tests.
+
+    Shared between the embedded_library fixture and chat round-trip test
+    to avoid divergent Settings construction.
+    """
+    return Settings(
+        jellyfin_url=jellyfin_url,
+        session_secret=TEST_SECRET,
+        session_secure_cookie=False,
+        jellyfin_api_key=SecretStr(admin_token),
+        jellyfin_admin_user_id=admin_user_id,
+        ollama_host=OLLAMA_HOST,
+        log_level="debug",
+    )  # type: ignore[call-arg]
+
+
+# ---------------------------------------------------------------------------
 # Session-scoped: sync + embed all fixtures into the pipeline database
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture(scope="session")
@@ -162,15 +187,7 @@ async def embedded_library(
         auth = await jf_client.authenticate(jellyfin.admin_user, TEST_ADMIN_PASS)
         admin_user_id = auth.user_id
 
-    settings = Settings(
-        jellyfin_url=jellyfin.url,
-        session_secret="a" * 32 + "-test-not-real-secret-12345678",
-        session_secure_cookie=False,
-        jellyfin_api_key=SecretStr(admin_auth_token),
-        jellyfin_admin_user_id=admin_user_id,
-        ollama_host=OLLAMA_HOST,
-        log_level="debug",
-    )  # type: ignore[call-arg]
+    settings = make_pipeline_settings(jellyfin.url, admin_auth_token, admin_user_id)
 
     # Run sync
     async with httpx.AsyncClient(timeout=30.0) as http:
