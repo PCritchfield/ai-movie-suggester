@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Shining</title>
+  <year>1980</year>
+  <plot>A struggling writer takes a winter caretaker position at an isolated mountain hotel, bringing his psychic young son and increasingly terrified wife. As snowbound months pass, the hotel's malevolent supernatural presence amplifies his madness until he turns violently on his own family in the hedge-maze corridors of the Overlook.</plot>
+  <genre>Horror</genre>
+  <director>Stanley Kubrick</director>
+  <actor>
+    <name>Jack Nicholson</name>
+    <role>Jack Torrance</role>
+  </actor>
+  <actor>
+    <name>Shelley Duvall</name>
+    <role>Wendy Torrance</role>
+  </actor>
+  <actor>
+    <name>Danny Lloyd</name>
+    <role>Danny Torrance</role>
+  </actor>
+  <studio>Warner Bros.</studio>
+  <rating>8.4</rating>
+  <runtime>146</runtime>
+</movie>

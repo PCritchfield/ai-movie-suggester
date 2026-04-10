@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Mars Attacks!</title>
+  <year>1996</year>
+  <plot>Martians arrive on Earth claiming to come in peace, then gleefully vaporize Congress and lay waste to landmarks with ray guns while cackling in helium voices. A wildly irreverent ensemble satire that skewers alien invasion tropes, Cold War paranoia, and American pop culture with Tim Burton's signature grotesque glee.</plot>
+  <genre>Comedy</genre>
+  <genre>Sci-Fi</genre>
+  <director>Tim Burton</director>
+  <actor>
+    <name>Jack Nicholson</name>
+    <role>President James Dale</role>
+  </actor>
+  <actor>
+    <name>Pierce Brosnan</name>
+    <role>Professor Donald Kessler</role>
+  </actor>
+  <actor>
+    <name>Sarah Jessica Parker</name>
+    <role>Nathalie Lake</role>
+  </actor>
+  <studio>Warner Bros.</studio>
+  <rating>6.4</rating>
+  <runtime>106</runtime>
+</movie>

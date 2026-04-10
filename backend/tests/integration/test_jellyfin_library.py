@@ -26,7 +26,12 @@ if TYPE_CHECKING:
     from app.jellyfin.models import LibraryItem, PaginatedItems
     from tests.integration.conftest import JellyfinInstance
 
-from tests.integration.conftest import TEST_USER_ALICE, TEST_USER_ALICE_PASS
+from tests.integration.conftest import (
+    EXPECTED_MOVIES,
+    EXPECTED_SHOWS,
+    TEST_USER_ALICE,
+    TEST_USER_ALICE_PASS,
+)
 
 
 @pytest_asyncio.fixture
@@ -138,3 +143,74 @@ async def test_extended_fields_no_validation_errors(
             assert item.community_rating is None or isinstance(
                 item.community_rating, float
             )
+
+
+# ---------------------------------------------------------------------------
+# Populated library tests — require the populated_library fixture
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_populated_library_has_movies(
+    jf_client: JellyfinClient,
+    populated_library: int,
+    test_users: dict[str, str],
+) -> None:
+    """Populated Jellyfin has at least the expected number of movies."""
+    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    total = 0
+    async for page in jf_client.get_all_items(
+        auth.access_token, auth.user_id, item_types=["Movie"]
+    ):
+        total = page.total_count
+    assert total >= EXPECTED_MOVIES
+
+
+@pytest.mark.integration
+async def test_populated_library_has_shows(
+    jf_client: JellyfinClient,
+    populated_library: int,
+    test_users: dict[str, str],
+) -> None:
+    """Populated Jellyfin has at least the expected number of shows."""
+    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    total = 0
+    async for page in jf_client.get_all_items(
+        auth.access_token, auth.user_id, item_types=["Series"]
+    ):
+        total = page.total_count
+    assert total >= EXPECTED_SHOWS
+
+
+@pytest.mark.integration
+async def test_movie_metadata_from_nfo(
+    jf_client: JellyfinClient,
+    populated_library: int,
+    test_users: dict[str, str],
+) -> None:
+    """At least one movie has overview, genres, and year from NFO."""
+    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    async for page in jf_client.get_all_items(
+        auth.access_token, auth.user_id, item_types=["Movie"]
+    ):
+        for item in page.items:
+            if item.overview and item.genres and item.production_year:
+                return  # Found one with full metadata — pass
+    pytest.fail("No movie item has overview + genres + production_year")
+
+
+@pytest.mark.integration
+async def test_show_metadata_from_nfo(
+    jf_client: JellyfinClient,
+    populated_library: int,
+    test_users: dict[str, str],
+) -> None:
+    """At least one show has overview and genres from NFO."""
+    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    async for page in jf_client.get_all_items(
+        auth.access_token, auth.user_id, item_types=["Series"]
+    ):
+        for item in page.items:
+            if item.overview and item.genres:
+                return  # Found one with metadata — pass
+    pytest.fail("No show item has overview + genres")

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Sicario</title>
+  <year>2015</year>
+  <plot>An idealistic FBI agent is recruited to a government task force targeting a Mexican drug cartel, only to discover the operation's true methods are far more brutal and legally murky than she was told. Tense border-crossing set pieces and a suffocating atmosphere of moral compromise reveal a drug war where the line between law and lawlessness has been deliberately erased.</plot>
+  <genre>Thriller</genre>
+  <genre>Action</genre>
+  <director>Denis Villeneuve</director>
+  <actor>
+    <name>Emily Blunt</name>
+    <role>Kate Macer</role>
+  </actor>
+  <actor>
+    <name>Benicio del Toro</name>
+    <role>Alejandro</role>
+  </actor>
+  <actor>
+    <name>Josh Brolin</name>
+    <role>Matt Graver</role>
+  </actor>
+  <studio>Lionsgate</studio>
+  <rating>7.6</rating>
+  <runtime>121</runtime>
+</movie>

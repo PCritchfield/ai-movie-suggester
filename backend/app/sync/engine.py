@@ -174,7 +174,7 @@ class SyncEngine:
                 async for page in self._jellyfin_client.get_all_items(
                     token=token,
                     user_id=user_id,
-                    item_types=["Movie"],
+                    item_types=["Movie", "Series"],
                     page_size=self._settings.library_sync_page_size,
                 ):
                     rows_to_upsert: list[LibraryItemRow] = []

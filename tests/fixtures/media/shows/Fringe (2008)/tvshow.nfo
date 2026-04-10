@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Fringe</title>
+  <year>2008</year>
+  <plot>An FBI agent, a brilliant but unstable scientist, and his genius son investigate a series of bizarre events linked to fringe science and a parallel universe. As the Pattern of strange occurrences intensifies, the team discovers a war between two realities that threatens to destroy both worlds.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Thriller</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Anna Torv</name>
+    <role>Olivia Dunham</role>
+  </actor>
+  <actor>
+    <name>John Noble</name>
+    <role>Dr. Walter Bishop</role>
+  </actor>
+  <actor>
+    <name>Joshua Jackson</name>
+    <role>Peter Bishop</role>
+  </actor>
+  <studio>Fox</studio>
+  <rating>8.4</rating>
+  <status>Ended</status>
+</tvshow>

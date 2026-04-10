@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>The Wire</title>
+  <year>2002</year>
+  <plot>A sprawling examination of Baltimore's institutions and their impact on individuals, told through the lens of the drug trade, the port, city hall, schools, and the media. Each season peels back another layer of systemic dysfunction, revealing how bureaucracy, corruption, and poverty conspire to trap people on both sides of the law.</plot>
+  <genre>Drama</genre>
+  <genre>Crime</genre>
+  <actor>
+    <name>Dominic West</name>
+    <role>Detective Jimmy McNulty</role>
+  </actor>
+  <actor>
+    <name>Idris Elba</name>
+    <role>Stringer Bell</role>
+  </actor>
+  <actor>
+    <name>Michael K. Williams</name>
+    <role>Omar Little</role>
+  </actor>
+  <actor>
+    <name>Wendell Pierce</name>
+    <role>Detective Bunk Moreland</role>
+  </actor>
+  <studio>HBO</studio>
+  <rating>9.3</rating>
+  <status>Ended</status>
+</tvshow>
