@@ -6,10 +6,17 @@ all fixture items are successfully embedded with real inference.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import httpx
 import pytest
 
+from tests.integration.conftest import EXPECTED_TOTAL
 from tests.pipeline.conftest import OLLAMA_HOST, REQUIRED_MODELS
+
+if TYPE_CHECKING:
+    from app.library.store import LibraryStore
+    from app.vectors.repository import SqliteVecRepository
 
 
 @pytest.mark.pipeline
@@ -34,3 +41,18 @@ async def test_models_available() -> None:
             assert model in available or f"{model}:latest" in available, (
                 f"Model {model} not available in Ollama. Available: {sorted(available)}"
             )
+
+
+@pytest.mark.pipeline
+async def test_all_items_embedded(
+    embedded_library: SqliteVecRepository,
+    pipeline_library_store: LibraryStore,
+) -> None:
+    """All 35 fixture items produce vectors with 0 pending in queue."""
+    vec_count = await embedded_library.count()
+    assert vec_count >= EXPECTED_TOTAL, (
+        f"Expected >= {EXPECTED_TOTAL} vectors, got {vec_count}"
+    )
+
+    pending = await pipeline_library_store.count_pending_embeddings()
+    assert pending == 0, f"Expected 0 pending embeddings, got {pending}"
