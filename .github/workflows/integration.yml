@@ -34,7 +34,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Secondary readiness gate — /health can return 200 before API is ready
       - name: Wait for Jellyfin API readiness
