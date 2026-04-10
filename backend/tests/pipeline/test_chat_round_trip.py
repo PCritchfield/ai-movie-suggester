@@ -20,6 +20,7 @@ from app.chat.service import ChatPauseCounter, ChatService
 from app.ollama.chat_client import OllamaChatClient
 from app.ollama.client import OllamaEmbeddingClient
 from app.search.service import SearchService
+from tests.integration.conftest import JELLYFIN_TEST_URL
 from tests.pipeline.conftest import CHAT_MODEL, EMBED_MODEL, OLLAMA_HOST
 
 if TYPE_CHECKING:
@@ -90,7 +91,7 @@ async def test_chat_round_trip_references_fixtures(
         "No fixture titles found — is tests/fixtures/media/ populated?"
     )
 
-    settings = _make_pipeline_settings("http://localhost:8096")
+    settings = _make_pipeline_settings(JELLYFIN_TEST_URL)
 
     async with httpx.AsyncClient(timeout=300.0) as http:
         embed_client = OllamaEmbeddingClient(
