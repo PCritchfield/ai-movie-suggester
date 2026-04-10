@@ -11,12 +11,15 @@ from typing import TYPE_CHECKING
 
 import httpx
 import pytest
+import pytest_asyncio
 
 from app.ollama.client import OllamaEmbeddingClient
 from app.search.models import QUERY_PREFIX
 from tests.pipeline.conftest import EMBED_MODEL, OLLAMA_HOST
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from app.library.store import LibraryStore
     from app.vectors.repository import SqliteVecRepository
 
@@ -38,11 +41,11 @@ async def _search(
     ]
 
 
-@pytest.fixture
-async def embed_client() -> OllamaEmbeddingClient:
+@pytest_asyncio.fixture
+async def embed_client() -> AsyncGenerator[OllamaEmbeddingClient, None]:
     """Embedding client for search queries — function-scoped httpx client."""
     async with httpx.AsyncClient(timeout=120.0) as http:
-        yield OllamaEmbeddingClient(  # type: ignore[misc]
+        yield OllamaEmbeddingClient(
             base_url=OLLAMA_HOST,
             http_client=http,
             embed_model=EMBED_MODEL,
