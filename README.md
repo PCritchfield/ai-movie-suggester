@@ -90,6 +90,14 @@ Jellyfin must be configured with a session timeout (Jellyfin Settings > Networki
 
 ## Development
 
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2
+- [uv](https://docs.astral.sh/uv/) — Python package manager (for running backend tests on host)
+- [Ollama](https://ollama.ai/) — required for pipeline validation tests (`brew install ollama` on macOS)
+
+### Commands
+
 ```bash
 # Full stack with hot reload
 make dev
@@ -102,6 +110,27 @@ make test
 
 # Lint
 make lint
+```
+
+### Integration Tests
+
+```bash
+make test-integration-full   # start Jellyfin, run tests, teardown
+```
+
+### Pipeline Validation
+
+Validates the full RAG pipeline (embed → search → chat) with real Ollama inference against 35 fixture items. Requires Ollama running locally — models are auto-pulled on first run (~4 GB).
+
+```bash
+# One-shot: checks Ollama, starts Jellyfin, runs tests, tears down
+ollama serve                 # in another terminal (or already running)
+make validate-pipeline
+
+# Or manage infrastructure separately for iterative development
+make pipeline-up             # start Jellyfin + check Ollama
+make validate-pipeline       # run pipeline tests
+make pipeline-down           # tear down Jellyfin
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for system design and data flow diagrams.
