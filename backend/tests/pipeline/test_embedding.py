@@ -30,7 +30,7 @@ async def test_ollama_reachable() -> None:
 
 
 @pytest.mark.pipeline
-async def test_models_available() -> None:
+async def test_models_available(_ensure_models: None) -> None:
     """Both required models (nomic-embed-text, llama3.1:8b) are available."""
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.get(f"{OLLAMA_HOST}/api/tags")
