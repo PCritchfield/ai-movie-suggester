@@ -1,0 +1,91 @@
+# =============================================================================
+# Local development stack — self-contained, zero-config
+# =============================================================================
+# Usage:
+#   make dev
+#
+# This overlay adds:
+#   - Disposable Jellyfin with 35 fixture items (movies + shows)
+#   - Ollama model auto-pull (nomic-embed-text + llama3.1:8b)
+#   - Backend dev defaults (no .env required)
+#   - Provisioner that sets up Jellyfin and triggers initial library sync
+#
+# Dev-only — all credentials are for the disposable local stack.
+# Do not use these values against a real Jellyfin server.
+# =============================================================================
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:10.11.6
+    ports:
+      - "127.0.0.1:8096:8096"
+    volumes:
+      - jellyfin-localdev-config:/config
+      - jellyfin-localdev-cache:/cache
+      - ./tests/fixtures/media:/media:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8096/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Override Ollama to auto-pull required models on first start
+  ollama:
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        ollama serve &
+        sleep 3
+        ollama pull nomic-embed-text
+        ollama pull llama3.1:8b
+        wait
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q nomic-embed-text && ollama list | grep -q llama3.1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+
+  # Override backend with dev defaults — no .env needed
+  backend:
+    environment:
+      - JELLYFIN_URL=http://jellyfin:8096
+      - SESSION_SECRET=localdev-32char-not-for-production
+      - SESSION_SECURE_COOKIE=false
+      - OLLAMA_HOST=http://ollama:11434
+      - LOG_LEVEL=debug
+      - SYNC_INTERVAL_HOURS=0
+      - CORS_ORIGIN=http://localhost:3000
+    depends_on:
+      jellyfin:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+  frontend:
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # One-shot provisioner: Jellyfin wizard + users + library + backend sync
+  provisioner:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    working_dir: /scripts
+    volumes:
+      - ./scripts:/scripts:ro
+    command: uv run --no-project dev-provision.py
+    environment:
+      - JELLYFIN_URL=http://jellyfin:8096
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      jellyfin:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: on-failure:5
+
+volumes:
+  jellyfin-localdev-config:
+  jellyfin-localdev-cache:

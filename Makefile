@@ -1,9 +1,25 @@
-.PHONY: dev dev-full dev-ui build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down
+.PHONY: dev dev-full dev-ui dev-down build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down
 
-# Default dev target — full stack with Ollama
-dev: dev-full
+# ---------------------------------------------------------------------------
+# Port 8096 guard — localdev Jellyfin and test Jellyfin share this port
+# ---------------------------------------------------------------------------
+_check_port_8096 = @curl -sf http://localhost:8096/health > /dev/null 2>&1 \
+	&& { echo "ERROR: Port 8096 already in use (another Jellyfin stack running?)"; \
+	     echo "  Run: make dev-down  or  make jellyfin-down  first"; exit 1; } \
+	|| true
 
-# Full stack: backend + frontend + Ollama sidecar
+# Self-contained local dev — Jellyfin + Ollama + provisioning, no .env required
+# First run pulls ~4 GB of Ollama models and takes a few minutes.
+dev:
+	$(_check_port_8096)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ollama.yml -f docker-compose.localdev.yml up
+
+# Stop the local dev stack
+dev-down:
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ollama.yml -f docker-compose.localdev.yml down
+
+# Full stack with hot reload — requires .env with JELLYFIN_URL + SESSION_SECRET
+# Use this if you have your own Jellyfin instance configured
 dev-full:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ollama.yml up
 
@@ -50,6 +66,7 @@ hooks:
 
 # Start disposable Jellyfin for integration tests
 jellyfin-up:
+	$(_check_port_8096)
 	docker compose -p ai-movie-suggester-test -f docker-compose.test.yml up -d jellyfin
 	@echo "Waiting for Jellyfin to become healthy..."
 	@timeout=120; while [ $$timeout -gt 0 ]; do \
