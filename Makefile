@@ -8,15 +8,16 @@ _check_port_8096 = @curl -sf http://localhost:8096/health > /dev/null 2>&1 \
 	     echo "  Run: make dev-down  or  make jellyfin-down  first"; exit 1; } \
 	|| true
 
-# Self-contained local dev — Jellyfin + Ollama + provisioning, no .env required
+# Self-contained local dev — Jellyfin + Ollama (CPU) + provisioning, no .env required
 # First run pulls ~4 GB of Ollama models and takes a few minutes.
+# Ollama runs CPU-only; for GPU use make dev-full with docker-compose.ollama.yml
 dev:
 	$(_check_port_8096)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ollama.yml -f docker-compose.localdev.yml up
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.localdev.yml up
 
 # Stop the local dev stack
 dev-down:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ollama.yml -f docker-compose.localdev.yml down
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.localdev.yml down
 
 # Full stack with hot reload — requires .env with JELLYFIN_URL + SESSION_SECRET
 # Use this if you have your own Jellyfin instance configured

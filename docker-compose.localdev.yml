@@ -30,8 +30,15 @@ services:
       retries: 10
       start_period: 30s
 
-  # Override Ollama to auto-pull required models on first start
+  # Ollama — CPU-only, auto-pulls required models on first start
+  # No nvidia GPU reservation (works on macOS + Linux without GPU)
+  # For GPU acceleration, use docker-compose.ollama.yml with make dev-full instead
   ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-localdev-data:/root/.ollama
     entrypoint:
       - /bin/sh
       - -c
@@ -47,6 +54,7 @@ services:
       timeout: 10s
       retries: 20
       start_period: 300s
+    restart: unless-stopped
 
   # Override backend with dev defaults — no .env needed
   backend:
@@ -89,3 +97,4 @@ services:
 volumes:
   jellyfin-localdev-config:
   jellyfin-localdev-cache:
+  ollama-localdev-data:
