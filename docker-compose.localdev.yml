@@ -8,7 +8,7 @@
 #   - Disposable Jellyfin with 35 fixture items (movies + shows)
 #   - Ollama model auto-pull (nomic-embed-text + llama3.1:8b)
 #   - Backend dev defaults (no .env required)
-#   - Provisioner that sets up Jellyfin and triggers initial library sync
+#   - Two-phase provisioner: Jellyfin setup → backend sync
 #
 # Dev-only — all credentials are for the disposable local stack.
 # Do not use these values against a real Jellyfin server.
@@ -56,10 +56,39 @@ services:
       start_period: 300s
     restart: unless-stopped
 
+  # Phase 1: Provision Jellyfin BEFORE backend starts.
+  # Completes wizard, creates users, creates API key, writes env to shared volume.
+  jellyfin-init:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    working_dir: /scripts
+    volumes:
+      - ./scripts:/scripts:ro
+      - localdev-shared:/shared
+    command: uv run --no-project dev-provision.py --phase init
+    environment:
+      - JELLYFIN_URL=http://jellyfin:8096
+      - SHARED_DIR=/shared
+    depends_on:
+      jellyfin:
+        condition: service_healthy
+    restart: on-failure:3
+
   # Override backend with dev defaults — no .env needed
+  # Sources runtime env from jellyfin-init (API key + admin user ID)
   # user: root so named volume at /app/data is writable (dev-only)
   backend:
     user: "0"
+    command:
+      - sh
+      - -c
+      - |
+        if [ -f /shared/.localdev-env ]; then
+          export $$(cat /shared/.localdev-env | xargs)
+          echo "[localdev] Loaded runtime env from jellyfin-init"
+        fi
+        exec uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    volumes:
+      - localdev-shared:/shared:ro
     environment:
       - JELLYFIN_URL=http://jellyfin:8096
       - SESSION_SECRET=localdev-32char-not-for-production
@@ -71,6 +100,8 @@ services:
     depends_on:
       jellyfin:
         condition: service_healthy
+      jellyfin-init:
+        condition: service_completed_successfully
       ollama:
         condition: service_healthy
 
@@ -79,13 +110,13 @@ services:
       backend:
         condition: service_healthy
 
-  # One-shot provisioner: Jellyfin wizard + users + library + backend sync
+  # Phase 2: Trigger backend sync + wait for completion
   provisioner:
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     working_dir: /scripts
     volumes:
       - ./scripts:/scripts:ro
-    command: uv run --no-project dev-provision.py
+    command: uv run --no-project dev-provision.py --phase sync
     environment:
       - JELLYFIN_URL=http://jellyfin:8096
       - BACKEND_URL=http://backend:8000
@@ -94,9 +125,10 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
-    restart: on-failure:5
+    restart: on-failure:3
 
 volumes:
   jellyfin-localdev-config:
   jellyfin-localdev-cache:
   ollama-localdev-data:
+  localdev-shared:

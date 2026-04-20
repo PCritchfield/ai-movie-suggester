@@ -2,13 +2,16 @@
 # requires-python = ">=3.12"
 # dependencies = ["httpx"]
 # ///
-"""Provision the local dev stack: Jellyfin wizard, test users, library, backend sync.
+"""Provision the local dev stack in two phases.
+
+Phase 1 (--phase init): Jellyfin wizard, test users, API key, library scan.
+  Writes JELLYFIN_API_KEY and JELLYFIN_ADMIN_USER_ID to /shared/.localdev-env
+  so the backend can source them at startup.
+
+Phase 2 (--phase sync): Log in to backend, trigger library sync, wait.
 
 Dev-only — all credentials are for the disposable local stack.
 Do not use these values against a real Jellyfin server.
-
-Runs as a one-shot container in docker-compose.localdev.yml.
-Idempotent — safe to re-run against an already-provisioned instance.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 
 import httpx
 
@@ -32,6 +36,7 @@ log = logging.getLogger("provision")
 # ---------------------------------------------------------------------------
 JELLYFIN_URL = os.environ.get("JELLYFIN_URL", "http://jellyfin:8096")
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://backend:8000")
+SHARED_DIR = os.environ.get("SHARED_DIR", "/shared")
 
 ADMIN_USER = "root"
 ADMIN_PASS = "test-admin-password"
@@ -43,7 +48,6 @@ TEST_USERS = [
 
 EXPECTED_TOTAL = 35  # 25 movies + 10 shows
 
-# Jellyfin auth header format (same as integration conftest)
 _AUTH_HEADER = (
     'MediaBrowser Client="ai-movie-suggester-dev", '
     'DeviceId="dev-provision", Device="provision-script", Version="0.0.0"'
@@ -59,9 +63,29 @@ def _auth_headers(token: str | None = None) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Phase 1: Jellyfin wizard
+# Phase 1: Init — Jellyfin provisioning
 # ---------------------------------------------------------------------------
-async def complete_wizard(client: httpx.AsyncClient) -> str:
+async def phase_init() -> None:
+    """Provision Jellyfin and write runtime env for the backend."""
+    log.info("=== Phase 1: Jellyfin init ===")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        admin_user = await _complete_wizard(client)
+        token, user_id = await _authenticate_admin(client, admin_user)
+        await _create_test_users(client, token)
+        api_key = await _create_api_key(client, token)
+        await _setup_libraries(client, token)
+
+    # Write runtime env for the backend to source
+    env_path = Path(SHARED_DIR) / ".localdev-env"
+    env_path.write_text(
+        f"JELLYFIN_API_KEY={api_key}\nJELLYFIN_ADMIN_USER_ID={user_id}\n"
+    )
+    log.info("Wrote runtime env to %s", env_path)
+    log.info("=== Phase 1 complete ===")
+
+
+async def _complete_wizard(client: httpx.AsyncClient) -> str:
     """Complete Jellyfin first-run wizard. Returns admin username."""
     admin_user = ADMIN_USER
 
@@ -70,7 +94,6 @@ async def complete_wizard(client: httpx.AsyncClient) -> str:
         log.info("Wizard already completed")
         return admin_user
 
-    # Discover admin username
     resp = await client.get(f"{JELLYFIN_URL}/Startup/User")
     if resp.is_success:
         admin_user = resp.json().get("Name", ADMIN_USER)
@@ -85,31 +108,27 @@ async def complete_wizard(client: httpx.AsyncClient) -> str:
             "PreferredMetadataLanguage": "en",
         },
     )
-
     await client.post(
         f"{JELLYFIN_URL}/Startup/User",
         json={"Name": admin_user, "Password": ADMIN_PASS},
     )
-
     await client.post(
         f"{JELLYFIN_URL}/Startup/RemoteAccess",
         json={"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False},
     )
-
     resp = await client.post(f"{JELLYFIN_URL}/Startup/Complete")
     resp.raise_for_status()
     log.info("Wizard complete")
     return admin_user
 
 
-# ---------------------------------------------------------------------------
-# Phase 2: Authenticate as admin
-# ---------------------------------------------------------------------------
-async def authenticate_admin(client: httpx.AsyncClient, admin_user: str) -> str:
-    """Authenticate as admin, setting password if needed. Returns token."""
+async def _authenticate_admin(
+    client: httpx.AsyncClient, admin_user: str
+) -> tuple[str, str]:
+    """Authenticate as admin. Returns (token, user_id)."""
     credentials = [
         (admin_user, ADMIN_PASS),
-        (admin_user, ""),  # fresh instance may have empty password
+        (admin_user, ""),
     ]
 
     for attempt in range(10):
@@ -124,7 +143,6 @@ async def authenticate_admin(client: httpx.AsyncClient, admin_user: str) -> str:
                 token: str = data["AccessToken"]
                 user_id: str = data["User"]["Id"]
 
-                # Set password if it was empty
                 if password != ADMIN_PASS:
                     await client.post(
                         f"{JELLYFIN_URL}/Users/{user_id}/Password",
@@ -133,8 +151,8 @@ async def authenticate_admin(client: httpx.AsyncClient, admin_user: str) -> str:
                     )
                     log.info("Admin password set")
 
-                log.info("Authenticated as '%s'", username)
-                return token
+                log.info("Authenticated as '%s' (id=%s)", username, user_id)
+                return token, user_id
 
         if attempt < 9:
             await asyncio.sleep(3)
@@ -143,10 +161,7 @@ async def authenticate_admin(client: httpx.AsyncClient, admin_user: str) -> str:
     sys.exit(1)
 
 
-# ---------------------------------------------------------------------------
-# Phase 3: Create test users
-# ---------------------------------------------------------------------------
-async def create_test_users(client: httpx.AsyncClient, token: str) -> None:
+async def _create_test_users(client: httpx.AsyncClient, token: str) -> None:
     """Create test users if they don't exist."""
     headers = _auth_headers(token)
     resp = await client.get(f"{JELLYFIN_URL}/Users", headers=headers)
@@ -166,11 +181,40 @@ async def create_test_users(client: httpx.AsyncClient, token: str) -> None:
         log.info("Created user '%s'", username)
 
 
-# ---------------------------------------------------------------------------
-# Phase 4: Add libraries and scan
-# ---------------------------------------------------------------------------
-async def setup_libraries(client: httpx.AsyncClient, token: str) -> None:
-    """Add Movies and Shows libraries, trigger scan, poll for completion."""
+async def _create_api_key(client: httpx.AsyncClient, token: str) -> str:
+    """Create a Jellyfin API key for the backend sync engine."""
+    headers = _auth_headers(token)
+
+    # Check if key already exists
+    resp = await client.get(f"{JELLYFIN_URL}/Auth/Keys", headers=headers)
+    resp.raise_for_status()
+    for key in resp.json().get("Items", []):
+        if key.get("AppName") == "localdev-sync":
+            log.info("API key 'localdev-sync' already exists")
+            return key["AccessToken"]
+
+    # Create new key
+    resp = await client.post(
+        f"{JELLYFIN_URL}/Auth/Keys",
+        params={"App": "localdev-sync"},
+        headers=headers,
+    )
+    resp.raise_for_status()
+
+    # Fetch back to get the generated key
+    resp = await client.get(f"{JELLYFIN_URL}/Auth/Keys", headers=headers)
+    resp.raise_for_status()
+    for key in resp.json().get("Items", []):
+        if key.get("AppName") == "localdev-sync":
+            log.info("Created API key 'localdev-sync'")
+            return key["AccessToken"]
+
+    log.error("Failed to retrieve created API key")
+    sys.exit(1)
+
+
+async def _setup_libraries(client: httpx.AsyncClient, token: str) -> None:
+    """Add libraries, trigger scan, poll for completion."""
     headers = _auth_headers(token)
 
     resp = await client.get(f"{JELLYFIN_URL}/Library/VirtualFolders", headers=headers)
@@ -203,7 +247,6 @@ async def setup_libraries(client: httpx.AsyncClient, token: str) -> None:
         )
         log.info("Added Shows library (status %d)", resp.status_code)
 
-    # Trigger library scan
     resp = await client.post(f"{JELLYFIN_URL}/Library/Refresh", headers=headers)
     resp.raise_for_status()
     log.info("Library scan triggered, polling for %d items...", EXPECTED_TOTAL)
@@ -213,7 +256,6 @@ async def setup_libraries(client: httpx.AsyncClient, token: str) -> None:
     while elapsed < POLL_TIMEOUT:
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
-
         resp = await client.get(
             f"{JELLYFIN_URL}/Items",
             params={"Recursive": "true", "IncludeItemTypes": "Movie,Series"},
@@ -235,86 +277,91 @@ async def setup_libraries(client: httpx.AsyncClient, token: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 5: Trigger backend sync via authenticated session
+# Phase 2: Sync — trigger backend library sync
 # ---------------------------------------------------------------------------
-async def trigger_backend_sync(client: httpx.AsyncClient) -> None:
-    """Log in to the backend as admin and trigger library sync."""
-    # Log in to the backend (which authenticates against Jellyfin)
-    log.info("Logging in to backend as '%s'...", ADMIN_USER)
-    resp = await client.post(
-        f"{BACKEND_URL}/api/auth/login",
-        json={"username": ADMIN_USER, "password": ADMIN_PASS},
-    )
-    if not resp.is_success:
-        log.error(
-            "Backend login failed (status %d): %s",
-            resp.status_code,
-            resp.text[:200],
+async def phase_sync() -> None:
+    """Log in to the backend and trigger library sync."""
+    log.info("=== Phase 2: Backend sync ===")
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        # Log in as admin
+        log.info("Logging in to backend as '%s'...", ADMIN_USER)
+        resp = await client.post(
+            f"{BACKEND_URL}/api/auth/login",
+            json={"username": ADMIN_USER, "password": ADMIN_PASS},
         )
-        sys.exit(1)
+        if not resp.is_success:
+            log.error(
+                "Backend login failed (status %d): %s",
+                resp.status_code,
+                resp.text[:200],
+            )
+            sys.exit(1)
 
-    # Extract session cookie for subsequent requests
-    cookies = resp.cookies
-    log.info("Backend login successful, triggering sync...")
+        cookies = resp.cookies
+        csrf_token = cookies.get("csrf_token", "")
+        csrf_headers = {"X-CSRF-Token": csrf_token} if csrf_token else {}
+        log.info("Backend login successful, triggering sync...")
 
-    resp = await client.post(
-        f"{BACKEND_URL}/api/admin/sync",
-        cookies=cookies,
-    )
-    if resp.status_code == 202:
-        log.info("Sync triggered (202 Accepted)")
-    elif resp.status_code == 409:
-        log.info("Sync already running (409 Conflict) — OK")
-    else:
-        log.warning(
-            "Sync trigger returned %d: %s",
-            resp.status_code,
-            resp.text[:200],
-        )
-
-    # Poll sync status until complete
-    log.info("Waiting for sync to complete...")
-    for _ in range(60):
-        await asyncio.sleep(5)
-        resp = await client.get(
-            f"{BACKEND_URL}/api/admin/sync/status",
+        # Trigger sync
+        resp = await client.post(
+            f"{BACKEND_URL}/api/admin/sync",
             cookies=cookies,
+            headers=csrf_headers,
         )
-        if resp.is_success:
-            data = resp.json()
-            status = data.get("status", "unknown")
-            if status == "idle":
-                item_count = data.get("items_synced", 0)
-                log.info("Sync complete: %d items synced", item_count)
-                return
-            log.info("Sync status: %s", status)
+        if resp.status_code == 202:
+            log.info("Sync triggered (202 Accepted)")
+        elif resp.status_code == 409:
+            log.info("Sync already running (409 Conflict) — OK")
+        else:
+            log.warning(
+                "Sync trigger returned %d: %s",
+                resp.status_code,
+                resp.text[:200],
+            )
+            # Non-fatal — sync may not be configured yet on first run
+            # The backend will sync when it has the right env vars
 
-    log.warning("Sync did not complete within timeout — continuing anyway")
+        # Poll sync status
+        log.info("Waiting for sync to complete...")
+        for _ in range(60):
+            await asyncio.sleep(5)
+            resp = await client.get(
+                f"{BACKEND_URL}/api/admin/sync/status",
+                cookies=cookies,
+                headers=csrf_headers,
+            )
+            if resp.is_success:
+                data = resp.json()
+                status = data.get("status", "unknown")
+                if status == "idle":
+                    item_count = data.get("items_synced", 0)
+                    log.info("Sync complete: %d items synced", item_count)
+                    break
+                log.info("Sync status: %s", status)
+        else:
+            log.warning("Sync did not complete within timeout — continuing")
+
+    log.info("=== Phase 2 complete ===")
+    log.info("Open http://localhost:3000 and log in as:")
+    log.info("  Username: test-alice")
+    log.info("  Password: test-alice-password")
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 async def main() -> None:
-    log.info("=== Dev provisioner starting ===")
-    log.info("Jellyfin: %s", JELLYFIN_URL)
-    log.info("Backend:  %s", BACKEND_URL)
+    phase = "all"
+    if "--phase" in sys.argv:
+        idx = sys.argv.index("--phase")
+        if idx + 1 < len(sys.argv):
+            phase = sys.argv[idx + 1]
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Phase 1-4: Jellyfin provisioning
-        admin_user = await complete_wizard(client)
-        token = await authenticate_admin(client, admin_user)
-        await create_test_users(client, token)
-        await setup_libraries(client, token)
-
-    # Phase 5: Backend sync (separate client for cookie handling)
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        await trigger_backend_sync(client)
-
-    log.info("=== Dev provisioner complete ===")
-    log.info("Open http://localhost:3000 and log in as:")
-    log.info("  Username: test-alice")
-    log.info("  Password: test-alice-password")
+    if phase in ("all", "init"):
+        await phase_init()
+    if phase in ("all", "sync"):
+        await phase_sync()
 
 
 if __name__ == "__main__":
