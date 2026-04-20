@@ -57,7 +57,9 @@ services:
     restart: unless-stopped
 
   # Override backend with dev defaults — no .env needed
+  # user: root so named volume at /app/data is writable (dev-only)
   backend:
+    user: "0"
     environment:
       - JELLYFIN_URL=http://jellyfin:8096
       - SESSION_SECRET=localdev-32char-not-for-production
