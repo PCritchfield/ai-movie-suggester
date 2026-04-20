@@ -1,4 +1,4 @@
-import { getCsrfToken, getBaseUrl, parseResponse } from "./shared";
+import { getCsrfToken, getStreamBaseUrl, parseResponse } from "./shared";
 import { networkFetch } from "./client";
 import type { SSEEvent } from "./types";
 
@@ -80,7 +80,7 @@ export async function sendChatMessage(
     headers["X-CSRF-Token"] = csrf;
   }
 
-  const response = await networkFetch(`${getBaseUrl()}/api/chat`, {
+  const response = await networkFetch(`${getStreamBaseUrl()}/api/chat`, {
     method: "POST",
     credentials: "include",
     headers,

@@ -108,6 +108,8 @@ services:
 
   # Override frontend to auto-install deps on first run
   # The named node_modules volume starts empty; npm ci populates it
+  # NEXT_PUBLIC_BACKEND_URL tells the client to stream SSE directly from
+  # the backend, bypassing Next.js rewrite buffering.
   frontend:
     command:
       - sh
@@ -115,6 +117,8 @@ services:
       - |
         [ -d node_modules/next ] || npm ci
         exec npm run dev
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
     depends_on:
       backend:
         condition: service_healthy
