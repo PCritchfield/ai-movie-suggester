@@ -105,7 +105,15 @@ services:
       ollama:
         condition: service_healthy
 
+  # Override frontend to auto-install deps on first run
+  # The named node_modules volume starts empty; npm ci populates it
   frontend:
+    command:
+      - sh
+      - -c
+      - |
+        [ -d node_modules/next ] || npm ci
+        exec npm run dev
     depends_on:
       backend:
         condition: service_healthy
