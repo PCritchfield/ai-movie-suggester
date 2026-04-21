@@ -4,15 +4,26 @@ Wizard completion and auth follow the pattern from Jellyfin's own
 integration tests (tests/Jellyfin.Server.Integration.Tests/AuthHelper.cs).
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 import warnings
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import httpx
 import pytest
 import pytest_asyncio
+
+from app.jellyfin.client import JellyfinClient
+from app.library.store import LibraryStore
+
+if TYPE_CHECKING:
+    import pathlib
+    from collections.abc import AsyncGenerator
+
+    from app.jellyfin.models import AuthResult
 
 _logger = logging.getLogger(__name__)
 
@@ -350,3 +361,38 @@ async def populated_library(
             f"within {_SCAN_POLL_TIMEOUT}s (got {total_count})"
         )
         raise TimeoutError(msg)
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures — used across integration test modules
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def jf_client(
+    jellyfin: JellyfinInstance,
+) -> AsyncGenerator[JellyfinClient, None]:
+    """JellyfinClient pointed at the test instance."""
+    async with httpx.AsyncClient(timeout=30.0) as http:
+        yield JellyfinClient(base_url=jellyfin.url, http_client=http)
+
+
+@pytest_asyncio.fixture
+async def library_store(
+    tmp_path: pathlib.Path,
+) -> AsyncGenerator[LibraryStore, None]:
+    """Temporary LibraryStore for integration tests."""
+    db_path = tmp_path / "test_library.db"
+    store = LibraryStore(str(db_path))
+    await store.init()
+    yield store
+    await store.close()
+
+
+@pytest_asyncio.fixture
+async def alice_auth(
+    jf_client: JellyfinClient,
+    test_users: dict[str, str],  # noqa: ARG001 — ensures users exist
+) -> AuthResult:
+    """Authenticate as test-alice. Returns AuthResult."""
+    return await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)

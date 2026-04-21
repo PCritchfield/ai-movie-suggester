@@ -15,40 +15,16 @@ from pydantic import SecretStr
 
 from app.config import Settings
 from app.jellyfin.client import JellyfinClient
-from app.library.store import LibraryStore
 from app.sync.engine import SyncEngine
 
 if TYPE_CHECKING:
-    import pathlib
-    from collections.abc import AsyncGenerator
-
+    from app.library.store import LibraryStore
     from tests.integration.conftest import JellyfinInstance
 
 from tests.integration.conftest import (
     EXPECTED_TOTAL,
     TEST_ADMIN_PASS,
 )
-
-
-@pytest_asyncio.fixture
-async def jf_client(
-    jellyfin: JellyfinInstance,
-) -> AsyncGenerator[JellyfinClient, None]:
-    """JellyfinClient pointed at the test instance."""
-    async with httpx.AsyncClient(timeout=30.0) as http:
-        yield JellyfinClient(base_url=jellyfin.url, http_client=http)
-
-
-@pytest_asyncio.fixture
-async def library_store(
-    tmp_path: pathlib.Path,
-) -> AsyncGenerator[LibraryStore, None]:
-    """Temporary LibraryStore for sync tests."""
-    db_path = tmp_path / "sync_test_library.db"
-    store = LibraryStore(str(db_path))
-    await store.init()
-    yield store
-    await store.close()
 
 
 def _make_sync_settings(

@@ -7,6 +7,26 @@ export function getBaseUrl(): string {
   return "";
 }
 
+/**
+ * Backend URL for client-side streaming (SSE) requests.
+ *
+ * Next.js rewrites buffer the entire response before returning it,
+ * which breaks SSE streaming. For endpoints that stream (e.g. /api/chat),
+ * the client must fetch directly from the backend, bypassing the rewrite.
+ *
+ * Falls back to same-origin rewrite ("") if not configured — streaming
+ * will be buffered but still functional (just not incremental).
+ */
+export function getStreamBaseUrl(): string {
+  // Server-side: use the internal backend URL (same as getBaseUrl)
+  if (typeof window === "undefined") {
+    return getBaseUrl();
+  }
+  // Client-side: use the public backend URL for direct SSE streaming,
+  // or fall back to same-origin rewrite ("") if not configured
+  return process.env.NEXT_PUBLIC_BACKEND_URL || "";
+}
+
 export async function parseResponse<T>(response: Response): Promise<T> {
   let body: unknown;
   try {
