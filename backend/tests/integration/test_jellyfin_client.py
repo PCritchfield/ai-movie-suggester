@@ -8,31 +8,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import httpx
 import pytest
-import pytest_asyncio
 
-from app.jellyfin.client import JellyfinClient
 from app.jellyfin.errors import JellyfinAuthError
 from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo, WatchHistoryEntry
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
-    from tests.integration.conftest import JellyfinInstance
-
-# Re-use credentials from conftest
 from tests.integration.conftest import TEST_USER_ALICE, TEST_USER_ALICE_PASS
 
-
-@pytest_asyncio.fixture
-async def jf_client(
-    jellyfin: JellyfinInstance,
-) -> AsyncGenerator[JellyfinClient, None]:
-    """JellyfinClient pointed at the test instance."""
-    # TODO(#29): Read timeout from Settings.jellyfin_timeout when wired
-    async with httpx.AsyncClient(timeout=10.0) as http:
-        yield JellyfinClient(base_url=jellyfin.url, http_client=http)
+if TYPE_CHECKING:
+    from app.jellyfin.client import JellyfinClient
 
 
 @pytest.mark.integration
@@ -61,14 +44,13 @@ async def test_authenticate_invalid_credentials(
 @pytest.mark.integration
 async def test_get_user_with_valid_token(
     jf_client: JellyfinClient,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """get_user() returns correct info for an authenticated user."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
-    user = await jf_client.get_user(auth.access_token)
+    user = await jf_client.get_user(alice_auth.access_token)
     assert isinstance(user, UserInfo)
     assert user.name == TEST_USER_ALICE
-    assert user.id == test_users[TEST_USER_ALICE]
+    assert user.id == alice_auth.user_id
 
 
 @pytest.mark.integration
@@ -84,13 +66,12 @@ async def test_get_user_with_invalid_token(
 @pytest.mark.integration
 async def test_get_items_returns_paginated_result(
     jf_client: JellyfinClient,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """get_items() returns a PaginatedItems even if library is empty."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
     result = await jf_client.get_items(
-        auth.access_token,
-        auth.user_id,
+        alice_auth.access_token,
+        alice_auth.user_id,
         item_types=["Movie"],
     )
     assert isinstance(result, PaginatedItems)
@@ -102,13 +83,12 @@ async def test_get_items_returns_paginated_result(
 @pytest.mark.integration
 async def test_get_items_pagination_params(
     jf_client: JellyfinClient,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """Pagination parameters are respected (no crash, correct start_index)."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
     result = await jf_client.get_items(
-        auth.access_token,
-        auth.user_id,
+        alice_auth.access_token,
+        alice_auth.user_id,
         start_index=0,
         limit=5,
     )
@@ -119,11 +99,12 @@ async def test_get_items_pagination_params(
 @pytest.mark.integration
 async def test_get_watched_items_returns_list(
     jf_client: JellyfinClient,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """get_watched_items returns list[WatchHistoryEntry] (empty for test instance)."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
-    result = await jf_client.get_watched_items(auth.access_token, auth.user_id)
+    result = await jf_client.get_watched_items(
+        alice_auth.access_token, alice_auth.user_id
+    )
     assert isinstance(result, list)
     for entry in result:
         assert isinstance(entry, WatchHistoryEntry)
@@ -132,11 +113,12 @@ async def test_get_watched_items_returns_list(
 @pytest.mark.integration
 async def test_get_favorite_items_returns_list(
     jf_client: JellyfinClient,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """get_favorite_items returns list[WatchHistoryEntry] (empty for test instance)."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
-    result = await jf_client.get_favorite_items(auth.access_token, auth.user_id)
+    result = await jf_client.get_favorite_items(
+        alice_auth.access_token, alice_auth.user_id
+    )
     assert isinstance(result, list)
     for entry in result:
         assert isinstance(entry, WatchHistoryEntry)
