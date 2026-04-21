@@ -4,13 +4,28 @@ Wizard completion and auth follow the pattern from Jellyfin's own
 integration tests (tests/Jellyfin.Server.Integration.Tests/AuthHelper.cs).
 """
 
+from __future__ import annotations
+
 import asyncio
+import logging
 import os
 import warnings
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import httpx
+import pytest
 import pytest_asyncio
+
+from app.jellyfin.client import JellyfinClient
+from app.library.store import LibraryStore
+
+if TYPE_CHECKING:
+    import pathlib
+    from collections.abc import AsyncGenerator
+
+    from app.jellyfin.models import AuthResult
+
+_logger = logging.getLogger(__name__)
 
 
 class JellyfinInstance(NamedTuple):
@@ -234,3 +249,150 @@ async def test_users(
             created[username] = resp.json()["Id"]
 
     return created
+
+
+# Expected fixture counts — update if fixtures are added/removed
+EXPECTED_MOVIES = 25
+EXPECTED_SHOWS = 10
+EXPECTED_TOTAL = EXPECTED_MOVIES + EXPECTED_SHOWS
+
+# Scan polling config
+_SCAN_POLL_INTERVAL = 2
+_SCAN_POLL_TIMEOUT = 120
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped fixture — adds libraries and waits for scan completion
+# ---------------------------------------------------------------------------
+@pytest_asyncio.fixture(scope="session")
+async def populated_library(
+    jellyfin: JellyfinInstance,
+    admin_auth_token: str,
+    test_users: dict[str, str],  # noqa: ARG001 — forces user provisioning before library setup
+) -> int:
+    """Add Movies and Shows libraries from fixture media, trigger scan, poll.
+
+    Returns the total item count discovered after scan completion.
+    Idempotent — skips library creation if libraries already exist.
+    """
+    base = jellyfin.url
+    headers = _auth_headers(admin_auth_token)
+
+    async with httpx.AsyncClient(timeout=_SCAN_POLL_TIMEOUT + 30) as client:
+        # Check existing libraries
+        resp = await client.get(f"{base}/Library/VirtualFolders", headers=headers)
+        resp.raise_for_status()
+        existing = {lib["Name"] for lib in resp.json()}
+
+        # Add Movies library if missing
+        # Note: paths must be a query parameter, not body — Jellyfin
+        # ignores PathInfos in the JSON body for this endpoint.
+        if "Movies" not in existing:
+            resp = await client.post(
+                f"{base}/Library/VirtualFolders",
+                params={
+                    "name": "Movies",
+                    "collectionType": "movies",
+                    "refreshLibrary": "false",
+                    "paths": "/media/movies",
+                },
+                headers=headers,
+            )
+            if resp.status_code == 400:
+                pytest.skip(
+                    "Jellyfin cannot access /media/movies — "
+                    "fixture media not mounted (CI service containers "
+                    "don't support bind mounts). Run locally with "
+                    "make test-integration-full."
+                )
+            if resp.status_code not in (200, 204):
+                _logger.warning(
+                    "Movies library creation returned %d: %s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+
+        # Add Shows library if missing
+        if "Shows" not in existing:
+            resp = await client.post(
+                f"{base}/Library/VirtualFolders",
+                params={
+                    "name": "Shows",
+                    "collectionType": "tvshows",
+                    "refreshLibrary": "false",
+                    "paths": "/media/shows",
+                },
+                headers=headers,
+            )
+            if resp.status_code not in (200, 204):
+                _logger.warning(
+                    "Shows library creation returned %d: %s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+
+        # Trigger library scan
+        resp = await client.post(f"{base}/Library/Refresh", headers=headers)
+        resp.raise_for_status()
+
+        # Poll for scan completion
+        elapsed = 0.0
+        total_count = 0
+        while elapsed < _SCAN_POLL_TIMEOUT:
+            await asyncio.sleep(_SCAN_POLL_INTERVAL)
+            elapsed += _SCAN_POLL_INTERVAL
+
+            resp = await client.get(
+                f"{base}/Items",
+                params={
+                    "Recursive": "true",
+                    "IncludeItemTypes": "Movie,Series",
+                },
+                headers=headers,
+            )
+            if resp.is_success:
+                total_count = resp.json().get("TotalRecordCount", 0)
+                if total_count >= EXPECTED_TOTAL:
+                    _logger.info("library scan complete: %d items found", total_count)
+                    return total_count
+
+        msg = (
+            f"Library scan did not reach {EXPECTED_TOTAL} items "
+            f"within {_SCAN_POLL_TIMEOUT}s (got {total_count})"
+        )
+        raise TimeoutError(msg)
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures — used across integration test modules
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def jf_client(
+    jellyfin: JellyfinInstance,
+) -> AsyncGenerator[JellyfinClient, None]:
+    """JellyfinClient pointed at the test instance."""
+    async with httpx.AsyncClient(timeout=30.0) as http:
+        yield JellyfinClient(base_url=jellyfin.url, http_client=http)
+
+
+@pytest_asyncio.fixture
+async def library_store(
+    tmp_path: pathlib.Path,
+) -> AsyncGenerator[LibraryStore, None]:
+    """Temporary LibraryStore for integration tests."""
+    db_path = tmp_path / "test_library.db"
+    store = LibraryStore(str(db_path))
+    await store.init()
+    yield store
+    await store.close()
+
+
+@pytest_asyncio.fixture
+async def alice_auth(
+    jf_client: JellyfinClient,
+    test_users: dict[str, str],  # noqa: ARG001 — ensures users exist
+) -> AuthResult:
+    """Authenticate as test-alice. Returns AuthResult."""
+    return await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)

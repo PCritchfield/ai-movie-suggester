@@ -10,6 +10,7 @@ vi.mock("@/lib/api/shared", async (importOriginal) => {
     ...actual,
     getCsrfToken: () => "test-csrf-token",
     getBaseUrl: () => "",
+    getStreamBaseUrl: () => "",
   };
 });
 

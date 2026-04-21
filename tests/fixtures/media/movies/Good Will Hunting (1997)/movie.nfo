@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Good Will Hunting</title>
+  <year>1997</year>
+  <plot>A self-taught mathematical genius working as a janitor at MIT is discovered by a professor but resists every attempt to unlock his potential, hiding behind a tough South Boston exterior. Only a grieving therapist manages to break through his defenses, forcing him to confront the abuse and fear that keep him from the life he deserves.</plot>
+  <genre>Drama</genre>
+  <director>Gus Van Sant</director>
+  <actor>
+    <name>Matt Damon</name>
+    <role>Will Hunting</role>
+  </actor>
+  <actor>
+    <name>Robin Williams</name>
+    <role>Sean Maguire</role>
+  </actor>
+  <actor>
+    <name>Ben Affleck</name>
+    <role>Chuckie Sullivan</role>
+  </actor>
+  <studio>Miramax Films</studio>
+  <rating>8.3</rating>
+  <runtime>126</runtime>
+</movie>

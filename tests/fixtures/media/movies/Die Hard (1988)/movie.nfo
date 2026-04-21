@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Die Hard</title>
+  <year>1988</year>
+  <plot>An off-duty New York cop visits his estranged wife at her company's Los Angeles Christmas party, only for the building to be seized by sophisticated European thieves posing as terrorists. Barefoot, outgunned, and wisecracking, he wages a one-man guerrilla war through elevator shafts and ventilation ducts in the film that redefined the action genre.</plot>
+  <genre>Action</genre>
+  <director>John McTiernan</director>
+  <actor>
+    <name>Bruce Willis</name>
+    <role>John McClane</role>
+  </actor>
+  <actor>
+    <name>Alan Rickman</name>
+    <role>Hans Gruber</role>
+  </actor>
+  <actor>
+    <name>Bonnie Bedelia</name>
+    <role>Holly Gennaro McClane</role>
+  </actor>
+  <studio>20th Century Fox</studio>
+  <rating>8.2</rating>
+  <runtime>132</runtime>
+</movie>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Shawshank Redemption</title>
+  <year>1994</year>
+  <plot>A mild-mannered banker is sentenced to life in a brutal Maine prison for a murder he did not commit, where over two decades he quietly transforms the institution and forges an unlikely friendship with a fellow lifer. A story of patience, dignity, and hope that culminates in one of cinema's most satisfying escapes.</plot>
+  <genre>Drama</genre>
+  <director>Frank Darabont</director>
+  <actor>
+    <name>Tim Robbins</name>
+    <role>Andy Dufresne</role>
+  </actor>
+  <actor>
+    <name>Morgan Freeman</name>
+    <role>Ellis "Red" Redding</role>
+  </actor>
+  <actor>
+    <name>Bob Gunton</name>
+    <role>Warden Norton</role>
+  </actor>
+  <studio>Columbia Pictures</studio>
+  <rating>9.3</rating>
+  <runtime>142</runtime>
+</movie>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Get Out</title>
+  <year>2017</year>
+  <plot>A young Black photographer visits his white girlfriend's wealthy family estate for the weekend, where unsettling behavior from the servants and overly enthusiastic guests masks a horrifying secret. A razor-sharp social thriller that weaponizes liberal racism into genuine body horror, blending satire and scares with surgical precision.</plot>
+  <genre>Horror</genre>
+  <genre>Thriller</genre>
+  <director>Jordan Peele</director>
+  <actor>
+    <name>Daniel Kaluuya</name>
+    <role>Chris Washington</role>
+  </actor>
+  <actor>
+    <name>Allison Williams</name>
+    <role>Rose Armitage</role>
+  </actor>
+  <actor>
+    <name>Catherine Keener</name>
+    <role>Missy Armitage</role>
+  </actor>
+  <studio>Universal Pictures</studio>
+  <rating>7.7</rating>
+  <runtime>104</runtime>
+</movie>

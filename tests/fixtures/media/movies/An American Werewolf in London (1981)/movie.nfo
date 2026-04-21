@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>An American Werewolf in London</title>
+  <year>1981</year>
+  <plot>Two American backpackers are attacked by a werewolf on the English moors, and the survivor wakes in a London hospital haunted by his decomposing friend's ghost warning him of the next full moon. Groundbreaking practical effects bring the most visceral werewolf transformation ever filmed to a story that swings wildly between genuine terror and dark humor.</plot>
+  <genre>Horror</genre>
+  <genre>Comedy</genre>
+  <director>John Landis</director>
+  <actor>
+    <name>David Naughton</name>
+    <role>David Kessler</role>
+  </actor>
+  <actor>
+    <name>Jenny Agutter</name>
+    <role>Nurse Alex Price</role>
+  </actor>
+  <actor>
+    <name>Griffin Dunne</name>
+    <role>Jack Goodman</role>
+  </actor>
+  <studio>Universal Pictures</studio>
+  <rating>7.6</rating>
+  <runtime>97</runtime>
+</movie>

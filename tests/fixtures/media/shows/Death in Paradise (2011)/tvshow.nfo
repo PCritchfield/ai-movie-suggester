@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Death in Paradise</title>
+  <year>2011</year>
+  <plot>A British detective is reluctantly posted to the fictional Caribbean island of Saint Marie, where he must solve elaborate locked-room murders while struggling to adapt to island life. The show blends classic whodunit mysteries with tropical sunshine and fish-out-of-water comedy.</plot>
+  <genre>Mystery</genre>
+  <genre>Comedy</genre>
+  <genre>Crime</genre>
+  <actor>
+    <name>Ben Miller</name>
+    <role>DI Richard Poole</role>
+  </actor>
+  <actor>
+    <name>Sara Martins</name>
+    <role>DS Camille Bordey</role>
+  </actor>
+  <actor>
+    <name>Danny John-Jules</name>
+    <role>Officer Dwayne Myers</role>
+  </actor>
+  <studio>BBC One</studio>
+  <rating>7.9</rating>
+  <status>Ended</status>
+</tvshow>

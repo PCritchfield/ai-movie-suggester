@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Battlestar Galactica</title>
+  <year>2004</year>
+  <plot>After a devastating nuclear attack by the Cylons destroys the Twelve Colonies, the last surviving warship leads a ragtag fleet of civilian ships on a desperate search for the legendary planet Earth. The survivors must contend with dwindling resources, political conflict, and Cylon infiltrators hidden among them.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Edward James Olmos</name>
+    <role>Admiral William Adama</role>
+  </actor>
+  <actor>
+    <name>Mary McDonnell</name>
+    <role>President Laura Roslin</role>
+  </actor>
+  <actor>
+    <name>Katee Sackhoff</name>
+    <role>Kara "Starbuck" Thrace</role>
+  </actor>
+  <actor>
+    <name>Jamie Bamber</name>
+    <role>Lee "Apollo" Adama</role>
+  </actor>
+  <studio>Sci Fi Channel</studio>
+  <rating>8.7</rating>
+  <status>Ended</status>
+</tvshow>

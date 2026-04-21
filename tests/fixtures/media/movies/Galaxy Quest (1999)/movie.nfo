@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Galaxy Quest</title>
+  <year>1999</year>
+  <plot>The washed-up cast of a cheesy 1980s sci-fi TV show are abducted by real aliens who mistook their episodes for historical documents. Now they must fumble their way through an actual interstellar war, discovering that the roles they played on television might be the only thing that can save an alien civilization.</plot>
+  <genre>Comedy</genre>
+  <genre>Sci-Fi</genre>
+  <director>Dean Parisot</director>
+  <actor>
+    <name>Tim Allen</name>
+    <role>Jason Nesmith</role>
+  </actor>
+  <actor>
+    <name>Sigourney Weaver</name>
+    <role>Gwen DeMarco</role>
+  </actor>
+  <actor>
+    <name>Alan Rickman</name>
+    <role>Alexander Dane</role>
+  </actor>
+  <studio>DreamWorks Pictures</studio>
+  <rating>7.4</rating>
+  <runtime>102</runtime>
+</movie>
