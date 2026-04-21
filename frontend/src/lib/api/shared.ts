@@ -18,9 +18,12 @@ export function getBaseUrl(): string {
  * will be buffered but still functional (just not incremental).
  */
 export function getStreamBaseUrl(): string {
+  // Server-side: use the internal backend URL (same as getBaseUrl)
   if (typeof window === "undefined") {
-    return process.env.BACKEND_URL || "http://localhost:8000";
+    return getBaseUrl();
   }
+  // Client-side: use the public backend URL for direct SSE streaming,
+  // or fall back to same-origin rewrite ("") if not configured
   return process.env.NEXT_PUBLIC_BACKEND_URL || "";
 }
 

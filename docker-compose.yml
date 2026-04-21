@@ -32,6 +32,10 @@ services:
       start_period: 15s
     restart: unless-stopped
 
+  # NEXT_PUBLIC_BACKEND_URL is intentionally not set here. Without it,
+  # the frontend proxies SSE through the Next.js rewrite (buffered but
+  # functional). Set it in docker-compose.localdev.yml for dev streaming
+  # or in .env for production if the backend is directly reachable.
   frontend:
     build:
       context: ./frontend
