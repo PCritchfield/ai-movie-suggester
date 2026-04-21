@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from app.library.hashing import compute_content_hash
-from app.sync.engine import _to_row
+from app.sync.engine import to_library_row
 
 if TYPE_CHECKING:
     from app.jellyfin.client import JellyfinClient
@@ -30,7 +30,7 @@ def _to_library_row(item: LibraryItem) -> LibraryItemRow:
     """Convert a LibraryItem to a LibraryItemRow using the sync engine's converter."""
     # Build a temporary row to compute the content hash, then create
     # the real row with the correct hash — same as SyncEngine.run_sync().
-    temp = _to_row(item, "placeholder")
+    temp = to_library_row(item, "placeholder")
     return dataclasses.replace(temp, content_hash=compute_content_hash(temp))
 
 
@@ -40,11 +40,11 @@ async def test_get_all_items_returns_pages(
     alice_auth: AuthResult,
 ) -> None:
     """get_all_items returns pages — may be 0 items on fresh Jellyfin."""
-    auth = alice_auth
+
     pages: list[PaginatedItems] = []
     async for page in jf_client.get_all_items(
-        auth.access_token,
-        auth.user_id,
+        alice_auth.access_token,
+        alice_auth.user_id,
         item_types=["Movie"],
     ):
         pages.append(page)
@@ -61,13 +61,13 @@ async def test_fetch_and_store_cycle(
     library_store: LibraryStore,
 ) -> None:
     """Fetch items via get_all_items, store in LibraryStore, verify count."""
-    auth = alice_auth
+
     total_items = 0
     all_rows: list[LibraryItemRow] = []
 
     async for page in jf_client.get_all_items(
-        auth.access_token,
-        auth.user_id,
+        alice_auth.access_token,
+        alice_auth.user_id,
         item_types=["Movie"],
     ):
         total_items = page.total_count
@@ -89,10 +89,10 @@ async def test_extended_fields_no_validation_errors(
     alice_auth: AuthResult,
 ) -> None:
     """Extended fields parse without Pydantic validation errors."""
-    auth = alice_auth
+
     async for page in jf_client.get_all_items(
-        auth.access_token,
-        auth.user_id,
+        alice_auth.access_token,
+        alice_auth.user_id,
         item_types=["Movie"],
     ):
         for item in page.items:
@@ -118,10 +118,10 @@ async def test_populated_library_has_movies(
     alice_auth: AuthResult,
 ) -> None:
     """Populated Jellyfin has at least the expected number of movies."""
-    auth = alice_auth
+
     total = 0
     async for page in jf_client.get_all_items(
-        auth.access_token, auth.user_id, item_types=["Movie"]
+        alice_auth.access_token, alice_auth.user_id, item_types=["Movie"]
     ):
         total = page.total_count
     assert total >= EXPECTED_MOVIES
@@ -134,10 +134,10 @@ async def test_populated_library_has_shows(
     alice_auth: AuthResult,
 ) -> None:
     """Populated Jellyfin has at least the expected number of shows."""
-    auth = alice_auth
+
     total = 0
     async for page in jf_client.get_all_items(
-        auth.access_token, auth.user_id, item_types=["Series"]
+        alice_auth.access_token, alice_auth.user_id, item_types=["Series"]
     ):
         total = page.total_count
     assert total >= EXPECTED_SHOWS
@@ -150,9 +150,9 @@ async def test_movie_metadata_from_nfo(
     alice_auth: AuthResult,
 ) -> None:
     """At least one movie has overview, genres, and year from NFO."""
-    auth = alice_auth
+
     async for page in jf_client.get_all_items(
-        auth.access_token, auth.user_id, item_types=["Movie"]
+        alice_auth.access_token, alice_auth.user_id, item_types=["Movie"]
     ):
         for item in page.items:
             if item.overview and item.genres and item.production_year:
@@ -167,9 +167,9 @@ async def test_show_metadata_from_nfo(
     alice_auth: AuthResult,
 ) -> None:
     """At least one show has overview and genres from NFO."""
-    auth = alice_auth
+
     async for page in jf_client.get_all_items(
-        auth.access_token, auth.user_id, item_types=["Series"]
+        alice_auth.access_token, alice_auth.user_id, item_types=["Series"]
     ):
         for item in page.items:
             if item.overview and item.genres:

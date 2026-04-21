@@ -65,6 +65,25 @@ def _assert_required_fields(root: ET.Element, fields: list[str], filename: str) 
         assert elem.text and elem.text.strip(), f"Empty <{field}> in {filename}"
 
 
+def _assert_actors(root: ET.Element, min_count: int, filename: str) -> None:
+    """Assert at least min_count actors with <name> elements."""
+    actors = root.findall("actor")
+    assert len(actors) >= min_count, (
+        f"Need >= {min_count} <actor> entries in {filename}, got {len(actors)}"
+    )
+    for actor in actors:
+        name = actor.find("name")
+        assert name is not None and name.text, f"Actor missing <name> in {filename}"
+
+
+def _assert_min_plot_length(root: ET.Element, filename: str) -> None:
+    """Assert plot text meets minimum length."""
+    plot = root.findtext("plot", default="")
+    assert len(plot) >= _MIN_PLOT_LENGTH, (
+        f"Plot too short ({len(plot)} chars, need {_MIN_PLOT_LENGTH}): {filename}"
+    )
+
+
 @pytest.mark.integration
 def test_fixture_counts_match_expected() -> None:
     """Guard: fixture directory has the expected number of NFO files.
@@ -91,19 +110,8 @@ def test_movie_nfo_has_required_fields(nfo_path: Path) -> None:
     assert root.tag == "movie", f"Expected <movie> root, got <{root.tag}>"
 
     _assert_required_fields(root, _MOVIE_REQUIRED, nfo_path.name)
-
-    # Actors need nested <name> elements
-    actors = root.findall("actor")
-    assert len(actors) >= 2, f"Need >= 2 <actor> entries, got {len(actors)}"
-    for actor in actors:
-        name = actor.find("name")
-        assert name is not None and name.text, "Actor missing <name>"
-
-    # Plot richness check
-    plot = root.findtext("plot", default="")
-    assert len(plot) >= _MIN_PLOT_LENGTH, (
-        f"Plot too short ({len(plot)} chars, need {_MIN_PLOT_LENGTH}): {nfo_path.name}"
-    )
+    _assert_actors(root, 2, nfo_path.name)
+    _assert_min_plot_length(root, nfo_path.name)
 
 
 @pytest.mark.integration
@@ -115,17 +123,8 @@ def test_show_nfo_has_required_fields(nfo_path: Path) -> None:
     assert root.tag == "tvshow", f"Expected <tvshow> root, got <{root.tag}>"
 
     _assert_required_fields(root, _SHOW_REQUIRED, nfo_path.name)
-
-    actors = root.findall("actor")
-    assert len(actors) >= 2, f"Need >= 2 <actor> entries, got {len(actors)}"
-    for actor in actors:
-        name = actor.find("name")
-        assert name is not None and name.text, "Actor missing <name>"
-
-    plot = root.findtext("plot", default="")
-    assert len(plot) >= _MIN_PLOT_LENGTH, (
-        f"Plot too short ({len(plot)} chars, need {_MIN_PLOT_LENGTH}): {nfo_path.name}"
-    )
+    _assert_actors(root, 2, nfo_path.name)
+    _assert_min_plot_length(root, nfo_path.name)
 
 
 @pytest.mark.integration
@@ -139,8 +138,4 @@ def test_episode_nfo_has_required_fields(nfo_path: Path) -> None:
     )
 
     _assert_required_fields(root, _EPISODE_REQUIRED, nfo_path.name)
-
-    plot = root.findtext("plot", default="")
-    assert len(plot) >= _MIN_PLOT_LENGTH, (
-        f"Plot too short ({len(plot)} chars, need {_MIN_PLOT_LENGTH}): {nfo_path.name}"
-    )
+    _assert_min_plot_length(root, nfo_path.name)
