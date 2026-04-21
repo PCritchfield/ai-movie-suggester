@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-def _to_row(item: LibraryItem, content_hash: str) -> LibraryItemRow:
+def to_library_row(item: LibraryItem, content_hash: str) -> LibraryItemRow:
     """Convert a Jellyfin LibraryItem to a LibraryItemRow for storage.
 
     Extracts actor names from the people list (filtering by Type == "Actor").
@@ -174,7 +174,7 @@ class SyncEngine:
                 async for page in self._jellyfin_client.get_all_items(
                     token=token,
                     user_id=user_id,
-                    item_types=["Movie"],
+                    item_types=["Movie", "Series"],
                     page_size=self._settings.library_sync_page_size,
                 ):
                     rows_to_upsert: list[LibraryItemRow] = []
@@ -194,13 +194,13 @@ class SyncEngine:
                             if old_hash is None:
                                 # New item
                                 state.items_created += 1
-                                row = _to_row(item, content_hash)
+                                row = to_library_row(item, content_hash)
                                 rows_to_upsert.append(row)
                                 ids_to_enqueue.append(item.id)
                             elif old_hash != content_hash:
                                 # Changed item
                                 state.items_updated += 1
-                                row = _to_row(item, content_hash)
+                                row = to_library_row(item, content_hash)
                                 rows_to_upsert.append(row)
                                 ids_to_enqueue.append(item.id)
                             else:

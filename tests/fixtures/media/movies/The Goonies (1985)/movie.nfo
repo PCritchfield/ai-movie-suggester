@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Goonies</title>
+  <year>1985</year>
+  <plot>A band of misfit kids from a declining Oregon neighborhood discover an old pirate treasure map and embark on an underground adventure through booby-trapped caverns to find One-Eyed Willy's gold before their homes are demolished. Chased by bumbling criminals and navigating deadly traps, their journey is a love letter to childhood friendship and never-say-die spirit.</plot>
+  <genre>Adventure</genre>
+  <genre>Comedy</genre>
+  <director>Richard Donner</director>
+  <actor>
+    <name>Sean Astin</name>
+    <role>Mikey Walsh</role>
+  </actor>
+  <actor>
+    <name>Josh Brolin</name>
+    <role>Brand Walsh</role>
+  </actor>
+  <actor>
+    <name>Corey Feldman</name>
+    <role>Mouth</role>
+  </actor>
+  <studio>Warner Bros.</studio>
+  <rating>7.7</rating>
+  <runtime>114</runtime>
+</movie>

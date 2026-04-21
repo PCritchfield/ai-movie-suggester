@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Midsomer Murders</title>
+  <year>1997</year>
+  <plot>Detective Chief Inspector Barnaby investigates a seemingly endless series of murders in the idyllic but surprisingly deadly English county of Midsomer. Beneath the picturesque villages and quaint traditions lies a web of jealousy, greed, and dark secrets that fuel an improbable body count.</plot>
+  <genre>Mystery</genre>
+  <genre>Crime</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>John Nettles</name>
+    <role>DCI Tom Barnaby</role>
+  </actor>
+  <actor>
+    <name>Daniel Casey</name>
+    <role>DS Gavin Troy</role>
+  </actor>
+  <actor>
+    <name>Jane Wymark</name>
+    <role>Joyce Barnaby</role>
+  </actor>
+  <studio>ITV</studio>
+  <rating>7.8</rating>
+  <status>Ended</status>
+</tvshow>

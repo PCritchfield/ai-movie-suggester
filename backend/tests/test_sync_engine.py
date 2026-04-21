@@ -242,6 +242,25 @@ async def test_sync_basic_two_pages() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sync_fetches_movies_and_series() -> None:
+    """run_sync calls get_all_items with item_types=["Movie", "Series"]."""
+    page = _make_paginated([])
+    store = _make_mock_store()
+    settings = _make_mock_settings()
+
+    # Use a MagicMock so we can inspect call kwargs
+    client = MagicMock()
+    client.get_all_items = MagicMock(return_value=_make_async_iter([page]))
+
+    engine = SyncEngine(store, client, settings)
+    await engine.run_sync()
+
+    client.get_all_items.assert_called_once()
+    call_kwargs = client.get_all_items.call_args
+    assert call_kwargs.kwargs.get("item_types") == ["Movie", "Series"]
+
+
+@pytest.mark.asyncio
 async def test_sync_unchanged_items() -> None:
     """Unchanged items: same hash means no upsert/enqueue calls for them."""
     item = _make_library_item("jf-001", "Movie One")

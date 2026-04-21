@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Arrival</title>
+  <year>2016</year>
+  <plot>When twelve mysterious spacecraft land around the globe, a linguist is recruited by the military to decipher the aliens' complex circular language before global tensions ignite war. As she learns their non-linear writing system, she begins experiencing time in ways that challenge everything she understands about choice and loss.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Drama</genre>
+  <director>Denis Villeneuve</director>
+  <actor>
+    <name>Amy Adams</name>
+    <role>Louise Banks</role>
+  </actor>
+  <actor>
+    <name>Jeremy Renner</name>
+    <role>Ian Donnelly</role>
+  </actor>
+  <actor>
+    <name>Forest Whitaker</name>
+    <role>Colonel Weber</role>
+  </actor>
+  <studio>Paramount Pictures</studio>
+  <rating>7.9</rating>
+  <runtime>116</runtime>
+</movie>

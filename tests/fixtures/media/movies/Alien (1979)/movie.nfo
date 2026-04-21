@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Alien</title>
+  <year>1979</year>
+  <plot>The crew of the commercial starship Nostromo encounters a deadly extraterrestrial creature after investigating a mysterious signal on an uncharted planetoid. Trapped in the claustrophobic corridors of their own ship, they are hunted one by one by a perfect organism that bleeds acid and adapts to kill.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Horror</genre>
+  <director>Ridley Scott</director>
+  <actor>
+    <name>Sigourney Weaver</name>
+    <role>Ellen Ripley</role>
+  </actor>
+  <actor>
+    <name>Tom Skerritt</name>
+    <role>Dallas</role>
+  </actor>
+  <actor>
+    <name>John Hurt</name>
+    <role>Kane</role>
+  </actor>
+  <studio>20th Century Fox</studio>
+  <rating>8.5</rating>
+  <runtime>117</runtime>
+</movie>

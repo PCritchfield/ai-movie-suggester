@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Se7en</title>
+  <year>1995</year>
+  <plot>A retiring detective and his impulsive young replacement hunt a meticulous serial killer who stages elaborate murders inspired by the seven deadly sins in a rain-soaked, unnamed city. The investigation spirals into a psychological duel that culminates in one of the most devastating final acts in thriller history.</plot>
+  <genre>Thriller</genre>
+  <director>David Fincher</director>
+  <actor>
+    <name>Brad Pitt</name>
+    <role>Detective David Mills</role>
+  </actor>
+  <actor>
+    <name>Morgan Freeman</name>
+    <role>Detective William Somerset</role>
+  </actor>
+  <actor>
+    <name>Kevin Spacey</name>
+    <role>John Doe</role>
+  </actor>
+  <studio>New Line Cinema</studio>
+  <rating>8.6</rating>
+  <runtime>127</runtime>
+</movie>

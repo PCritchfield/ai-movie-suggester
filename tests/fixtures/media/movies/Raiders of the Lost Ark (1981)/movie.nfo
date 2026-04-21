@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Raiders of the Lost Ark</title>
+  <year>1981</year>
+  <plot>A globe-trotting archaeologist races against Nazi agents to find the Ark of the Covenant before it can be weaponized as an instrument of unstoppable power. From the jungles of South America to the deserts of Egypt, Indiana Jones fights, quips, and improvises his way through relentless action set pieces that defined the adventure genre.</plot>
+  <genre>Adventure</genre>
+  <genre>Action</genre>
+  <director>Steven Spielberg</director>
+  <actor>
+    <name>Harrison Ford</name>
+    <role>Indiana Jones</role>
+  </actor>
+  <actor>
+    <name>Karen Allen</name>
+    <role>Marion Ravenwood</role>
+  </actor>
+  <actor>
+    <name>Paul Freeman</name>
+    <role>Belloq</role>
+  </actor>
+  <studio>Paramount Pictures</studio>
+  <rating>8.4</rating>
+  <runtime>115</runtime>
+</movie>
