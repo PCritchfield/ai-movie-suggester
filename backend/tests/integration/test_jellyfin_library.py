@@ -10,47 +10,20 @@ import dataclasses
 import time
 from typing import TYPE_CHECKING
 
-import httpx
 import pytest
-import pytest_asyncio
 
-from app.jellyfin.client import JellyfinClient
 from app.library.hashing import compute_content_hash
 from app.library.models import LibraryItemRow
-from app.library.store import LibraryStore
 
 if TYPE_CHECKING:
-    import pathlib
-    from collections.abc import AsyncGenerator
-
-    from app.jellyfin.models import LibraryItem, PaginatedItems
-    from tests.integration.conftest import JellyfinInstance
+    from app.jellyfin.client import JellyfinClient
+    from app.jellyfin.models import AuthResult, LibraryItem, PaginatedItems
+    from app.library.store import LibraryStore
 
 from tests.integration.conftest import (
     EXPECTED_MOVIES,
     EXPECTED_SHOWS,
-    TEST_USER_ALICE,
-    TEST_USER_ALICE_PASS,
 )
-
-
-@pytest_asyncio.fixture
-async def jf_client(
-    jellyfin: JellyfinInstance,
-) -> AsyncGenerator[JellyfinClient, None]:
-    """JellyfinClient pointed at the test instance."""
-    async with httpx.AsyncClient(timeout=10.0) as http:
-        yield JellyfinClient(base_url=jellyfin.url, http_client=http)
-
-
-@pytest_asyncio.fixture
-async def library_store(tmp_path: pathlib.Path) -> AsyncGenerator[LibraryStore, None]:
-    """Temporary LibraryStore for integration tests."""
-    db_path = tmp_path / "test_library.db"
-    store = LibraryStore(str(db_path))
-    await store.init()
-    yield store
-    await store.close()
 
 
 def _to_library_row(item: LibraryItem) -> LibraryItemRow:
@@ -76,10 +49,10 @@ def _to_library_row(item: LibraryItem) -> LibraryItemRow:
 @pytest.mark.integration
 async def test_get_all_items_returns_pages(
     jf_client: JellyfinClient,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """get_all_items returns pages — may be 0 items on fresh Jellyfin."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    auth = alice_auth
     pages: list[PaginatedItems] = []
     async for page in jf_client.get_all_items(
         auth.access_token,
@@ -96,11 +69,11 @@ async def test_get_all_items_returns_pages(
 @pytest.mark.integration
 async def test_fetch_and_store_cycle(
     jf_client: JellyfinClient,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
     library_store: LibraryStore,
 ) -> None:
     """Fetch items via get_all_items, store in LibraryStore, verify count."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    auth = alice_auth
     total_items = 0
     all_rows: list[LibraryItemRow] = []
 
@@ -125,10 +98,10 @@ async def test_fetch_and_store_cycle(
 @pytest.mark.integration
 async def test_extended_fields_no_validation_errors(
     jf_client: JellyfinClient,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """Extended fields parse without Pydantic validation errors."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    auth = alice_auth
     async for page in jf_client.get_all_items(
         auth.access_token,
         auth.user_id,
@@ -154,10 +127,10 @@ async def test_extended_fields_no_validation_errors(
 async def test_populated_library_has_movies(
     jf_client: JellyfinClient,
     populated_library: int,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """Populated Jellyfin has at least the expected number of movies."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    auth = alice_auth
     total = 0
     async for page in jf_client.get_all_items(
         auth.access_token, auth.user_id, item_types=["Movie"]
@@ -170,10 +143,10 @@ async def test_populated_library_has_movies(
 async def test_populated_library_has_shows(
     jf_client: JellyfinClient,
     populated_library: int,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """Populated Jellyfin has at least the expected number of shows."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    auth = alice_auth
     total = 0
     async for page in jf_client.get_all_items(
         auth.access_token, auth.user_id, item_types=["Series"]
@@ -186,10 +159,10 @@ async def test_populated_library_has_shows(
 async def test_movie_metadata_from_nfo(
     jf_client: JellyfinClient,
     populated_library: int,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """At least one movie has overview, genres, and year from NFO."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    auth = alice_auth
     async for page in jf_client.get_all_items(
         auth.access_token, auth.user_id, item_types=["Movie"]
     ):
@@ -203,10 +176,10 @@ async def test_movie_metadata_from_nfo(
 async def test_show_metadata_from_nfo(
     jf_client: JellyfinClient,
     populated_library: int,
-    test_users: dict[str, str],
+    alice_auth: AuthResult,
 ) -> None:
     """At least one show has overview and genres from NFO."""
-    auth = await jf_client.authenticate(TEST_USER_ALICE, TEST_USER_ALICE_PASS)
+    auth = alice_auth
     async for page in jf_client.get_all_items(
         auth.access_token, auth.user_id, item_types=["Series"]
     ):
