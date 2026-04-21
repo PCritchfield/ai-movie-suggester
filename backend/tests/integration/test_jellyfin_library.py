@@ -28,8 +28,9 @@ from tests.integration.conftest import (
 
 def _to_library_row(item: LibraryItem) -> LibraryItemRow:
     """Convert a LibraryItem to a LibraryItemRow using the sync engine's converter."""
-    # Build a temporary row to compute the content hash, then create
-    # the real row with the correct hash — same as SyncEngine.run_sync().
+    # Build a temporary row to compute a content hash, then replace the
+    # placeholder. Note: SyncEngine uses build_composite_text + SHA-256;
+    # this uses compute_content_hash which is sufficient for test assertions.
     temp = to_library_row(item, "placeholder")
     return dataclasses.replace(temp, content_hash=compute_content_hash(temp))
 
