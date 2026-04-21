@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 # Pre-commit hook for ai-movie-suggester monorepo
 # Install with: make hooks
 # Runs ruff on staged Python files, eslint+prettier on staged TS/TSX files
