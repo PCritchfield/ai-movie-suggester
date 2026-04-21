@@ -42,7 +42,7 @@ JELLYFIN_TEST_URL = os.environ.get(
     "JELLYFIN_TEST_URL", "http://host.docker.internal:8096"
 )
 # Must match the image version in docker-compose.test.yml
-EXPECTED_JELLYFIN_VERSION = "10.11.6"
+EXPECTED_JELLYFIN_VERSION = "10.11.8"
 TEST_ADMIN_PASS = "test-admin-password"
 
 TEST_USER_ALICE = "test-alice"
