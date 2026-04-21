@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Spirited Away</title>
+  <year>2001</year>
+  <plot>A sullen ten-year-old girl wanders into an abandoned theme park that transforms at dusk into a bathhouse for spirits, where a witch turns her parents into pigs and forces her to work. To rescue her family, she must navigate the bathhouse's strange hierarchy of gods, monsters, and spirits while holding onto her own identity and name in a world that devours both.</plot>
+  <genre>Animation</genre>
+  <genre>Fantasy</genre>
+  <director>Hayao Miyazaki</director>
+  <actor>
+    <name>Rumi Hiiragi</name>
+    <role>Chihiro</role>
+  </actor>
+  <actor>
+    <name>Miyu Irino</name>
+    <role>Haku</role>
+  </actor>
+  <actor>
+    <name>Mari Natsuki</name>
+    <role>Yubaba</role>
+  </actor>
+  <studio>Studio Ghibli</studio>
+  <rating>8.6</rating>
+  <runtime>125</runtime>
+</movie>

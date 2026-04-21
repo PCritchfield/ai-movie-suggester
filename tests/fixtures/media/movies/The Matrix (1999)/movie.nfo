@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Matrix</title>
+  <year>1999</year>
+  <plot>A computer hacker discovers that reality as he knows it is a simulated world created by machines to pacify humanity while harvesting their bodies for energy. Recruited by a band of rebels, he must embrace his role as "The One" and fight back against the system using gravity-defying martial arts and bullet-time gunplay.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Action</genre>
+  <director>Lana Wachowski</director>
+  <actor>
+    <name>Keanu Reeves</name>
+    <role>Neo</role>
+  </actor>
+  <actor>
+    <name>Laurence Fishburne</name>
+    <role>Morpheus</role>
+  </actor>
+  <actor>
+    <name>Carrie-Anne Moss</name>
+    <role>Trinity</role>
+  </actor>
+  <studio>Warner Bros.</studio>
+  <rating>8.7</rating>
+  <runtime>136</runtime>
+</movie>

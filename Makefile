@@ -1,9 +1,26 @@
-.PHONY: dev dev-full dev-ui build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection
+.PHONY: dev dev-full dev-ui dev-down build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down
 
-# Default dev target — full stack with Ollama
-dev: dev-full
+# ---------------------------------------------------------------------------
+# Port 8096 guard — localdev Jellyfin and test Jellyfin share this port
+# ---------------------------------------------------------------------------
+_check_port_8096 = @curl -sf http://localhost:8096/health > /dev/null 2>&1 \
+	&& { echo "ERROR: Port 8096 already in use (another Jellyfin stack running?)"; \
+	     echo "  Run: make dev-down  or  make jellyfin-down  first"; exit 1; } \
+	|| true
 
-# Full stack: backend + frontend + Ollama sidecar
+# Self-contained local dev — Jellyfin + Ollama (CPU) + provisioning, no .env required
+# First run pulls ~4 GB of Ollama models and takes a few minutes.
+# Ollama runs CPU-only; for GPU use make dev-full with docker-compose.ollama.yml
+dev:
+	$(_check_port_8096)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.localdev.yml up
+
+# Stop the local dev stack
+dev-down:
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.localdev.yml down
+
+# Full stack with hot reload — requires .env with JELLYFIN_URL + SESSION_SECRET
+# Use this if you have your own Jellyfin instance configured
 dev-full:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.ollama.yml up
 
@@ -17,7 +34,7 @@ build:
 
 # Run all tests
 test:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend pytest -m "not integration"
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm backend pytest -m "not integration and not pipeline"
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm test
 
 # Lint both runtimes
@@ -50,6 +67,7 @@ hooks:
 
 # Start disposable Jellyfin for integration tests
 jellyfin-up:
+	$(_check_port_8096)
 	docker compose -p ai-movie-suggester-test -f docker-compose.test.yml up -d jellyfin
 	@echo "Waiting for Jellyfin to become healthy..."
 	@timeout=120; while [ $$timeout -gt 0 ]; do \
@@ -70,13 +88,42 @@ jellyfin-down:
 # Run integration tests (requires Jellyfin via jellyfin-up)
 # Runs on host (same as CI) — Jellyfin is on localhost:8096
 test-integration:
-	cd backend && JELLYFIN_TEST_URL=http://localhost:8096 uv run pytest -m integration -v
+	cd backend && JELLYFIN_TEST_URL=http://localhost:8096 uv run pytest -m "integration and not pipeline" -v
 
 # Full cycle: start Jellyfin, run integration tests, teardown (unconditional)
 # WARNING: This MUST remain a single logical line. Make runs each recipe line
 # in a separate shell — splitting this would break unconditional teardown.
 test-integration-full:
 	@$(MAKE) jellyfin-up && $(MAKE) test-integration; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
+
+# ---------------------------------------------------------------------------
+# Pipeline validation (requires Ollama running locally)
+# ---------------------------------------------------------------------------
+
+# Start pipeline infrastructure: Jellyfin test container + Ollama health check
+# Ollama must be started separately (ollama serve, or Docker sidecar on Linux)
+pipeline-up:
+	@$(MAKE) jellyfin-up
+	@echo "Checking Ollama at http://localhost:11434/ ..."
+	@curl -sf http://localhost:11434/ > /dev/null 2>&1 \
+		&& echo "Ollama is running" \
+		|| { echo "WARNING: Ollama not reachable at http://localhost:11434/"; \
+		     echo "  macOS:  ollama serve"; \
+		     echo "  Linux:  docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d ollama"; \
+		     echo "Start Ollama, then run: make validate-pipeline"; exit 1; }
+	@echo "Pipeline infrastructure ready — run: make validate-pipeline"
+
+# Stop pipeline infrastructure
+pipeline-down:
+	@$(MAKE) jellyfin-down
+
+# Full RAG pipeline validation: embed → search → chat against real Ollama
+# Checks Ollama health BEFORE starting Jellyfin to fail fast
+# WARNING: This MUST remain a single logical line. Make runs each recipe line
+# in a separate shell — splitting this would break unconditional teardown.
+validate-pipeline:
+	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama first, or run: make pipeline-up"; exit 1; }
+	@$(MAKE) jellyfin-up && JELLYFIN_TEST_URL=http://localhost:8096 uv run --directory backend pytest -m pipeline -v ; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
 
 # ---------------------------------------------------------------------------
 # Adversarial injection test harness

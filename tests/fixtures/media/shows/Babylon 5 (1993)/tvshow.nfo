@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Babylon 5</title>
+  <year>1993</year>
+  <plot>A five-mile-long space station serves as a diplomatic hub for various alien civilizations and humans in the 23rd century. As ancient forces awaken and political intrigue escalates, the station's crew must navigate war, prophecy, and the fate of entire species.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Space Opera</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Bruce Boxleitner</name>
+    <role>Captain John Sheridan</role>
+  </actor>
+  <actor>
+    <name>Claudia Christian</name>
+    <role>Commander Susan Ivanova</role>
+  </actor>
+  <actor>
+    <name>Jerry Doyle</name>
+    <role>Michael Garibaldi</role>
+  </actor>
+  <actor>
+    <name>Mira Furlan</name>
+    <role>Delenn</role>
+  </actor>
+  <studio>PTEN</studio>
+  <rating>8.3</rating>
+  <status>Ended</status>
+</tvshow>

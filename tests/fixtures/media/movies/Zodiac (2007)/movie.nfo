@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Zodiac</title>
+  <year>2007</year>
+  <plot>A San Francisco cartoonist becomes obsessed with tracking down the Zodiac killer, a real serial murderer who taunted police and newspapers with cryptic ciphers throughout the late 1960s and 1970s. As years turn to decades, the investigation consumes careers, marriages, and sanity, painting an unflinching portrait of obsession in the face of unsolvable mystery.</plot>
+  <genre>Thriller</genre>
+  <director>David Fincher</director>
+  <actor>
+    <name>Jake Gyllenhaal</name>
+    <role>Robert Graysmith</role>
+  </actor>
+  <actor>
+    <name>Robert Downey Jr.</name>
+    <role>Paul Avery</role>
+  </actor>
+  <actor>
+    <name>Mark Ruffalo</name>
+    <role>Inspector David Toschi</role>
+  </actor>
+  <studio>Paramount Pictures</studio>
+  <rating>7.7</rating>
+  <runtime>157</runtime>
+</movie>

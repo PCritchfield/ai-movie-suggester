@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Moonlight</title>
+  <year>2016</year>
+  <plot>Told in three chapters, a young Black man in Miami navigates poverty, his mother's crack addiction, bullying, and his own suppressed sexuality from childhood through adolescence to adulthood. Intimate and lyrical, the film captures the quiet devastation of learning to hide who you are and the tentative courage of finally stopping.</plot>
+  <genre>Drama</genre>
+  <director>Barry Jenkins</director>
+  <actor>
+    <name>Trevante Rhodes</name>
+    <role>Black</role>
+  </actor>
+  <actor>
+    <name>Mahershala Ali</name>
+    <role>Juan</role>
+  </actor>
+  <actor>
+    <name>Naomie Harris</name>
+    <role>Paula</role>
+  </actor>
+  <studio>A24</studio>
+  <rating>7.4</rating>
+  <runtime>111</runtime>
+</movie>
