@@ -57,6 +57,14 @@ def _nfo_id(path: Path) -> str:
     return str(path.relative_to(_MEDIA_ROOT))
 
 
+def _assert_required_fields(root: ET.Element, fields: list[str], filename: str) -> None:
+    """Assert all required fields exist and have non-empty text."""
+    for field in fields:
+        elem = root.find(field)
+        assert elem is not None, f"Missing <{field}> in {filename}"
+        assert elem.text and elem.text.strip(), f"Empty <{field}> in {filename}"
+
+
 @pytest.mark.integration
 def test_fixture_counts_match_expected() -> None:
     """Guard: fixture directory has the expected number of NFO files.
@@ -82,10 +90,7 @@ def test_movie_nfo_has_required_fields(nfo_path: Path) -> None:
     root = tree.getroot()
     assert root.tag == "movie", f"Expected <movie> root, got <{root.tag}>"
 
-    for field in _MOVIE_REQUIRED:
-        elem = root.find(field)
-        assert elem is not None, f"Missing <{field}> in {nfo_path.name}"
-        assert elem.text and elem.text.strip(), f"Empty <{field}> in {nfo_path.name}"
+    _assert_required_fields(root, _MOVIE_REQUIRED, nfo_path.name)
 
     # Actors need nested <name> elements
     actors = root.findall("actor")
@@ -109,10 +114,7 @@ def test_show_nfo_has_required_fields(nfo_path: Path) -> None:
     root = tree.getroot()
     assert root.tag == "tvshow", f"Expected <tvshow> root, got <{root.tag}>"
 
-    for field in _SHOW_REQUIRED:
-        elem = root.find(field)
-        assert elem is not None, f"Missing <{field}> in {nfo_path.name}"
-        assert elem.text and elem.text.strip(), f"Empty <{field}> in {nfo_path.name}"
+    _assert_required_fields(root, _SHOW_REQUIRED, nfo_path.name)
 
     actors = root.findall("actor")
     assert len(actors) >= 2, f"Need >= 2 <actor> entries, got {len(actors)}"
@@ -136,10 +138,7 @@ def test_episode_nfo_has_required_fields(nfo_path: Path) -> None:
         f"Expected <episodedetails> root, got <{root.tag}>"
     )
 
-    for field in _EPISODE_REQUIRED:
-        elem = root.find(field)
-        assert elem is not None, f"Missing <{field}> in {nfo_path.name}"
-        assert elem.text and elem.text.strip(), f"Empty <{field}> in {nfo_path.name}"
+    _assert_required_fields(root, _EPISODE_REQUIRED, nfo_path.name)
 
     plot = root.findtext("plot", default="")
     assert len(plot) >= _MIN_PLOT_LENGTH, (

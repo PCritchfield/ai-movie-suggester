@@ -7,17 +7,17 @@ Uses the existing fixture chain: jellyfin -> admin_auth_token -> test_users.
 from __future__ import annotations
 
 import dataclasses
-import time
 from typing import TYPE_CHECKING
 
 import pytest
 
 from app.library.hashing import compute_content_hash
-from app.library.models import LibraryItemRow
+from app.sync.engine import _to_row
 
 if TYPE_CHECKING:
     from app.jellyfin.client import JellyfinClient
     from app.jellyfin.models import AuthResult, LibraryItem, PaginatedItems
+    from app.library.models import LibraryItemRow
     from app.library.store import LibraryStore
 
 from tests.integration.conftest import (
@@ -27,23 +27,11 @@ from tests.integration.conftest import (
 
 
 def _to_library_row(item: LibraryItem) -> LibraryItemRow:
-    """Convert a LibraryItem to a LibraryItemRow for storage."""
-    actor_names = [p["Name"] for p in item.people if p.get("Type") == "Actor"]
-    row = LibraryItemRow(
-        jellyfin_id=item.id,
-        title=item.name,
-        overview=item.overview,
-        production_year=item.production_year,
-        genres=item.genres,
-        tags=item.tags,
-        studios=item.studios,
-        community_rating=item.community_rating,
-        people=actor_names,
-        content_hash="placeholder",
-        synced_at=int(time.time()),
-    )
-    # Compute real hash and replace placeholder
-    return dataclasses.replace(row, content_hash=compute_content_hash(row))
+    """Convert a LibraryItem to a LibraryItemRow using the sync engine's converter."""
+    # Build a temporary row to compute the content hash, then create
+    # the real row with the correct hash — same as SyncEngine.run_sync().
+    temp = _to_row(item, "placeholder")
+    return dataclasses.replace(temp, content_hash=compute_content_hash(temp))
 
 
 @pytest.mark.integration
