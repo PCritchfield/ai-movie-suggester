@@ -80,10 +80,10 @@ sequenceDiagram
     U->>F: Tap "Cast to TV" in card-detail
     F->>P: Open picker dialog
     P->>B: GET /api/devices
-    B->>S: list_controllable(user_token, user_id, device_id)
+    B->>S: list_controllable(user_token)
     S->>J: GET /Sessions
     J-->>S: All active sessions
-    Note over S: Filter: SupportsRemoteControl==true<br/>Exclude: Session.UserId==user AND<br/>Session.DeviceId==caller's DeviceId
+    Note over S: Filter: SupportsRemoteControl==true<br/>(no self-exclusion — chat UI is not<br/>a Jellyfin client, cannot appear)
     S-->>B: [Device{session_id, name, client, type}]
     B-->>P: 200 [devices]
     P-->>U: Render list (or empty + Refresh)
@@ -103,7 +103,7 @@ sequenceDiagram
 
 - **User-token auth** for device listing and dispatch, not the admin API key. Matches the existing permission-service pattern. Token is request-scoped and never persisted into objects, never logged.
 - **Filter on `SupportsRemoteControl == true`** — devices without remote-control capability cannot receive play commands.
-- **Self-session exclusion via server-side correlation.** Caller's own session is excluded by matching `Session.UserId == current user AND Session.DeviceId == caller's Jellyfin DeviceId issued at login`. The frontend **never** supplies its own session_id to this filter — that would be spoofable. The Jellyfin DeviceId is derived from the backend's encrypted session payload, established at login.
+- **No self-session exclusion.** The original design proposed "exclude caller's own session" for "you can't cast to yourself." Verified against the codebase (`backend/app/auth/models.py`, `backend/app/jellyfin/client.py`): the chat UI is a plain browser session, **not a Jellyfin client**, and therefore never appears in Jellyfin's `/Sessions` response. There is nothing to exclude. If the user happens to have a real Jellyfin client (mobile app, web player) running on the same device, that **should** appear in the list — casting to it is a valid user choice. Keeping the feature in scope would require adding per-user Jellyfin DeviceId tracking to sessions, which is outside Epic 4. Angua's spoofability concern is moot: no exclusion mechanism means no spoofable surface.
 - **Jellyfin re-validates item access** on `POST /Sessions/{id}/Playing` using the user's token. No app-side permission check is added in the dispatch path; we rely on Jellyfin to reject playback of items the user can't access. If this turns out to be untrue for any item type, T3 must add an explicit check.
 - **Error-to-status mapping:**
   - Jellyfin 404/400 on session ID → `DeviceOfflineError` → HTTP 409
@@ -244,7 +244,7 @@ Button renamed to **"Cast to TV"**:
 />
 ```
 
-Two dialogs stacking (card-detail → device-picker) is supported by the Radix Dialog primitive. Existing `card-detail.tsx` confirms the pattern works.
+Two dialogs stacking (card-detail → device-picker) is supported by Radix Dialog via portal rendering + z-index stacking. This pattern is not yet exercised elsewhere in the codebase, so **T2 must include a verification test**: opening the device-picker from within card-detail → dispatching → both dialogs close cleanly → focus returns to the card-detail trigger → pressing `Escape` with both open dismisses the top dialog only.
 
 ### API client
 
@@ -279,7 +279,7 @@ Use Lucide icons (`Tv`, `Smartphone`, `Tablet`, `MonitorSmartphone` for Other) i
 | Subject | Covers |
 |---|---|
 | Shared transport helper | Auth header formatting; 401 → `JellyfinAuthError`; transport error → `JellyfinConnectionError`; JSON error wrapping |
-| `JellyfinSessionsClient` | Happy path; `SupportsRemoteControl` filter; **self-session exclusion by UserId+DeviceId correlation**; 401; empty list |
+| `JellyfinSessionsClient` | Happy path; `SupportsRemoteControl` filter; 401; empty list |
 | `_classify_device` | Fixture table: AndroidTV/KodiTV/SamsungTV → Tv; iOS/Android/Mobile → Mobile; iPad/Tablet → Tablet; unknown → Other |
 | `JellyfinPlaybackClient` | Happy path (204 → ok); 404/400 → `DeviceOfflineError`; **401/403 → `PlaybackAuthError`** (new); 5xx → `PlaybackDispatchError`; timeout → `PlaybackDispatchError`; exception message scrubbing |
 | `GET /api/devices` router | Unauthenticated → 401; authenticated → list shape; empty list → `200 []`; 10/min rate limit |
@@ -314,13 +314,13 @@ Four tickets, each ≤3pt, single-PR ≤500 LOC, two demoable beats.
 
 **Deliverables:**
 - **Refactor**: extract shared Jellyfin transport helper from existing `backend/app/jellyfin/client.py`; refactor `JellyfinClient` to use it. Unit tests for the shared helper land here.
-- `backend/app/jellyfin/sessions.py` — `JellyfinSessionsClient.list_controllable(user_token, current_user_id, current_device_id)` with server-side self-exclusion via UserId+DeviceId correlation
+- `backend/app/jellyfin/sessions.py` — `JellyfinSessionsClient.list_controllable(user_token)` returning all sessions with `SupportsRemoteControl == true`
 - `backend/app/jellyfin/sessions.py` — private `_classify_device(client, device_id)` with fixture tests
 - `backend/app/jellyfin/device_models.py` — `Device`, `DeviceType`
 - `backend/app/jellyfin/errors.py` — add `DeviceOfflineError` (subclass `JellyfinError`)
 - `backend/app/routers/devices.py` — `GET /api/devices`, auth required, 10/min rate limit
 - Wire into `backend/app/main.py`
-- Unit tests: shared transport (auth header, 401, transport error, JSON error wrap); sessions client (happy path, filter, UserId+DeviceId correlation, 401, empty); `_classify_device` fixture table; router (auth, empty, rate limit)
+- Unit tests: shared transport (auth header, 401, transport error, JSON error wrap); sessions client (happy path, `SupportsRemoteControl` filter, 401, empty); `_classify_device` fixture table; router (auth, empty, rate limit)
 - **Two** integration tests: empty-list shape + field-mapping verification
 - OpenAPI spec update
 
@@ -427,7 +427,7 @@ Already filed: **#195** (fake playback client, deferred tech debt).
 - **Toast durations:** ✅ 4s success, 5s error. Placement: sonner responsive defaults (bottom-center mobile, top-right desktop). Ruled by Adorabelle.
 - **Refresh button affordance:** ✅ Prominent, text-labeled "Refresh". Ruled by Adorabelle.
 - **Button label:** ✅ "Cast to TV" — platform convention; "Play on Device" rejected. Ruled by Adorabelle.
-- **Self-session exclusion mechanism:** ✅ Server-side UserId+DeviceId correlation; frontend never supplies session_id for exclusion. Ruled by Angua + Granny + Carrot consensus.
+- **Self-session exclusion mechanism:** ✅ **Dropped from scope.** Verification against `backend/app/auth/models.py` + `backend/app/jellyfin/client.py` (Copilot review on PR #196) showed the chat UI is not a Jellyfin client and cannot appear in `/Sessions` — so there is nothing to exclude. The original design's "server-side UserId+DeviceId correlation" was infeasible without new session-model fields. Keeping the exclusion would have required adding per-user DeviceId tracking outside Epic 4 scope. Dropping it removes Angua's spoofability concern as a side effect.
 - **File organization:** ✅ Module-local `models.py` (no top-level `schemas/`). Ruled by Carrot.
 - **Shared Jellyfin transport:** ✅ Extract from existing `JellyfinClient`; new clients compose against it. Ruled by Granny.
 - **Exception placement and naming:** ✅ `DeviceOfflineError`, `PlaybackAuthError`, `PlaybackDispatchError` in `jellyfin/errors.py`, all subclass `JellyfinError`. Ruled by Granny.
