@@ -2,6 +2,33 @@ import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { axe, toHaveNoViolations } from "jest-axe";
+
+// Hoisted module mocks — sonner (card-detail fires toast.success on dispatch)
+// and auth-context (picker uses useAuth internally).
+const mocks = vi.hoisted(() => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+  clearAuth: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: mocks.toast,
+  Toaster: () => null,
+}));
+
+vi.mock("@/lib/auth/auth-context", () => ({
+  useAuth: () => ({
+    userId: "u1",
+    username: "alice",
+    serverName: "server",
+    isAuthenticated: true,
+    clearAuth: mocks.clearAuth,
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 import { CardDetail } from "../card-detail";
 import type { Device, SearchResultItem } from "@/lib/api/types";
 
@@ -192,6 +219,9 @@ describe("CardDetail — Cast to TV entry point", () => {
       writable: true,
       value: "csrf_token=test-csrf-value",
     });
+    mocks.toast.success.mockClear();
+    mocks.toast.error.mockClear();
+    mocks.clearAuth.mockClear();
   });
 
   afterEach(() => {
@@ -263,6 +293,56 @@ describe("CardDetail — Cast to TV entry point", () => {
     // data-return-focus="false" or similar — Radix doesn't expose this, so the
     // grep-in-source check above is the real guard).
     expect(dialogs[0]).toBeInTheDocument();
+  });
+
+  it("fires toast.success('Now playing on {deviceName}') when dispatch succeeds (T4)", async () => {
+    const user = userEvent.setup();
+
+    // Sequence: initial GET /api/devices returns a populated list, then
+    // POST /api/play returns 200 with device_name.
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve([
+              {
+                session_id: "tv",
+                name: "Living Room TV",
+                client: "Jellyfin Android TV",
+                device_type: "Tv",
+              },
+            ] satisfies Device[]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({ status: "ok", device_name: "Living Room TV" }),
+        })
+    );
+
+    render(<CardDetail item={makeItem()} open={true} onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "Cast to TV" }));
+
+    // Wait for the device row, then tap it
+    const row = await screen.findByRole("button", {
+      name: /Cast Galaxy Quest to Living Room TV/i,
+    });
+    await user.click(row);
+
+    // Card-detail's onDispatched handler fires toast.success from sonner
+    await waitFor(() => {
+      expect(mocks.toast.success).toHaveBeenCalledWith(
+        "Now playing on Living Room TV"
+      );
+    });
+    expect(mocks.toast.success).toHaveBeenCalledTimes(1);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
   });
 
   it("pressing Escape with both dialogs open dismisses only the top (picker) dialog; card-detail stays open", async () => {
