@@ -239,9 +239,10 @@ describe("CardDetail — Cast to TV entry point", () => {
   it("does not suppress Radix returnFocus — picker is not rendered with returnFocus={false}", async () => {
     // NOTE: jsdom + Radix FocusScope does not faithfully reproduce focus-restore
     // behavior when multiple Dialog FocusScopes stack. The authoritative focus
-    // verification for this flow lives in Playwright E2E (tests/e2e). Here we
-    // verify the *intent*: the picker is not rendered with `returnFocus={false}`,
-    // which is the only way a dev could accidentally suppress the default.
+    // verification for this flow is *planned* in Playwright E2E and tracked by
+    // issue #207 — no spec exists yet. Here we verify the *intent*: the picker
+    // is not rendered with `returnFocus={false}`, which is the only way a dev
+    // could accidentally suppress the default.
     //
     // The source-of-truth assertion: grep `device-picker-dialog.tsx` and
     // `card-detail.tsx` — neither should contain `returnFocus={false}` or

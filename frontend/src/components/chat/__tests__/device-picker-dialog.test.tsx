@@ -344,6 +344,12 @@ describe("DevicePickerDialog — fetch states", () => {
   });
 });
 
+// NOTE: These tests assert Lucide's per-icon CSS class convention
+// (`lucide-<kebab-name>`), which is not a formal public contract. A Lucide
+// major-version bump could rename these classes; if so, update the expected
+// class pattern as part of the upgrade. The alternative — dropping the
+// per-type mapping assertions — would lose the Adorabelle-ruled coverage
+// that `Mobile` → smartphone icon (not Tv etc.). Deliberate tradeoff.
 describe("DevicePickerDialog — Lucide icon mapping", () => {
   beforeEach(() => {
     Object.defineProperty(document, "cookie", {

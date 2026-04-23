@@ -16,7 +16,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { fetchDevices } from "@/lib/api/devices";
-import { ApiAuthError } from "@/lib/api/types";
 import type { Device, DeviceType, SearchResultItem } from "@/lib/api/types";
 
 interface DevicePickerDialogProps {
@@ -82,14 +81,12 @@ export function DevicePickerDialog({
     } catch (err) {
       if (!mountedRef.current) return;
       if (myFetchId !== fetchIdRef.current) return;
-      if (err instanceof ApiAuthError) {
-        // T4 will hook this to the auth-context + toast flow.
-        // For T2, surface as a generic fetch error so the user can Refresh
-        // after re-authenticating.
-        setFetchError(true);
-      } else {
-        setFetchError(true);
-      }
+      // T2: all fetch errors (including ApiAuthError) surface as the generic
+      // fetch-error state so the user can Refresh after re-authenticating.
+      // T4 will split ApiAuthError into the clearAuth + toast flow used by
+      // the dispatch handler (see PR #209).
+      void err;
+      setFetchError(true);
     } finally {
       if (!mountedRef.current) return;
       if (myFetchId === fetchIdRef.current) setLoading(false);
@@ -97,14 +94,18 @@ export function DevicePickerDialog({
   }, []);
 
   // Fresh fetch on every open false→true transition.
+  //
+  // Do NOT reset selectedSessionId or dispatchInFlightRef here — the
+  // finally block of handleTap is the authoritative reset for both. Resetting
+  // on reopen would create two bugs:
+  //   - dispatchInFlightRef reset allows a second concurrent dispatch if the
+  //     user closes + reopens mid-flight (Carrot review on PR #208).
+  //   - selectedSessionId reset without also clearing the ref leaves rows
+  //     visually enabled while handleTap silently no-ops (Copilot review).
+  // If reopen happens mid-dispatch, the dispatching-row spinner stays visible
+  // until postPlay resolves — correct reflection of actual state.
   useEffect(() => {
     if (open) {
-      // Reset selected row state on open. Do NOT reset dispatchInFlightRef here
-      // — the finally block of handleTap is the authoritative reset. Resetting
-      // on reopen would allow a second concurrent dispatch if the user closes +
-      // reopens the dialog while a previous dispatch is still in flight
-      // (Carrot review on PR #208).
-      setSelectedSessionId(null);
       runFetch();
     }
   }, [open, runFetch]);
@@ -182,7 +183,10 @@ export function DevicePickerDialog({
         {!loading && !fetchError && devices.length > 0 && (
           <ul className="flex flex-col gap-2">
             {devices.map((device) => {
-              const Icon = deviceTypeToIcon[device.device_type];
+              // Fallback to MonitorSmartphone if the backend sends a device_type
+              // not in our union (e.g., newer backend, older frontend).
+              const Icon =
+                deviceTypeToIcon[device.device_type] ?? MonitorSmartphone;
               const isDispatching = selectedSessionId === device.session_id;
               const isDisabled = selectedSessionId != null && !isDispatching;
               return (
