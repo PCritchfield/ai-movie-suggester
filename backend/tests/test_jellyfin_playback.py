@@ -45,7 +45,7 @@ def _make_client(
         http_client.request.return_value = response
     transport = _JellyfinTransport(
         base_url=_BASE_URL,
-        http_client=http_client,
+        client=http_client,
     )
     return JellyfinPlaybackClient(transport=transport), http_client
 
@@ -244,7 +244,7 @@ class TestPlaybackClientTokenGuard:
         """dispatch_play must not cache user_token on self; repr/str carry no token."""
         transport = _JellyfinTransport(
             base_url=_BASE_URL,
-            http_client=MagicMock(spec=httpx.AsyncClient),
+            client=MagicMock(spec=httpx.AsyncClient),
         )
         client = JellyfinPlaybackClient(transport=transport)
         # Dispatch a call to ensure the token flowed as a parameter.

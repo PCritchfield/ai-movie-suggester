@@ -432,7 +432,7 @@ class TestPlaybackClientTokenGuardRouter:
     async def test_playback_client_repr_and_str_have_no_token(self) -> None:
         transport = _JellyfinTransport(
             base_url="https://jellyfin.example",
-            http_client=MagicMock(spec=httpx.AsyncClient),
+            client=MagicMock(spec=httpx.AsyncClient),
         )
         client = JellyfinPlaybackClient(transport=transport)
         assert _JELLY_TOKEN not in repr(client)
