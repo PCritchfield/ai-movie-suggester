@@ -41,6 +41,25 @@ export class ApiAuthError extends ApiError {
   }
 }
 
+/** Raised when the chosen Jellyfin device is no longer reachable (HTTP 409). */
+export class DeviceOfflineError extends ApiError {
+  constructor(body: unknown) {
+    super(409, body);
+    this.name = "DeviceOfflineError";
+  }
+}
+
+/**
+ * Raised when the play dispatch failed for a reason other than auth or device
+ * offline (HTTP 500, transport error, unexpected backend state).
+ */
+export class PlaybackFailedError extends ApiError {
+  constructor(status: number, body: unknown) {
+    super(status, body);
+    this.name = "PlaybackFailedError";
+  }
+}
+
 // --- Device / Play types (Epic 4 Remote Control — mirroring backend models) ---
 
 /** Mirrors backend DeviceType literal from backend/app/jellyfin/device_models.py */
@@ -52,6 +71,18 @@ export interface Device {
   name: string;
   client: string;
   device_type: DeviceType;
+}
+
+/** Mirrors backend PlayRequest Pydantic model from backend/app/play/models.py */
+export interface PlayRequest {
+  item_id: string;
+  session_id: string;
+}
+
+/** Mirrors backend PlayResponse Pydantic model from backend/app/play/models.py */
+export interface PlayResponse {
+  status: string;
+  device_name: string;
 }
 
 // --- Chat / Search types (mirroring backend models) ---
