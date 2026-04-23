@@ -25,6 +25,7 @@ from app.devices.router import create_devices_router
 from app.embedding.router import router as embedding_router
 from app.embedding.worker import EmbeddingWorker
 from app.jellyfin.client import JellyfinClient
+from app.jellyfin.playback import JellyfinPlaybackClient
 from app.jellyfin.sessions import JellyfinSessionsClient
 from app.jellyfin.transport import _JellyfinTransport
 from app.library.store import LibraryStore
@@ -39,6 +40,7 @@ from app.models import (
     ServiceStatus,
 )
 from app.ollama.client import OllamaEmbeddingClient
+from app.play.router import create_play_router
 from app.search.router import create_search_router
 from app.sync.engine import SyncEngine
 from app.sync.router import router as sync_router
@@ -307,6 +309,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Devices router — GET /api/devices (Epic 4 remote control)
         devices_router = create_devices_router(limiter=limiter)
         app.include_router(devices_router)
+
+        # Play router — POST /api/play (Epic 4 remote control)
+        jf_playback_transport = _JellyfinTransport(
+            base_url=settings.jellyfin_url,
+            client=http_client,
+        )
+        app.state.jellyfin_playback_client = JellyfinPlaybackClient(
+            transport=jf_playback_transport,
+        )
+        play_router = create_play_router(settings=settings, limiter=limiter)
+        app.include_router(play_router)
 
         # Store settings on app.state for routers that need them
         app.state.settings = settings
