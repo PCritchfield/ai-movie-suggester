@@ -11,26 +11,22 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
-import httpx
+from app.jellyfin.errors import (
+    JellyfinAuthError,
+    JellyfinError,
+)
+from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo, WatchHistoryEntry
+from app.jellyfin.transport import _DEFAULT_DEVICE_ID, _JellyfinTransport
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
-from app.jellyfin.errors import (
-    JellyfinAuthError,
-    JellyfinConnectionError,
-    JellyfinError,
-)
-from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo, WatchHistoryEntry
+    import httpx
 
 logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
 
-_APP_NAME = "ai-movie-suggester"
-_APP_VERSION = "0.1.0"
-_DEVICE = "Server"
-_DEFAULT_DEVICE_ID = "ai-movie-suggester-server"
 # Fields to request from Jellyfin — matches our LibraryItem model
 _ITEM_FIELDS = (
     "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,RunTimeTicks,People"
@@ -46,24 +42,29 @@ class JellyfinClient:
         http_client: httpx.AsyncClient,
         device_id: str = _DEFAULT_DEVICE_ID,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._client = http_client
-        self._server_name: str | None = None
-        self._auth_value = (
-            f'MediaBrowser Client="{_APP_NAME}", '
-            f'Device="{_DEVICE}", '
-            f'DeviceId="{device_id}", '
-            f'Version="{_APP_VERSION}"'
+        self._transport = _JellyfinTransport(
+            base_url=base_url,
+            client=http_client,
+            device_id=device_id,
         )
+        self._server_name: str | None = None
+
+    @property
+    def _base_url(self) -> str:
+        """Expose the base URL for callers that introspect the client."""
+        return self._transport.base_url
+
+    @property
+    def _client(self) -> httpx.AsyncClient:
+        """Expose the shared http client for callers that introspect it."""
+        return self._transport.client
 
     def _headers(self, token: str | None = None) -> dict[str, str]:
-        """Build Jellyfin Authorization header, optionally with token."""
-        value = (
-            self._auth_value
-            if token is None
-            else f"{self._auth_value}, Token={token.strip()}"
-        )
-        return {"Authorization": value}
+        """Build Jellyfin Authorization header, optionally with token.
+
+        Delegates to the shared transport helper.
+        """
+        return self._transport.headers(token)
 
     async def _request(
         self,
@@ -76,33 +77,15 @@ class JellyfinClient:
     ) -> httpx.Response:
         """Send a request to Jellyfin with standard error handling.
 
-        Raises JellyfinAuthError on 401.
-        Raises JellyfinConnectionError on transport failure.
-        Raises JellyfinError on other non-2xx responses.
+        Delegates to the shared transport helper.
         """
-        try:
-            resp = await self._client.request(
-                method,
-                f"{self._base_url}{path}",
-                headers=self._headers(token),
-                **kwargs,
-            )
-        except httpx.TransportError as exc:
-            raise JellyfinConnectionError(
-                f"Cannot reach Jellyfin at {self._base_url}"
-            ) from exc
-
-        if resp.status_code == 401:
-            raise JellyfinAuthError(auth_error_message)
-
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise JellyfinError(
-                f"Unexpected response from Jellyfin: {resp.status_code}"
-            ) from exc
-
-        return resp
+        return await self._transport.request(
+            method,
+            path,
+            token=token,
+            auth_error_message=auth_error_message,
+            **kwargs,
+        )
 
     @staticmethod
     def _parse_response(resp: httpx.Response, parser: Callable[..., _T]) -> _T:
