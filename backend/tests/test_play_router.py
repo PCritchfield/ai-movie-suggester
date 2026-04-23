@@ -25,6 +25,9 @@ from app.auth.dependencies import get_current_session
 from app.auth.models import SessionMeta
 from app.jellyfin.errors import (
     DeviceOfflineError,
+    JellyfinAuthError,
+    JellyfinConnectionError,
+    JellyfinError,
     PlaybackAuthError,
     PlaybackDispatchError,
 )
@@ -99,6 +102,7 @@ def _device(session_id: str = "sess-1", name: str = "Living Room TV") -> Any:
 def _make_play_app(
     *,
     sessions_return: list[Any] | None = None,
+    sessions_side_effect: Exception | None = None,
     dispatch_side_effect: Exception | None = None,
     limiter: Any = None,
     enable_csrf_middleware: bool = False,
@@ -108,9 +112,12 @@ def _make_play_app(
     settings = make_test_settings()
 
     sessions_client = AsyncMock()
-    sessions_client.list_controllable = AsyncMock(
-        return_value=sessions_return if sessions_return is not None else [_device()]
-    )
+    if sessions_side_effect is not None:
+        sessions_client.list_controllable = AsyncMock(side_effect=sessions_side_effect)
+    else:
+        sessions_client.list_controllable = AsyncMock(
+            return_value=sessions_return if sessions_return is not None else [_device()]
+        )
 
     playback_client = AsyncMock()
     if dispatch_side_effect is not None:
@@ -297,6 +304,60 @@ class TestPlayErrorMatrix:
         )
         assert resp.status_code == 500
         assert resp.json() == {"error": "playback_failed"}
+
+
+# ---------------------------------------------------------------------------
+# Step-1 error matrix — list_controllable raises (Copilot review fix)
+# ---------------------------------------------------------------------------
+
+
+class TestPlayListControllableErrorMatrix:
+    """list_controllable (step 1) must produce documented error shapes.
+
+    Without these mappings, a revoked token or upstream failure during
+    device resolution returns an unstructured 500. The router is the
+    orchestration layer (Granny-B4); it owns the HTTP translation from
+    the typed JellyfinError subclasses raised by the capability client.
+    """
+
+    def test_list_controllable_auth_error_returns_401(self) -> None:
+        _, client, sessions_client, playback_client = _make_play_app(
+            sessions_side_effect=JellyfinAuthError("token revoked"),
+        )
+        resp = client.post(
+            "/api/play",
+            json={"item_id": "item-1", "session_id": "sess-1"},
+        )
+        assert resp.status_code == 401
+        assert resp.json() == {"error": "jellyfin_auth_failed"}
+        sessions_client.list_controllable.assert_awaited_once_with(_JELLY_TOKEN)
+        playback_client.dispatch_play.assert_not_called()
+
+    def test_list_controllable_connection_error_returns_503(self) -> None:
+        _, client, sessions_client, playback_client = _make_play_app(
+            sessions_side_effect=JellyfinConnectionError("unreachable"),
+        )
+        resp = client.post(
+            "/api/play",
+            json={"item_id": "item-1", "session_id": "sess-1"},
+        )
+        assert resp.status_code == 503
+        assert resp.json() == {"error": "jellyfin_unreachable"}
+        sessions_client.list_controllable.assert_awaited_once_with(_JELLY_TOKEN)
+        playback_client.dispatch_play.assert_not_called()
+
+    def test_list_controllable_generic_jellyfin_error_returns_502(self) -> None:
+        _, client, sessions_client, playback_client = _make_play_app(
+            sessions_side_effect=JellyfinError("unexpected upstream"),
+        )
+        resp = client.post(
+            "/api/play",
+            json={"item_id": "item-1", "session_id": "sess-1"},
+        )
+        assert resp.status_code == 502
+        assert resp.json() == {"error": "jellyfin_error"}
+        sessions_client.list_controllable.assert_awaited_once_with(_JELLY_TOKEN)
+        playback_client.dispatch_play.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
