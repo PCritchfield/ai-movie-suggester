@@ -42,30 +42,28 @@ def sessions_client(mock_http: AsyncMock) -> JellyfinSessionsClient:
 
 class TestClassifyDevice:
     @pytest.mark.parametrize(
-        ("client", "device_id", "expected"),
+        ("client", "expected"),
         [
             # TV clients — substring "TV" wins
-            ("Jellyfin Android TV", "dev-1", "Tv"),
-            ("Jellyfin Kodi TV", "dev-2", "Tv"),
-            ("Samsung Smart TV", "dev-3", "Tv"),
+            ("Jellyfin Android TV", "Tv"),
+            ("Jellyfin Kodi TV", "Tv"),
+            ("Samsung Smart TV", "Tv"),
             # Bare Kodi — NOT a TV, not remote-controllable via /Sessions/Playing
             # per Jellyfin's own behavior. Explicit fallback row makes
             # this deliberate, not accidental.
-            ("Kodi", "dev-4", "Other"),
+            ("Kodi", "Other"),
             # Mobile clients — iOS/Android without "TV" suffix
-            ("Jellyfin iOS", "dev-5", "Mobile"),
-            ("Jellyfin Android", "dev-6", "Mobile"),
+            ("Jellyfin iOS", "Mobile"),
+            ("Jellyfin Android", "Mobile"),
             # Tablet clients
-            ("Jellyfin iPad", "dev-7", "Tablet"),
-            ("SomeTablet", "dev-8", "Tablet"),
+            ("Jellyfin iPad", "Tablet"),
+            ("SomeTablet", "Tablet"),
             # Unknown fall-through
-            ("Unknown Client", "dev-9", "Other"),
+            ("Unknown Client", "Other"),
         ],
     )
-    def test_classify_device_fixture_table(
-        self, client: str, device_id: str, expected: str
-    ) -> None:
-        assert _classify_device(client, device_id) == expected
+    def test_classify_device_fixture_table(self, client: str, expected: str) -> None:
+        assert _classify_device(client) == expected
 
 
 class TestSessionsClientHappyPath:
@@ -245,7 +243,6 @@ class TestSessionsClientTokenHandling:
         """repr(client) / str(client) expose no auth/token state."""
         text = repr(sessions_client) + str(sessions_client)
         assert "Token=" not in text
-        assert "token" not in text.lower() or "token" in text.lower()  # sanity
         # Stronger: no attribute surface should ever contain a token value,
         # because the client holds no token. These asserts guard future regressions.
         assert "MediaBrowser" not in text

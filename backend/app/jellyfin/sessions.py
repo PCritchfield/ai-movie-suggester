@@ -12,7 +12,6 @@ token state) and a ``__repr__`` that returns a fixed string.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from app.jellyfin.device_models import Device, DeviceType
@@ -20,11 +19,9 @@ from app.jellyfin.device_models import Device, DeviceType
 if TYPE_CHECKING:
     from app.jellyfin.transport import _JellyfinTransport
 
-logger = logging.getLogger(__name__)
-
 
 # Table of (substring, result). Evaluated in order, case-sensitive.
-# First match wins. Must include a fallback entry.
+# First match wins; unmatched clients fall through to ``"Other"``.
 _CLASSIFICATION_TABLE: tuple[tuple[str, DeviceType], ...] = (
     # TVs — check "TV" substring before bare-Kodi or mobile checks
     ("TV", "Tv"),
@@ -37,18 +34,14 @@ _CLASSIFICATION_TABLE: tuple[tuple[str, DeviceType], ...] = (
 )
 
 
-def _classify_device(client: str, device_id: str) -> DeviceType:
+def _classify_device(client: str) -> DeviceType:
     """Classify a Jellyfin session's device by its reported Client string.
 
     Returns one of ``"Tv" | "Mobile" | "Tablet" | "Other"``. Falls
     through to ``"Other"`` when no substring matches — including the
     bare ``"Kodi"`` case, which is not remote-controllable via
     ``/Sessions/{id}/Playing`` per Jellyfin's own behavior.
-
-    ``device_id`` is accepted for future signal extension (currently
-    unused; kept in signature so call sites don't need to change).
     """
-    _ = device_id  # reserved for future classification signal
     for substring, result in _CLASSIFICATION_TABLE:
         if substring in client:
             return result
@@ -98,13 +91,12 @@ class JellyfinSessionsClient:
             if session.get("SupportsRemoteControl") is not True:
                 continue
             client_str: str = session.get("Client", "") or ""
-            device_id: str = session.get("DeviceId", "") or ""
             devices.append(
                 Device(
                     session_id=session["Id"],
                     name=session.get("DeviceName", "") or "",
                     client=client_str,
-                    device_type=_classify_device(client_str, device_id),
+                    device_type=_classify_device(client_str),
                 )
             )
         return devices
