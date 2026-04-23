@@ -99,9 +99,12 @@ export function DevicePickerDialog({
   // Fresh fetch on every open false→true transition.
   useEffect(() => {
     if (open) {
-      // Reset non-fetch transient state whenever the dialog opens
+      // Reset selected row state on open. Do NOT reset dispatchInFlightRef here
+      // — the finally block of handleTap is the authoritative reset. Resetting
+      // on reopen would allow a second concurrent dispatch if the user closes +
+      // reopens the dialog while a previous dispatch is still in flight
+      // (Carrot review on PR #208).
       setSelectedSessionId(null);
-      dispatchInFlightRef.current = false;
       runFetch();
     }
   }, [open, runFetch]);
@@ -159,7 +162,6 @@ export function DevicePickerDialog({
               className="h-6 w-6 animate-spin text-muted-foreground"
               aria-hidden={true}
             />
-            <span className="sr-only">Loading devices…</span>
           </div>
         )}
 

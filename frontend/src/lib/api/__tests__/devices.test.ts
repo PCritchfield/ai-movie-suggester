@@ -81,4 +81,15 @@ describe("fetchDevices", () => {
     await expect(fetchDevices()).rejects.toThrow(ApiAuthError);
     await expect(fetchDevices()).rejects.toHaveProperty("status", 401);
   });
+
+  it("rejects with ApiAuthError on 403", async () => {
+    // parseResponse throws ApiAuthError on both 401 and 403 (see shared.ts).
+    // Asserting 403 defends against a future shared.ts change that would
+    // narrow this to 401 only and silently downgrade 403s to generic errors.
+    mockFetch(403, { detail: "Forbidden" });
+    const { fetchDevices } = await import("../devices");
+
+    await expect(fetchDevices()).rejects.toThrow(ApiAuthError);
+    await expect(fetchDevices()).rejects.toHaveProperty("status", 403);
+  });
 });
