@@ -1,6 +1,34 @@
 import { render, screen, cleanup, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Hoisted mocks — sonner (toast) and auth-context (useAuth).
+// All T2 tests continue to work because the mocks provide defaults;
+// T4 tests add assertions on the mocked call counts.
+const mocks = vi.hoisted(() => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+  clearAuth: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: mocks.toast,
+  Toaster: () => null,
+}));
+
+vi.mock("@/lib/auth/auth-context", () => ({
+  useAuth: () => ({
+    userId: "u1",
+    username: "alice",
+    serverName: "server",
+    isAuthenticated: true,
+    clearAuth: mocks.clearAuth,
+  }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 import { DevicePickerDialog } from "../device-picker-dialog";
 import type { Device, SearchResultItem } from "@/lib/api/types";
 
@@ -417,30 +445,35 @@ describe("DevicePickerDialog — Dispatching state and concurrent-dispatch guard
     document.cookie = "";
   });
 
-  it("shows inline spinner on tapped row and disables other rows during dispatch (T2 stub: never-resolving onDispatched)", async () => {
+  it("shows inline spinner on tapped row and disables other rows during dispatch (postPlay hanging)", async () => {
     const user = userEvent.setup();
-    vi.stubGlobal(
-      "fetch",
-      mockFetchOnce(200, [
-        makeDevice({ session_id: "tv", name: "TV" }),
-        makeDevice({
-          session_id: "phone",
-          name: "Phone",
-          device_type: "Mobile",
-          client: "Jellyfin Mobile",
-        }),
-      ])
-    );
 
-    // Never-resolving onDispatched pins the component in the dispatching state for the assertion
-    const onDispatched = vi.fn(() => new Promise<void>(() => {}));
+    // First call: GET /api/devices. Second call: POST /api/play → hangs forever.
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve([
+            makeDevice({ session_id: "tv", name: "TV" }),
+            makeDevice({
+              session_id: "phone",
+              name: "Phone",
+              device_type: "Mobile",
+              client: "Jellyfin Mobile",
+            }),
+          ]),
+      })
+      .mockImplementationOnce(() => new Promise(() => {}));
+    vi.stubGlobal("fetch", fetchFn);
 
     render(
       <DevicePickerDialog
         item={makeItem({ title: "Galaxy Quest" })}
         open={true}
         onClose={vi.fn()}
-        onDispatched={onDispatched}
+        onDispatched={vi.fn()}
       />
     );
 
@@ -464,47 +497,9 @@ describe("DevicePickerDialog — Dispatching state and concurrent-dispatch guard
     expect(phoneButton).toBeDisabled();
   });
 
-  it("concurrent-dispatch guard: a second tap during an in-flight dispatch is a no-op (postPlay not re-called)", async () => {
-    const user = userEvent.setup();
-    vi.stubGlobal(
-      "fetch",
-      mockFetchOnce(200, [
-        makeDevice({ session_id: "tv", name: "TV" }),
-        makeDevice({
-          session_id: "phone",
-          name: "Phone",
-          device_type: "Mobile",
-          client: "Jellyfin Mobile",
-        }),
-      ])
-    );
-
-    const onDispatched = vi.fn(() => new Promise<void>(() => {}));
-
-    render(
-      <DevicePickerDialog
-        item={makeItem({ title: "Galaxy Quest" })}
-        open={true}
-        onClose={vi.fn()}
-        onDispatched={onDispatched}
-      />
-    );
-
-    const tvButton = await screen.findByRole("button", {
-      name: "Cast Galaxy Quest to TV, Jellyfin Android TV",
-    });
-    const phoneButton = await screen.findByRole("button", {
-      name: "Cast Galaxy Quest to Phone, Jellyfin Mobile",
-    });
-
-    await user.click(tvButton);
-    // Second tap on the other row — must be ignored because first dispatch is in flight
-    await user.click(phoneButton);
-
-    // onDispatched called exactly once, with the first device's name
-    expect(onDispatched).toHaveBeenCalledTimes(1);
-    expect(onDispatched).toHaveBeenCalledWith("TV");
-  });
+  // The concurrent-dispatch guard is tested under real dispatch semantics in
+  // the "DevicePickerDialog — real dispatch (T4)" describe block below
+  // (see "concurrent-dispatch under real dispatch: ... postPlay called exactly once").
 });
 
 describe("DevicePickerDialog — Offline banner rendering (test-only forceOffline)", () => {
@@ -566,5 +561,255 @@ describe("DevicePickerDialog — Offline banner rendering (test-only forceOfflin
     expect(
       screen.queryByText("That device just went offline — pick another")
     ).toBeNull();
+  });
+});
+
+describe("DevicePickerDialog — real dispatch (T4)", () => {
+  const initialDevices = [
+    makeDevice({ session_id: "tv", name: "TV" }),
+    makeDevice({
+      session_id: "phone",
+      name: "Phone",
+      device_type: "Mobile",
+      client: "Jellyfin Mobile",
+    }),
+  ];
+
+  function responseJSON(status: number, body: unknown) {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: () => Promise.resolve(body),
+    };
+  }
+
+  beforeEach(() => {
+    Object.defineProperty(document, "cookie", {
+      writable: true,
+      value: "csrf_token=test-csrf-value",
+    });
+    mocks.toast.success.mockClear();
+    mocks.toast.error.mockClear();
+    mocks.clearAuth.mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+    document.cookie = "";
+  });
+
+  it("200 success: POST /api/play returns device_name → onDispatched(name) + picker closes", async () => {
+    const user = userEvent.setup();
+    const onDispatched = vi.fn();
+    const onClose = vi.fn();
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(responseJSON(200, initialDevices)) // GET /api/devices
+        .mockResolvedValueOnce(
+          responseJSON(200, { status: "ok", device_name: "TV" })
+        ) // POST /api/play
+    );
+
+    render(
+      <DevicePickerDialog
+        item={makeItem({ title: "Galaxy Quest" })}
+        open={true}
+        onClose={onClose}
+        onDispatched={onDispatched}
+      />
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Cast Galaxy Quest to TV, Jellyfin Android TV",
+      })
+    );
+
+    await waitFor(() => {
+      expect(onDispatched).toHaveBeenCalledTimes(1);
+    });
+    expect(onDispatched).toHaveBeenCalledWith("TV");
+    expect(onClose).toHaveBeenCalled();
+
+    // No error toast on the happy path; success toast fires from the parent
+    // (card-detail), not the picker, so `mocks.toast.success` should also be 0.
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+  });
+
+  it("409 device_offline: picker stays open, offline banner appears (aria-live=assertive), device list re-fetched in place", async () => {
+    const user = userEvent.setup();
+    const onDispatched = vi.fn();
+    const onClose = vi.fn();
+
+    const freshDevices = [
+      makeDevice({ session_id: "phone", name: "Phone (fresh)" }),
+    ];
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(responseJSON(200, initialDevices)) // initial GET /api/devices
+        .mockResolvedValueOnce(responseJSON(409, { error: "device_offline" })) // POST /api/play 409
+        .mockResolvedValueOnce(responseJSON(200, freshDevices)) // refetched GET /api/devices
+    );
+
+    render(
+      <DevicePickerDialog
+        item={makeItem({ title: "Galaxy Quest" })}
+        open={true}
+        onClose={onClose}
+        onDispatched={onDispatched}
+      />
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Cast Galaxy Quest to TV, Jellyfin Android TV",
+      })
+    );
+
+    // Offline banner appears with aria-live=assertive
+    const banner = await screen.findByText(
+      "That device just went offline — pick another"
+    );
+    expect(banner.closest('[aria-live="assertive"]')).not.toBeNull();
+
+    // List refetched — fresh device row appears
+    await screen.findByRole("button", {
+      name: "Cast Galaxy Quest to Phone (fresh), Jellyfin Android TV",
+    });
+
+    // Picker stays open (onClose not called) and onDispatched not called
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onDispatched).not.toHaveBeenCalled();
+    expect(mocks.toast.error).not.toHaveBeenCalled(); // 409 is NOT a toast
+  });
+
+  it("401 auth failure: picker closes, clearAuth() called, toast.error with expired-session copy", async () => {
+    const user = userEvent.setup();
+    const onDispatched = vi.fn();
+    const onClose = vi.fn();
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(responseJSON(200, initialDevices)) // GET /api/devices
+        .mockResolvedValueOnce(
+          responseJSON(401, { error: "jellyfin_auth_failed" })
+        ) // POST /api/play 401
+    );
+
+    render(
+      <DevicePickerDialog
+        item={makeItem({ title: "Galaxy Quest" })}
+        open={true}
+        onClose={onClose}
+        onDispatched={onDispatched}
+      />
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Cast Galaxy Quest to TV, Jellyfin Android TV",
+      })
+    );
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    expect(mocks.clearAuth).toHaveBeenCalledTimes(1);
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      "Your session has expired. Please log in again."
+    );
+    expect(onDispatched).not.toHaveBeenCalled();
+  });
+
+  it("500 generic failure: picker closes, toast.error with generic playback copy", async () => {
+    const user = userEvent.setup();
+    const onDispatched = vi.fn();
+    const onClose = vi.fn();
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(responseJSON(200, initialDevices))
+        .mockResolvedValueOnce(responseJSON(500, { error: "playback_failed" }))
+    );
+
+    render(
+      <DevicePickerDialog
+        item={makeItem({ title: "Galaxy Quest" })}
+        open={true}
+        onClose={onClose}
+        onDispatched={onDispatched}
+      />
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Cast Galaxy Quest to TV, Jellyfin Android TV",
+      })
+    );
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      "Couldn't start playback. Please try again."
+    );
+    expect(mocks.clearAuth).not.toHaveBeenCalled();
+    expect(onDispatched).not.toHaveBeenCalled();
+  });
+
+  it("concurrent-dispatch under real dispatch: second tap while postPlay is in-flight is a no-op (postPlay called exactly once)", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    // Two fetches: initial devices load succeeds, then /api/play hangs forever.
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(responseJSON(200, initialDevices))
+      .mockImplementationOnce(() => new Promise(() => {})); // /api/play hangs
+
+    vi.stubGlobal("fetch", fetchFn);
+
+    render(
+      <DevicePickerDialog
+        item={makeItem({ title: "Galaxy Quest" })}
+        open={true}
+        onClose={onClose}
+        onDispatched={vi.fn()}
+      />
+    );
+
+    const tvButton = await screen.findByRole("button", {
+      name: "Cast Galaxy Quest to TV, Jellyfin Android TV",
+    });
+    const phoneButton = await screen.findByRole("button", {
+      name: "Cast Galaxy Quest to Phone, Jellyfin Mobile",
+    });
+
+    await user.click(tvButton);
+    // Second tap on a different row while the first is still in-flight
+    await user.click(phoneButton);
+
+    // Only two fetch calls total: the initial devices load + ONE play dispatch.
+    // If the guard were state-only (not ref), React 19's batching could allow
+    // a second postPlay to fire.
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+
+    // The second call is the /api/play dispatch
+    const [, playCall] = fetchFn.mock.calls;
+    expect(playCall[0]).toBe("/api/play");
   });
 });

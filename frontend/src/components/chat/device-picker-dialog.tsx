@@ -8,6 +8,7 @@ import {
   MonitorSmartphone,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +16,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { fetchDevices } from "@/lib/api/devices";
+import { fetchDevices, postPlay } from "@/lib/api/devices";
+import { ApiAuthError, DeviceOfflineError } from "@/lib/api/types";
 import type { Device, DeviceType, SearchResultItem } from "@/lib/api/types";
+import { useAuth } from "@/lib/auth/auth-context";
 
 interface DevicePickerDialogProps {
   item: SearchResultItem;
@@ -50,12 +53,15 @@ export function DevicePickerDialog({
   const titleId = useId();
   const descId = useId();
 
+  const { clearAuth } = useAuth();
+
   const [loading, setLoading] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [fetchError, setFetchError] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
+  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
 
   // Ref guards — see spec Technical Considerations.
   const mountedRef = useRef(true);
@@ -71,11 +77,12 @@ export function DevicePickerDialog({
     previousOpenRef.current = open;
     if (open) {
       // Clean slate on every open transition: ensure the first post-open
-      // paint shows the Loading skeleton, not stale devices or a stale
-      // error from the previous session.
+      // paint shows the Loading skeleton, not stale devices/errors/offline
+      // banner from the previous session.
       setLoading(true);
       setDevices([]);
       setFetchError(false);
+      setShowOfflineBanner(false);
     }
   }
 
@@ -133,17 +140,41 @@ export function DevicePickerDialog({
       dispatchInFlightRef.current = true;
       setSelectedSessionId(sessionId);
 
-      const device = devices.find((d) => d.session_id === sessionId);
       try {
-        if (device) {
-          await onDispatched(device.name);
+        const result = await postPlay({
+          item_id: item.jellyfin_id,
+          session_id: sessionId,
+        });
+        if (!mountedRef.current) return;
+        // Success — clear any prior offline state, notify parent, close picker
+        setShowOfflineBanner(false);
+        onDispatched(result.device_name);
+        onClose();
+      } catch (err) {
+        if (!mountedRef.current) return;
+        if (err instanceof ApiAuthError) {
+          // Revoked session — match use-chat.ts:314 pattern: clear auth context
+          // and surface a toast. Middleware handles redirect on next navigation.
+          clearAuth();
+          toast.error("Your session has expired. Please log in again.");
+          onClose();
+        } else if (err instanceof DeviceOfflineError) {
+          // 409 — stay open, show banner, refetch device list in place.
+          setShowOfflineBanner(true);
+          runFetch();
+        } else {
+          // PlaybackFailedError, NetworkError, or anything else — generic
+          // error toast with fixed copy (no err.message interpolation per
+          // Angua's ruling on information-disclosure via toast strings).
+          toast.error("Couldn't start playback. Please try again.");
+          onClose();
         }
       } finally {
         if (mountedRef.current) setSelectedSessionId(null);
         dispatchInFlightRef.current = false;
       }
     },
-    [devices, onDispatched]
+    [clearAuth, item.jellyfin_id, onClose, onDispatched, runFetch]
   );
 
   return (
@@ -160,7 +191,7 @@ export function DevicePickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {forceOffline && (
+        {(forceOffline || showOfflineBanner) && (
           <div
             role="alert"
             aria-live="assertive"
