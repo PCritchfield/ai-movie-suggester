@@ -13,3 +13,7 @@ class JellyfinAuthError(JellyfinError):
 
 class JellyfinConnectionError(JellyfinError):
     """Cannot reach the Jellyfin server."""
+
+
+class DeviceOfflineError(JellyfinError):
+    """Target Jellyfin session is no longer available (404/400 on session ID)."""
