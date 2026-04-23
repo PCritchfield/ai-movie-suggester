@@ -30,6 +30,11 @@ from app.auth.dependencies import get_current_session
 from app.auth.models import SessionMeta
 from app.devices.router import create_devices_router, get_sessions_client
 from app.jellyfin.device_models import Device
+from app.jellyfin.errors import (
+    JellyfinAuthError,
+    JellyfinConnectionError,
+    JellyfinError,
+)
 from app.jellyfin.sessions import JellyfinSessionsClient
 from app.middleware.rate_limit import create_limiter
 from tests.conftest import TEST_SECRET, make_test_settings
@@ -179,3 +184,34 @@ class TestDevicesRouterOpenAPI:
         assert "/api/devices" in openapi["paths"]
         op = openapi["paths"]["/api/devices"]["get"]
         assert "devices" in op.get("tags", [])
+
+
+class TestDevicesRouterErrorMapping:
+    """Jellyfin-layer exceptions map to structured HTTP errors (not 500)."""
+
+    def test_jellyfin_auth_error_returns_401(self) -> None:
+        """Revoked/expired Jellyfin token -> 401 so frontend can re-login."""
+        mock = AsyncMock(spec=JellyfinSessionsClient)
+        mock.list_controllable.side_effect = JellyfinAuthError("token revoked")
+        _, client = _make_devices_app(sessions_client=mock)
+        resp = client.get("/api/devices")
+        assert resp.status_code == 401
+        assert resp.json() == {"detail": "jellyfin_auth_failed"}
+
+    def test_jellyfin_connection_error_returns_503(self) -> None:
+        """Upstream unreachable -> 503."""
+        mock = AsyncMock(spec=JellyfinSessionsClient)
+        mock.list_controllable.side_effect = JellyfinConnectionError("conn refused")
+        _, client = _make_devices_app(sessions_client=mock)
+        resp = client.get("/api/devices")
+        assert resp.status_code == 503
+        assert resp.json() == {"detail": "jellyfin_unreachable"}
+
+    def test_generic_jellyfin_error_returns_502(self) -> None:
+        """Upstream protocol/parse failure -> 502."""
+        mock = AsyncMock(spec=JellyfinSessionsClient)
+        mock.list_controllable.side_effect = JellyfinError("bad upstream")
+        _, client = _make_devices_app(sessions_client=mock)
+        resp = client.get("/api/devices")
+        assert resp.status_code == 502
+        assert resp.json() == {"detail": "jellyfin_error"}

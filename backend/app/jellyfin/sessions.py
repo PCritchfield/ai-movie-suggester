@@ -12,9 +12,11 @@ token state) and a ``__repr__`` that returns a fixed string.
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from app.jellyfin.device_models import Device, DeviceType
+from app.jellyfin.errors import JellyfinError
 
 if TYPE_CHECKING:
     from app.jellyfin.transport import _JellyfinTransport
@@ -73,6 +75,8 @@ class JellyfinSessionsClient:
 
         Raises ``JellyfinAuthError`` on 401.
         Raises ``JellyfinConnectionError`` on transport failure.
+        Raises ``JellyfinError`` if Jellyfin returns a non-JSON response
+        (e.g. a reverse-proxy HTML error page).
         """
         resp = await self._transport.request(
             "GET",
@@ -80,7 +84,12 @@ class JellyfinSessionsClient:
             token=user_token,
         )
 
-        raw: Any = resp.json()
+        try:
+            raw: Any = resp.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            # A reverse proxy in front of Jellyfin may return HTML on an
+            # upstream error; treat as an upstream protocol failure.
+            raise JellyfinError("Jellyfin returned non-JSON response") from exc
         if not isinstance(raw, list):
             # Jellyfin always returns a JSON array; if not, treat as empty
             # rather than crashing.

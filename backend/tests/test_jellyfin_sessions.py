@@ -19,7 +19,7 @@ import httpx
 import pytest
 
 from app.jellyfin.device_models import Device
-from app.jellyfin.errors import JellyfinAuthError
+from app.jellyfin.errors import JellyfinAuthError, JellyfinError
 from app.jellyfin.sessions import JellyfinSessionsClient, _classify_device
 from app.jellyfin.transport import _JellyfinTransport
 
@@ -196,6 +196,27 @@ class TestSessionsClientAuthFailure:
         mock_http.request.return_value = httpx.Response(401, request=_FAKE_REQUEST)
         with pytest.raises(JellyfinAuthError):
             await sessions_client.list_controllable("bad-tok")
+
+
+class TestSessionsClientNonJsonResponse:
+    async def test_non_json_body_raises_jellyfin_error(
+        self,
+        sessions_client: JellyfinSessionsClient,
+        mock_http: AsyncMock,
+    ) -> None:
+        """A 200 with HTML body (e.g. reverse-proxy error) -> JellyfinError."""
+        # Construct a 200 response whose body is not valid JSON. Calling
+        # ``.json()`` on this will raise ``json.JSONDecodeError``.
+        mock_http.request.return_value = httpx.Response(
+            200,
+            content=b"<html><body>502 Bad Gateway</body></html>",
+            headers={"content-type": "text/html"},
+            request=_FAKE_REQUEST,
+        )
+        with pytest.raises(JellyfinError) as excinfo:
+            await sessions_client.list_controllable("tok")
+        # The original JSONDecodeError is preserved as __cause__
+        assert excinfo.value.__cause__ is not None
 
 
 class TestSessionsClientTokenHandling:
