@@ -21,9 +21,12 @@ from app.auth.service import AuthService, cleanup_expired_sessions
 from app.auth.session_store import SessionStore
 from app.chat.conversation_store import ConversationStore
 from app.config import Settings
+from app.devices.router import create_devices_router
 from app.embedding.router import router as embedding_router
 from app.embedding.worker import EmbeddingWorker
 from app.jellyfin.client import JellyfinClient
+from app.jellyfin.sessions import JellyfinSessionsClient
+from app.jellyfin.transport import _JellyfinTransport
 from app.library.store import LibraryStore
 from app.logging_config import configure_logging
 from app.middleware import SecurityHeadersMiddleware
@@ -133,6 +136,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             http_client=http_client,
         )
         app.state.jellyfin_client = jf_client
+
+        # Capability clients (composed against the shared transport — see
+        # app.jellyfin.transport._JellyfinTransport). Request-scoped user
+        # tokens only; no auth state on the instance.
+        jf_sessions_transport = _JellyfinTransport(
+            base_url=settings.jellyfin_url,
+            client=http_client,
+        )
+        app.state.jellyfin_sessions_client = JellyfinSessionsClient(
+            transport=jf_sessions_transport,
+        )
 
         # Permission service (stateless in-memory cache, no init()/close())
         from app.permissions.service import PermissionService
@@ -289,6 +303,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             limiter=limiter,
         )
         app.include_router(chat_router)
+
+        # Devices router — GET /api/devices (Epic 4 remote control)
+        devices_router = create_devices_router(limiter=limiter)
+        app.include_router(devices_router)
 
         # Store settings on app.state for routers that need them
         app.state.settings = settings

@@ -155,6 +155,17 @@ class TestSessionsClientHappyPath:
         )
         assert await sessions_client.list_controllable("tok") == []
 
+    async def test_non_list_body_returns_empty(
+        self,
+        sessions_client: JellyfinSessionsClient,
+        mock_http: AsyncMock,
+    ) -> None:
+        """If Jellyfin somehow returns a non-list, return [] (no crash)."""
+        mock_http.request.return_value = httpx.Response(
+            200, json={"unexpected": "dict"}, request=_FAKE_REQUEST
+        )
+        assert await sessions_client.list_controllable("tok") == []
+
     async def test_missing_supports_remote_control_treated_as_false(
         self,
         sessions_client: JellyfinSessionsClient,
