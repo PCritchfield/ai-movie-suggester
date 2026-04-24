@@ -284,6 +284,19 @@ class TestToLibraryRowCrewExtraction:
         assert row.writers == []
         assert row.composers == []
 
+    def test_empty_name_excluded(self) -> None:
+        """Entries with missing/empty Name are discarded from every bucket."""
+        item = _make_library_item(
+            people=[
+                {"Name": "", "Type": "Actor"},
+                {"Type": "Director"},
+                {"Name": "Real Person", "Type": "Actor"},
+            ]
+        )
+        row = to_library_row(item)
+        assert row.people == ["Real Person"]
+        assert row.directors == []
+
     def test_row_content_hash_matches_compute_content_hash(self) -> None:
         """to_library_row must compute content_hash via compute_content_hash."""
         item = _make_library_item()

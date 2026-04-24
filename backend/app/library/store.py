@@ -145,7 +145,7 @@ class LibraryStore:
             )
             await self._db.commit()
 
-        # Migration: add crew columns if table predates #216
+        # Migration: add crew columns for pre-existing tables
         for col in ("directors", "writers", "composers"):
             if col not in existing_columns:
                 await self._db.execute(

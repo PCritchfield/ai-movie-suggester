@@ -297,6 +297,21 @@ class TestGetMany:
         results = await store.get_many([])
         assert results == []
 
+    async def test_crew_fields_round_trip(self, store: LibraryStore) -> None:
+        """get_many hydrates directors, writers, composers (distinct SELECT path)."""
+        item = _make_item(
+            jellyfin_id="jf-gm-crew",
+            directors=["Roger Corman"],
+            writers=["Charles B. Griffith"],
+            composers=["Les Baxter"],
+        )
+        await store.upsert_many([item])
+        results = await store.get_many(["jf-gm-crew"])
+        assert len(results) == 1
+        assert results[0].directors == ["Roger Corman"]
+        assert results[0].writers == ["Charles B. Griffith"]
+        assert results[0].composers == ["Les Baxter"]
+
 
 class TestGetAllHashes:
     """get_all_hashes() hash mapping."""
@@ -335,6 +350,7 @@ class TestContentHash:
         hash1 = compute_content_hash(item)
         hash2 = compute_content_hash(item)
         assert hash1 == hash2
+        assert len(hash1) == 64  # SHA-256 hex digest
 
     def test_different_input_different_hash(self) -> None:
         item1 = _make_item(title="Alien")
