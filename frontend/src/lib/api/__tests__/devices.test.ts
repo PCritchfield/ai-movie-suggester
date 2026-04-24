@@ -99,6 +99,16 @@ describe("fetchDevices", () => {
   });
 });
 
+// Important: these tests use `vi.spyOn(client, "apiPost")` to verify
+// `postPlay` routes through the shared `apiPost` helper (and therefore
+// carries CSRF). The spy + `await import("../devices")` pattern below works
+// because the module registry is NOT reset between tests — the imported
+// `postPlay` references the same `apiPost` instance the spy patches.
+//
+// If a future `beforeEach` adds `vi.resetModules()`, the spy and the
+// imported `postPlay` would point at different module instances and the
+// spy assertion would silently pass without actually verifying the call.
+// Do NOT add vi.resetModules() to this file without rethinking the pattern.
 describe("postPlay", () => {
   const validRequest: PlayRequest = {
     item_id: "f4e3d2c1",

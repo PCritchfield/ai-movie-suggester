@@ -28,7 +28,8 @@ interface DevicePickerDialogProps {
   onDispatched: (deviceName: string) => void | Promise<void>;
   /**
    * Test-only: forces the offline-banner rendering path without requiring a
-   * real 409 dispatch. T4 will add an internal state path for production use.
+   * real 409 dispatch. The production path uses internal `showOfflineBanner`
+   * state, set to true in `handleTap`'s `DeviceOfflineError` branch.
    */
   forceOffline?: boolean;
 }
@@ -105,10 +106,14 @@ export function DevicePickerDialog({
     } catch (err) {
       if (!mountedRef.current) return;
       if (myFetchId !== fetchIdRef.current) return;
-      // T2: all fetch errors (including ApiAuthError) surface as the generic
-      // fetch-error state so the user can Refresh after re-authenticating.
-      // T4 will split ApiAuthError into the clearAuth + toast flow used by
-      // the dispatch handler (see PR #209).
+      // Deliberate: runFetch errors (including ApiAuthError) surface as the
+      // generic fetch-error state with a Refresh button. The clearAuth + toast
+      // flow only fires from the dispatch path (handleTap), where the user's
+      // tap directly caused the 401. Here the user merely opened the dialog;
+      // forcing logout on passive auth failure would be disproportionate.
+      // If /api/devices starts returning 401 consistently, the user will hit
+      // it again via Refresh and the middleware auth guard will redirect on
+      // the next protected navigation.
       void err;
       setFetchError(true);
     } finally {
@@ -194,7 +199,6 @@ export function DevicePickerDialog({
         {(forceOffline || showOfflineBanner) && (
           <div
             role="alert"
-            aria-live="assertive"
             className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-foreground"
           >
             That device just went offline — pick another

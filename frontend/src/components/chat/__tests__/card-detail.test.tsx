@@ -344,6 +344,17 @@ describe("CardDetail — Cast to TV entry point", () => {
     });
     expect(mocks.toast.success).toHaveBeenCalledTimes(1);
     expect(mocks.toast.error).not.toHaveBeenCalled();
+
+    // Picker should close after successful dispatch (handleTap calls onClose,
+    // which flips pickerOpen back to false in the parent). Assert the tapped
+    // device row is gone — picker DialogContent unmounts via Radix portal.
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", {
+          name: /Cast Galaxy Quest to Living Room TV/i,
+        })
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("pressing Escape with both dialogs open dismisses only the top (picker) dialog; card-detail stays open", async () => {

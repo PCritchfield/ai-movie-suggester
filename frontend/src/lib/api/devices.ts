@@ -28,9 +28,14 @@ export async function postPlay(req: PlayRequest): Promise<PlayResponse> {
   try {
     return await apiPost<PlayResponse>("/api/play", req);
   } catch (err) {
+    // Catch ordering matters: ApiAuthError extends ApiError, so the
+    // ApiAuthError guard MUST run before the ApiError branch — otherwise
+    // auth errors would be swallowed into PlaybackFailedError and the picker
+    // would never trigger the re-login flow. Any future ApiError subclass
+    // with special handling belongs above this block.
     if (err instanceof ApiAuthError) {
-      // Preserve auth errors as-is — T4 picker distinguishes this from
-      // other failures to trigger the re-login flow.
+      // Preserve auth errors as-is — the picker distinguishes ApiAuthError
+      // in its handleTap catch to trigger clearAuth + the re-login toast.
       throw err;
     }
     if (err instanceof ApiError) {
@@ -39,7 +44,10 @@ export async function postPlay(req: PlayRequest): Promise<PlayResponse> {
       }
       throw new PlaybackFailedError(err.status, err.body);
     }
-    // NetworkError or anything else — classify as playback failure.
+    // NetworkError or anything non-ApiError — re-thrown unwrapped. The
+    // picker's handleTap `else` branch treats any non-typed error as a
+    // generic playback failure (shows the "Couldn't start playback" toast),
+    // so wrapping in PlaybackFailedError here would be redundant.
     throw err;
   }
 }

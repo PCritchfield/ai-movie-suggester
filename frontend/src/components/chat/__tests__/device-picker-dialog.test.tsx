@@ -515,7 +515,7 @@ describe("DevicePickerDialog — Offline banner rendering (test-only forceOfflin
     document.cookie = "";
   });
 
-  it("renders offline banner with aria-live=assertive and exact copy when forceOffline is true", async () => {
+  it("renders offline banner with role=alert (implicit aria-live=assertive) and exact copy when forceOffline is true", async () => {
     vi.stubGlobal(
       "fetch",
       mockFetchOnce(200, [makeDevice({ session_id: "tv", name: "TV" })])
@@ -536,9 +536,11 @@ describe("DevicePickerDialog — Offline banner rendering (test-only forceOfflin
     );
     expect(banner).toBeInTheDocument();
 
-    // aria-live="assertive" on the banner (or an enclosing element)
-    const liveRegion = banner.closest('[aria-live="assertive"]');
-    expect(liveRegion).not.toBeNull();
+    // role="alert" on an enclosing element — role="alert" implicitly sets
+    // aria-live="assertive" per the WAI-ARIA spec, so we assert the role
+    // rather than the explicit attribute to avoid double-announcement.
+    const alertRegion = banner.closest('[role="alert"]');
+    expect(alertRegion).not.toBeNull();
   });
 
   it("does NOT render offline banner when forceOffline is false/undefined", async () => {
@@ -641,7 +643,7 @@ describe("DevicePickerDialog — real dispatch (T4)", () => {
     expect(mocks.toast.success).not.toHaveBeenCalled();
   });
 
-  it("409 device_offline: picker stays open, offline banner appears (aria-live=assertive), device list re-fetched in place", async () => {
+  it("409 device_offline: picker stays open, offline banner appears (role=alert), device list re-fetched in place", async () => {
     const user = userEvent.setup();
     const onDispatched = vi.fn();
     const onClose = vi.fn();
@@ -674,11 +676,11 @@ describe("DevicePickerDialog — real dispatch (T4)", () => {
       })
     );
 
-    // Offline banner appears with aria-live=assertive
+    // Offline banner appears with role=alert (implicit aria-live=assertive)
     const banner = await screen.findByText(
       "That device just went offline — pick another"
     );
-    expect(banner.closest('[aria-live="assertive"]')).not.toBeNull();
+    expect(banner.closest('[role="alert"]')).not.toBeNull();
 
     // List refetched — fresh device row appears
     await screen.findByRole("button", {
@@ -803,13 +805,17 @@ describe("DevicePickerDialog — real dispatch (T4)", () => {
     // Second tap on a different row while the first is still in-flight
     await user.click(phoneButton);
 
-    // Only two fetch calls total: the initial devices load + ONE play dispatch.
-    // If the guard were state-only (not ref), React 19's batching could allow
-    // a second postPlay to fire.
-    expect(fetchFn).toHaveBeenCalledTimes(2);
-
-    // The second call is the /api/play dispatch
-    const [, playCall] = fetchFn.mock.calls;
-    expect(playCall[0]).toBe("/api/play");
+    // Exactly one POST to /api/play fired, regardless of call order. The
+    // earlier form (asserting fetchFn.mock.calls[1][0] === "/api/play") would
+    // silently pass if a future refactor inserted another request (e.g., a
+    // preflight) ahead of the dispatch.
+    expect(fetchFn).toHaveBeenCalledWith(
+      "/api/play",
+      expect.objectContaining({ method: "POST" })
+    );
+    const playCalls = fetchFn.mock.calls.filter(
+      (call) => call[0] === "/api/play"
+    );
+    expect(playCalls).toHaveLength(1);
   });
 });
