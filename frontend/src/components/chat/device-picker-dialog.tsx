@@ -8,6 +8,7 @@ import {
   MonitorSmartphone,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -15,17 +16,27 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { fetchDevices } from "@/lib/api/devices";
+import { fetchDevices, postPlay } from "@/lib/api/devices";
+import { ApiAuthError, DeviceOfflineError } from "@/lib/api/types";
 import type { Device, DeviceType, SearchResultItem } from "@/lib/api/types";
+import { useAuth } from "@/lib/auth/auth-context";
 
 interface DevicePickerDialogProps {
   item: SearchResultItem;
   open: boolean;
   onClose: () => void;
-  onDispatched: (deviceName: string) => void | Promise<void>;
+  /**
+   * Called by the picker when postPlay has succeeded. Must be synchronous
+   * (return `void`). The picker invokes this without `await` and does NOT
+   * handle rejections — a Promise-returning handler could produce an
+   * unhandled rejection. If the parent needs async work on dispatch, it
+   * should schedule that work internally (e.g., wrap in a `.catch`).
+   */
+  onDispatched: (deviceName: string) => void;
   /**
    * Test-only: forces the offline-banner rendering path without requiring a
-   * real 409 dispatch. T4 will add an internal state path for production use.
+   * real 409 dispatch. The production path uses internal `showOfflineBanner`
+   * state, set to true in `handleTap`'s `DeviceOfflineError` branch.
    */
   forceOffline?: boolean;
 }
@@ -50,12 +61,15 @@ export function DevicePickerDialog({
   const titleId = useId();
   const descId = useId();
 
+  const { clearAuth } = useAuth();
+
   const [loading, setLoading] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [fetchError, setFetchError] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
+  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
 
   // Ref guards — see spec Technical Considerations.
   const mountedRef = useRef(true);
@@ -71,11 +85,12 @@ export function DevicePickerDialog({
     previousOpenRef.current = open;
     if (open) {
       // Clean slate on every open transition: ensure the first post-open
-      // paint shows the Loading skeleton, not stale devices or a stale
-      // error from the previous session.
+      // paint shows the Loading skeleton, not stale devices/errors/offline
+      // banner from the previous session.
       setLoading(true);
       setDevices([]);
       setFetchError(false);
+      setShowOfflineBanner(false);
     }
   }
 
@@ -98,10 +113,14 @@ export function DevicePickerDialog({
     } catch (err) {
       if (!mountedRef.current) return;
       if (myFetchId !== fetchIdRef.current) return;
-      // T2: all fetch errors (including ApiAuthError) surface as the generic
-      // fetch-error state so the user can Refresh after re-authenticating.
-      // T4 will split ApiAuthError into the clearAuth + toast flow used by
-      // the dispatch handler (see PR #209).
+      // Deliberate: runFetch errors (including ApiAuthError) surface as the
+      // generic fetch-error state with a Refresh button. The clearAuth + toast
+      // flow only fires from the dispatch path (handleTap), where the user's
+      // tap directly caused the 401. Here the user merely opened the dialog;
+      // forcing logout on passive auth failure would be disproportionate.
+      // If /api/devices starts returning 401 consistently, the user will hit
+      // it again via Refresh and the middleware auth guard will redirect on
+      // the next protected navigation.
       void err;
       setFetchError(true);
     } finally {
@@ -133,17 +152,41 @@ export function DevicePickerDialog({
       dispatchInFlightRef.current = true;
       setSelectedSessionId(sessionId);
 
-      const device = devices.find((d) => d.session_id === sessionId);
       try {
-        if (device) {
-          await onDispatched(device.name);
+        const result = await postPlay({
+          item_id: item.jellyfin_id,
+          session_id: sessionId,
+        });
+        if (!mountedRef.current) return;
+        // Success — clear any prior offline state, notify parent, close picker
+        setShowOfflineBanner(false);
+        onDispatched(result.device_name);
+        onClose();
+      } catch (err) {
+        if (!mountedRef.current) return;
+        if (err instanceof ApiAuthError) {
+          // Revoked session — match use-chat.ts:314 pattern: clear auth context
+          // and surface a toast. Middleware handles redirect on next navigation.
+          clearAuth();
+          toast.error("Your session has expired. Please log in again.");
+          onClose();
+        } else if (err instanceof DeviceOfflineError) {
+          // 409 — stay open, show banner, refetch device list in place.
+          setShowOfflineBanner(true);
+          runFetch();
+        } else {
+          // PlaybackFailedError, NetworkError, or anything else — generic
+          // error toast with fixed copy (no err.message interpolation per
+          // Angua's ruling on information-disclosure via toast strings).
+          toast.error("Couldn't start playback. Please try again.");
+          onClose();
         }
       } finally {
         if (mountedRef.current) setSelectedSessionId(null);
         dispatchInFlightRef.current = false;
       }
     },
-    [devices, onDispatched]
+    [clearAuth, item.jellyfin_id, onClose, onDispatched, runFetch]
   );
 
   return (
@@ -160,10 +203,9 @@ export function DevicePickerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {forceOffline && (
+        {(forceOffline || showOfflineBanner) && (
           <div
             role="alert"
-            aria-live="assertive"
             className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-foreground"
           >
             That device just went offline — pick another

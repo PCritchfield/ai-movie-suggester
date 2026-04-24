@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ApiAuthError } from "../types";
-import type { Device } from "../types";
+import {
+  ApiAuthError,
+  DeviceOfflineError,
+  PlaybackFailedError,
+} from "../types";
+import type { Device, PlayRequest } from "../types";
+import * as client from "../client";
 
 function mockFetch(status: number, body: unknown): void {
   vi.stubGlobal(
@@ -91,5 +96,88 @@ describe("fetchDevices", () => {
 
     await expect(fetchDevices()).rejects.toThrow(ApiAuthError);
     await expect(fetchDevices()).rejects.toHaveProperty("status", 403);
+  });
+});
+
+// Important: these tests use `vi.spyOn(client, "apiPost")` to verify
+// `postPlay` routes through the shared `apiPost` helper (and therefore
+// carries CSRF). The spy + `await import("../devices")` pattern below works
+// because the module registry is NOT reset between tests — the imported
+// `postPlay` references the same `apiPost` instance the spy patches.
+//
+// If a future `beforeEach` adds `vi.resetModules()`, the spy and the
+// imported `postPlay` would point at different module instances and the
+// spy assertion would silently pass without actually verifying the call.
+// Do NOT add vi.resetModules() to this file without rethinking the pattern.
+describe("postPlay", () => {
+  const validRequest: PlayRequest = {
+    item_id: "f4e3d2c1",
+    session_id: "a1b2c3d4",
+  };
+
+  beforeEach(() => {
+    Object.defineProperty(document, "cookie", {
+      writable: true,
+      value: "csrf_token=test-csrf-value",
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.cookie = "";
+  });
+
+  it("resolves to PlayResponse {status, device_name} on 200 and routes through apiPost (not raw fetch)", async () => {
+    mockFetch(200, { status: "ok", device_name: "Living Room TV" });
+    const apiPostSpy = vi.spyOn(client, "apiPost");
+
+    const { postPlay } = await import("../devices");
+    const result = await postPlay(validRequest);
+
+    expect(result).toEqual({ status: "ok", device_name: "Living Room TV" });
+
+    // Angua C1 — guard against a regression that bypasses apiPost (and therefore CSRF).
+    expect(apiPostSpy).toHaveBeenCalledTimes(1);
+    expect(apiPostSpy).toHaveBeenCalledWith("/api/play", validRequest);
+
+    // CSRF header present in the outgoing fetch call (apiPost's responsibility, re-asserted here).
+    const call = vi.mocked(fetch).mock.calls[0];
+    const headers = call[1]?.headers as Record<string, string>;
+    expect(headers["X-CSRF-Token"]).toBe("test-csrf-value");
+
+    // Body shape matches PlayRequest
+    expect(JSON.parse(call[1]?.body as string)).toEqual(validRequest);
+  });
+
+  it("rejects with ApiAuthError on 401 (passes through — T4 picker will handle re-login)", async () => {
+    mockFetch(401, { error: "jellyfin_auth_failed" });
+    const { postPlay } = await import("../devices");
+
+    await expect(postPlay(validRequest)).rejects.toThrow(ApiAuthError);
+    await expect(postPlay(validRequest)).rejects.toHaveProperty("status", 401);
+  });
+
+  it("rejects with DeviceOfflineError on 409", async () => {
+    mockFetch(409, { error: "device_offline" });
+    const { postPlay } = await import("../devices");
+
+    await expect(postPlay(validRequest)).rejects.toThrow(DeviceOfflineError);
+    await expect(postPlay(validRequest)).rejects.toHaveProperty("status", 409);
+  });
+
+  it("rejects with PlaybackFailedError on 500", async () => {
+    mockFetch(500, { error: "playback_failed" });
+    const { postPlay } = await import("../devices");
+
+    await expect(postPlay(validRequest)).rejects.toThrow(PlaybackFailedError);
+    await expect(postPlay(validRequest)).rejects.toHaveProperty("status", 500);
+  });
+
+  it("rejects with PlaybackFailedError on any other non-ok non-auth status (e.g., 502)", async () => {
+    mockFetch(502, { detail: "Bad gateway" });
+    const { postPlay } = await import("../devices");
+
+    await expect(postPlay(validRequest)).rejects.toThrow(PlaybackFailedError);
+    await expect(postPlay(validRequest)).rejects.toHaveProperty("status", 502);
   });
 });

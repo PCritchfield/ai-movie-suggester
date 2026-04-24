@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useId, useState } from "react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -128,9 +129,8 @@ export function CardDetail({ item, open, onClose }: CardDetailProps) {
         item={item}
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onDispatched={() => {
-          // T2 stub — T4 will replace with toast.success(`Now playing on ${deviceName}`)
-          setPickerOpen(false);
+        onDispatched={(deviceName) => {
+          toast.success(`Now playing on ${deviceName}`);
         }}
       />
     </>
