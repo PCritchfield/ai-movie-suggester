@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS library_items (
     people            TEXT NOT NULL DEFAULT '[]',
     content_hash      TEXT NOT NULL,
     synced_at         INTEGER NOT NULL,
+    runtime_minutes   INTEGER,
     deleted_at        INTEGER,
     directors         TEXT NOT NULL DEFAULT '[]',
     writers           TEXT NOT NULL DEFAULT '[]',
