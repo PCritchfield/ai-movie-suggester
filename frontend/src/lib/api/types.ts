@@ -41,6 +41,19 @@ export class ApiAuthError extends ApiError {
   }
 }
 
+// --- Device / Play types (Epic 4 Remote Control — mirroring backend models) ---
+
+/** Mirrors backend DeviceType literal from backend/app/jellyfin/device_models.py */
+export type DeviceType = "Tv" | "Mobile" | "Tablet" | "Other";
+
+/** Mirrors backend Device Pydantic model from backend/app/jellyfin/device_models.py */
+export interface Device {
+  session_id: string;
+  name: string;
+  client: string;
+  device_type: DeviceType;
+}
+
 // --- Chat / Search types (mirroring backend models) ---
 
 /** Mirrors backend SearchResultItem from backend/app/search/models.py */
