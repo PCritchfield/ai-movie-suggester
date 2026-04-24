@@ -6,17 +6,15 @@ Uses the existing fixture chain: jellyfin -> admin_auth_token -> test_users.
 
 from __future__ import annotations
 
-import dataclasses
 from typing import TYPE_CHECKING
 
 import pytest
 
-from app.library.hashing import compute_content_hash
 from app.sync.engine import to_library_row
 
 if TYPE_CHECKING:
     from app.jellyfin.client import JellyfinClient
-    from app.jellyfin.models import AuthResult, LibraryItem, PaginatedItems
+    from app.jellyfin.models import AuthResult, PaginatedItems
     from app.library.models import LibraryItemRow
     from app.library.store import LibraryStore
 
@@ -24,15 +22,6 @@ from tests.integration.conftest import (
     EXPECTED_MOVIES,
     EXPECTED_SHOWS,
 )
-
-
-def _to_library_row(item: LibraryItem) -> LibraryItemRow:
-    """Convert a LibraryItem to a LibraryItemRow using the sync engine's converter."""
-    # Build a temporary row to compute a content hash, then replace the
-    # placeholder. Note: SyncEngine uses build_composite_text + SHA-256;
-    # this uses compute_content_hash which is sufficient for test assertions.
-    temp = to_library_row(item, "placeholder")
-    return dataclasses.replace(temp, content_hash=compute_content_hash(temp))
 
 
 @pytest.mark.integration
@@ -73,7 +62,7 @@ async def test_fetch_and_store_cycle(
     ):
         total_items = page.total_count
         for item in page.items:
-            all_rows.append(_to_library_row(item))
+            all_rows.append(to_library_row(item))
 
     if all_rows:
         await library_store.upsert_many(all_rows)

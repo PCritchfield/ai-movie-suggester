@@ -12,7 +12,8 @@ import pytest
 
 from app.jellyfin.errors import JellyfinConnectionError
 from app.jellyfin.models import LibraryItem, PaginatedItems
-from app.sync.engine import SyncEngine
+from app.library.hashing import compute_content_hash
+from app.sync.engine import SyncEngine, to_library_row
 from app.sync.models import (
     SYNC_STATUS_COMPLETED,
     SYNC_STATUS_FAILED,
@@ -215,6 +216,95 @@ def _make_mock_client(
 
 
 # ---------------------------------------------------------------------------
+# to_library_row — per-Type crew extraction
+# ---------------------------------------------------------------------------
+
+
+class TestToLibraryRowCrewExtraction:
+    """Verify to_library_row extracts crew roles from Jellyfin's People array."""
+
+    def test_extracts_actors_into_people(self) -> None:
+        item = _make_library_item(
+            people=[
+                {"Name": "Sigourney Weaver", "Type": "Actor"},
+                {"Name": "Ridley Scott", "Type": "Director"},
+            ]
+        )
+        row = to_library_row(item)
+        assert row.people == ["Sigourney Weaver"]
+
+    def test_extracts_directors(self) -> None:
+        item = _make_library_item(
+            people=[
+                {"Name": "Ridley Scott", "Type": "Director"},
+                {"Name": "Sigourney Weaver", "Type": "Actor"},
+            ]
+        )
+        row = to_library_row(item)
+        assert row.directors == ["Ridley Scott"]
+
+    def test_extracts_writers(self) -> None:
+        item = _make_library_item(
+            people=[
+                {"Name": "Dan O'Bannon", "Type": "Writer"},
+                {"Name": "Ronald Shusett", "Type": "Writer"},
+            ]
+        )
+        row = to_library_row(item)
+        assert row.writers == ["Dan O'Bannon", "Ronald Shusett"]
+
+    def test_extracts_composers(self) -> None:
+        item = _make_library_item(
+            people=[
+                {"Name": "Jerry Goldsmith", "Type": "Composer"},
+            ]
+        )
+        row = to_library_row(item)
+        assert row.composers == ["Jerry Goldsmith"]
+
+    def test_unknown_types_discarded(self) -> None:
+        """Types we don't bucket (e.g. Producer, GuestStar) don't land anywhere."""
+        item = _make_library_item(
+            people=[
+                {"Name": "Some Producer", "Type": "Producer"},
+                {"Name": "Guest Star", "Type": "GuestStar"},
+            ]
+        )
+        row = to_library_row(item)
+        assert row.people == []
+        assert row.directors == []
+        assert row.writers == []
+        assert row.composers == []
+
+    def test_empty_people_gives_empty_crew(self) -> None:
+        item = _make_library_item(people=[])
+        row = to_library_row(item)
+        assert row.people == []
+        assert row.directors == []
+        assert row.writers == []
+        assert row.composers == []
+
+    def test_empty_name_excluded(self) -> None:
+        """Entries with missing/empty Name are discarded from every bucket."""
+        item = _make_library_item(
+            people=[
+                {"Name": "", "Type": "Actor"},
+                {"Type": "Director"},
+                {"Name": "Real Person", "Type": "Actor"},
+            ]
+        )
+        row = to_library_row(item)
+        assert row.people == ["Real Person"]
+        assert row.directors == []
+
+    def test_row_content_hash_matches_compute_content_hash(self) -> None:
+        """to_library_row must compute content_hash via compute_content_hash."""
+        item = _make_library_item()
+        row = to_library_row(item)
+        assert row.content_hash == compute_content_hash(row)
+
+
+# ---------------------------------------------------------------------------
 # Task 3.0 tests — SyncEngine core
 # ---------------------------------------------------------------------------
 
@@ -266,11 +356,8 @@ async def test_sync_unchanged_items() -> None:
     item = _make_library_item("jf-001", "Movie One")
     page = _make_paginated([item])
 
-    # Pre-compute the hash the engine will produce
-    from app.ollama.text_builder import build_composite_text
-
-    text = build_composite_text(item).text
-    expected_hash = SyncEngine._compute_hash(text)
+    # Pre-compute the hash the engine will produce from the row
+    expected_hash = to_library_row(item).content_hash
 
     store = _make_mock_store()
     store.get_all_hashes.return_value = {"jf-001": expected_hash}
@@ -370,16 +457,17 @@ async def test_sync_per_item_failure() -> None:
 
     engine = SyncEngine(store, client, settings)
 
-    # Make build_composite_text fail for the second item
-    def _patched_build(item: LibraryItem):  # type: ignore[type-arg]
+    # Make row construction fail for the second item; delegate to the
+    # real function (bound via module-level import) for the others.
+    _real_to_row = to_library_row
+
+    def _patched_to_row(item: LibraryItem):  # type: ignore[type-arg]
         if item.id == "jf-002":
             msg = "Simulated failure"
             raise ValueError(msg)
-        from app.ollama.text_builder import build_composite_text as _real
+        return _real_to_row(item)
 
-        return _real(item)
-
-    with patch("app.sync.engine.build_composite_text", side_effect=_patched_build):
+    with patch("app.sync.engine.to_library_row", side_effect=_patched_to_row):
         result = await engine.run_sync()
 
     assert result.items_failed == 1
@@ -474,22 +562,6 @@ async def test_sync_missing_admin_user_id() -> None:
 
     with pytest.raises(SyncConfigError, match="not configured"):
         await engine.run_sync()
-
-
-def test_hash_determinism() -> None:
-    """Same input text produces the same hash."""
-    text = "Title: Test Movie. A great overview. Genres: Action, Sci-Fi. Year: 2024."
-    h1 = SyncEngine._compute_hash(text)
-    h2 = SyncEngine._compute_hash(text)
-    assert h1 == h2
-    assert len(h1) == 64  # SHA-256 hex digest
-
-
-def test_hash_different_input() -> None:
-    """Different input text produces different hashes."""
-    h1 = SyncEngine._compute_hash("Movie A")
-    h2 = SyncEngine._compute_hash("Movie B")
-    assert h1 != h2
 
 
 @pytest.mark.asyncio
