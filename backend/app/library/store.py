@@ -35,7 +35,10 @@ CREATE TABLE IF NOT EXISTS library_items (
     people            TEXT NOT NULL DEFAULT '[]',
     content_hash      TEXT NOT NULL,
     synced_at         INTEGER NOT NULL,
-    deleted_at        INTEGER
+    deleted_at        INTEGER,
+    directors         TEXT NOT NULL DEFAULT '[]',
+    writers           TEXT NOT NULL DEFAULT '[]',
+    composers         TEXT NOT NULL DEFAULT '[]'
 )
 """
 
@@ -142,6 +145,15 @@ class LibraryStore:
             )
             await self._db.commit()
 
+        # Migration: add crew columns if table predates #216
+        for col in ("directors", "writers", "composers"):
+            if col not in existing_columns:
+                await self._db.execute(
+                    f"ALTER TABLE library_items ADD COLUMN {col} "
+                    "TEXT NOT NULL DEFAULT '[]'"
+                )
+                await self._db.commit()
+
         await self._db.execute(_CREATE_SYNC_RUNS)
         await self._db.execute(_CREATE_INDEX_SYNC_RUNS_STARTED)
         await self._db.commit()
@@ -176,6 +188,9 @@ class LibraryStore:
           9: content_hash   TEXT NOT NULL
          10: synced_at      INTEGER NOT NULL
          11: runtime_minutes INTEGER (nullable)
+         12: directors      TEXT (JSON array)
+         13: writers        TEXT (JSON array)
+         14: composers      TEXT (JSON array)
         """
         return LibraryItemRow(
             jellyfin_id=row[0],
@@ -190,6 +205,9 @@ class LibraryStore:
             content_hash=row[9],
             synced_at=row[10],
             runtime_minutes=row[11],
+            directors=json.loads(row[12]),
+            writers=json.loads(row[13]),
+            composers=json.loads(row[14]),
         )
 
     async def _get_hashes_for_ids(self, ids: list[str]) -> dict[str, str]:
@@ -256,6 +274,9 @@ class LibraryStore:
                     item.content_hash,
                     item.synced_at,
                     item.runtime_minutes,
+                    json.dumps(item.directors),
+                    json.dumps(item.writers),
+                    json.dumps(item.composers),
                 )
             )
 
@@ -266,8 +287,9 @@ class LibraryStore:
                     """INSERT INTO library_items
                        (jellyfin_id, title, overview, production_year,
                         genres, tags, studios, community_rating,
-                        people, content_hash, synced_at, runtime_minutes)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        people, content_hash, synced_at, runtime_minutes,
+                        directors, writers, composers)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(jellyfin_id) DO UPDATE SET
                         title = excluded.title,
                         overview = excluded.overview,
@@ -279,7 +301,10 @@ class LibraryStore:
                         people = excluded.people,
                         content_hash = excluded.content_hash,
                         synced_at = excluded.synced_at,
-                        runtime_minutes = excluded.runtime_minutes""",
+                        runtime_minutes = excluded.runtime_minutes,
+                        directors = excluded.directors,
+                        writers = excluded.writers,
+                        composers = excluded.composers""",
                     params_list,
                 )
             except Exception:
@@ -294,7 +319,8 @@ class LibraryStore:
         cursor = await self._conn.execute(
             """SELECT jellyfin_id, title, overview, production_year,
                       genres, tags, studios, community_rating,
-                      people, content_hash, synced_at, runtime_minutes
+                      people, content_hash, synced_at, runtime_minutes,
+                      directors, writers, composers
                FROM library_items WHERE jellyfin_id = ?""",
             (jellyfin_id,),
         )
@@ -321,7 +347,8 @@ class LibraryStore:
             cursor = await self._conn.execute(
                 f"""SELECT jellyfin_id, title, overview, production_year,
                           genres, tags, studios, community_rating,
-                          people, content_hash, synced_at, runtime_minutes
+                          people, content_hash, synced_at, runtime_minutes,
+                          directors, writers, composers
                    FROM library_items WHERE jellyfin_id IN ({placeholders})""",
                 batch,
             )

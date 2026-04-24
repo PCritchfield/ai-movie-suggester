@@ -6,15 +6,15 @@ Fetches Jellyfin library, diffs against store, enqueues changes.
 from __future__ import annotations
 
 import asyncio
-import hashlib
+import dataclasses
 import logging
 import os
 import time
 from typing import TYPE_CHECKING
 
 from app.jellyfin.errors import JellyfinConnectionError, JellyfinError
+from app.library.hashing import compute_content_hash
 from app.library.models import LibraryItemRow
-from app.library.text_builder import build_composite_text
 from app.sync.models import (
     SYNC_STATUS_COMPLETED,
     SYNC_STATUS_FAILED,
@@ -35,15 +35,38 @@ if TYPE_CHECKING:
 _logger = logging.getLogger(__name__)
 
 
-def to_library_row(item: LibraryItem, content_hash: str) -> LibraryItemRow:
+_CREW_ROLE_MAP = {
+    "Actor": "people",
+    "Director": "directors",
+    "Writer": "writers",
+    "Composer": "composers",
+}
+
+
+def to_library_row(item: LibraryItem) -> LibraryItemRow:
     """Convert a Jellyfin LibraryItem to a LibraryItemRow for storage.
 
-    Extracts actor names from the people list (filtering by Type == "Actor").
+    Buckets `item.people` by ``Type`` into ``people`` (actors), ``directors``,
+    ``writers``, and ``composers``. Other crew roles are discarded. The
+    returned row's ``content_hash`` is computed internally via
+    ``compute_content_hash`` so callers never have to keep hash derivation
+    and row construction in sync.
     """
-    people = [
-        p["Name"] for p in item.people if p.get("Type") == "Actor" and "Name" in p
-    ]
-    return LibraryItemRow(
+    buckets: dict[str, list[str]] = {
+        "people": [],
+        "directors": [],
+        "writers": [],
+        "composers": [],
+    }
+    for person in item.people:
+        name = person.get("Name")
+        if not name:
+            continue
+        bucket = _CREW_ROLE_MAP.get(person.get("Type", ""))
+        if bucket is not None:
+            buckets[bucket].append(name)
+
+    row = LibraryItemRow(
         jellyfin_id=item.id,
         title=item.name,
         overview=item.overview,
@@ -52,11 +75,15 @@ def to_library_row(item: LibraryItem, content_hash: str) -> LibraryItemRow:
         tags=item.tags,
         studios=item.studios,
         community_rating=item.community_rating,
-        people=people,
-        content_hash=content_hash,
+        people=buckets["people"],
+        content_hash="",
         synced_at=int(time.time()),
         runtime_minutes=item.runtime_minutes,
+        directors=buckets["directors"],
+        writers=buckets["writers"],
+        composers=buckets["composers"],
     )
+    return dataclasses.replace(row, content_hash=compute_content_hash(row))
 
 
 class SyncEngine:
@@ -108,11 +135,6 @@ class SyncEngine:
     async def get_last_run(self) -> SyncRunRow | None:
         """Return the most recent sync run, or None."""
         return await self._library_store.get_last_sync_run()
-
-    @staticmethod
-    def _compute_hash(text: str) -> str:
-        """Compute a SHA-256 hex digest from the given text."""
-        return hashlib.sha256(text.encode()).hexdigest()
 
     async def run_sync(self) -> SyncResult:
         """Execute an incremental library sync.
@@ -183,28 +205,22 @@ class SyncEngine:
                     for item in page.items:
                         # Track as seen regardless of processing success —
                         # an item present in Jellyfin should not be tombstoned
-                        # just because build_composite_text failed on it
+                        # just because row construction failed on it
                         seen_ids.add(item.id)
                         try:
-                            composite_result = build_composite_text(item)
-                            content_hash = self._compute_hash(composite_result.text)
+                            row = to_library_row(item)
                             state.items_processed += 1
 
                             old_hash = existing_hashes.get(item.id)
                             if old_hash is None:
-                                # New item
                                 state.items_created += 1
-                                row = to_library_row(item, content_hash)
                                 rows_to_upsert.append(row)
                                 ids_to_enqueue.append(item.id)
-                            elif old_hash != content_hash:
-                                # Changed item
+                            elif old_hash != row.content_hash:
                                 state.items_updated += 1
-                                row = to_library_row(item, content_hash)
                                 rows_to_upsert.append(row)
                                 ids_to_enqueue.append(item.id)
                             else:
-                                # Unchanged
                                 state.items_unchanged += 1
                         except Exception:
                             _logger.warning(

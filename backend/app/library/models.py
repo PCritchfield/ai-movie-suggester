@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
@@ -14,8 +14,9 @@ class LibraryItemRow:
     """A library item row as stored in the database.
 
     People contains actor names only (filtered from Jellyfin's full People list).
-    JSON array fields (genres, tags, studios, people) are serialized to/from
-    JSON strings by the store layer.
+    directors, writers, composers hold the respective crew role names.
+    JSON array fields (genres, tags, studios, people, directors, writers,
+    composers) are serialized to/from JSON strings by the store layer.
     """
 
     jellyfin_id: str
@@ -30,6 +31,9 @@ class LibraryItemRow:
     content_hash: str  # SHA-256 hex digest
     synced_at: int  # Unix epoch seconds
     runtime_minutes: int | None = None
+    directors: list[str] = field(default_factory=list)
+    writers: list[str] = field(default_factory=list)
+    composers: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

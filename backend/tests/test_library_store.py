@@ -34,6 +34,9 @@ def _make_item(
     content_hash: str = "abc123hash",
     synced_at: int | None = None,
     runtime_minutes: int | None = 117,
+    directors: list[str] | None = None,
+    writers: list[str] | None = None,
+    composers: list[str] | None = None,
 ) -> LibraryItemRow:
     """Helper to build LibraryItemRow with sensible defaults."""
     return LibraryItemRow(
@@ -49,6 +52,9 @@ def _make_item(
         content_hash=content_hash,
         synced_at=synced_at if synced_at is not None else _now(),
         runtime_minutes=runtime_minutes,
+        directors=directors if directors is not None else ["Ridley Scott"],
+        writers=writers if writers is not None else ["Dan O'Bannon"],
+        composers=composers if composers is not None else ["Jerry Goldsmith"],
     )
 
 
@@ -101,6 +107,54 @@ class TestInit:
         s = LibraryStore("/tmp/nonexistent.db")
         with pytest.raises(RuntimeError, match="LibraryStore not initialised"):
             _ = s._conn
+
+    async def test_crew_columns_exist_on_fresh_db(self, store: LibraryStore) -> None:
+        """directors, writers, composers columns are present on a fresh init."""
+        cursor = await store._conn.execute("PRAGMA table_info(library_items)")
+        rows = await cursor.fetchall()
+        columns = {row[1] for row in rows}
+        assert "directors" in columns
+        assert "writers" in columns
+        assert "composers" in columns
+
+    async def test_crew_columns_added_to_legacy_db(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Opening a pre-existing DB without crew columns adds them via ALTER TABLE."""
+        import aiosqlite
+
+        db_path = tmp_path / "legacy.db"
+        async with aiosqlite.connect(str(db_path)) as conn:
+            await conn.execute(
+                "CREATE TABLE library_items ("
+                " jellyfin_id TEXT PRIMARY KEY,"
+                " title TEXT NOT NULL,"
+                " overview TEXT,"
+                " production_year INTEGER,"
+                " genres TEXT NOT NULL DEFAULT '[]',"
+                " tags TEXT NOT NULL DEFAULT '[]',"
+                " studios TEXT NOT NULL DEFAULT '[]',"
+                " community_rating REAL,"
+                " people TEXT NOT NULL DEFAULT '[]',"
+                " content_hash TEXT NOT NULL,"
+                " synced_at INTEGER NOT NULL,"
+                " deleted_at INTEGER,"
+                " runtime_minutes INTEGER"
+                ")"
+            )
+            await conn.commit()
+
+        s = LibraryStore(str(db_path))
+        await s.init()
+        try:
+            cursor = await s._conn.execute("PRAGMA table_info(library_items)")
+            rows = await cursor.fetchall()
+            columns = {row[1] for row in rows}
+            assert "directors" in columns
+            assert "writers" in columns
+            assert "composers" in columns
+        finally:
+            await s.close()
 
 
 class TestUpsertMany:
@@ -179,6 +233,36 @@ class TestGet:
         assert fetched is not None
         assert fetched.runtime_minutes == 90
 
+    async def test_crew_fields_round_trip(self, store: LibraryStore) -> None:
+        """directors, writers, composers persist and reload intact."""
+        item = _make_item(
+            jellyfin_id="jf-crew",
+            directors=["Roger Corman"],
+            writers=["Charles B. Griffith", "Robert Towne"],
+            composers=["Les Baxter"],
+        )
+        await store.upsert_many([item])
+        fetched = await store.get("jf-crew")
+        assert fetched is not None
+        assert fetched.directors == ["Roger Corman"]
+        assert fetched.writers == ["Charles B. Griffith", "Robert Towne"]
+        assert fetched.composers == ["Les Baxter"]
+
+    async def test_empty_crew_fields_round_trip(self, store: LibraryStore) -> None:
+        """Empty crew lists round-trip as empty arrays, not NULL."""
+        item = _make_item(
+            jellyfin_id="jf-no-crew",
+            directors=[],
+            writers=[],
+            composers=[],
+        )
+        await store.upsert_many([item])
+        fetched = await store.get("jf-no-crew")
+        assert fetched is not None
+        assert fetched.directors == []
+        assert fetched.writers == []
+        assert fetched.composers == []
+
     async def test_runtime_minutes_null_round_trips(self, store: LibraryStore) -> None:
         item = _make_item(jellyfin_id="jf-no-runtime", runtime_minutes=None)
         await store.upsert_many([item])
@@ -256,6 +340,27 @@ class TestContentHash:
         item1 = _make_item(title="Alien")
         item2 = _make_item(title="Aliens")
         assert compute_content_hash(item1) != compute_content_hash(item2)
+
+    def test_different_directors_different_hash(self) -> None:
+        item1 = _make_item(directors=["Ridley Scott"])
+        item2 = _make_item(directors=["James Cameron"])
+        assert compute_content_hash(item1) != compute_content_hash(item2)
+
+    def test_different_writers_different_hash(self) -> None:
+        item1 = _make_item(writers=["Dan O'Bannon"])
+        item2 = _make_item(writers=["Someone Else"])
+        assert compute_content_hash(item1) != compute_content_hash(item2)
+
+    def test_different_composers_different_hash(self) -> None:
+        item1 = _make_item(composers=["Jerry Goldsmith"])
+        item2 = _make_item(composers=["John Williams"])
+        assert compute_content_hash(item1) != compute_content_hash(item2)
+
+    def test_crew_order_irrelevant(self) -> None:
+        """Hash is stable under reordering of crew lists."""
+        item1 = _make_item(directors=["A", "B"], writers=["X", "Y"])
+        item2 = _make_item(directors=["B", "A"], writers=["Y", "X"])
+        assert compute_content_hash(item1) == compute_content_hash(item2)
 
 
 class TestPeopleFiltering:
