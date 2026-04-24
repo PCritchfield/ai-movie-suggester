@@ -61,6 +61,23 @@ export function DevicePickerDialog({
   const mountedRef = useRef(true);
   const dispatchInFlightRef = useRef(false);
   const fetchIdRef = useRef(0);
+  // Tracks the previous open value so we can detect open false→true
+  // transitions during render and reset visible state synchronously — this
+  // prevents a one-frame flash of stale devices/error on reopen before the
+  // open-effect runs runFetch (Copilot review on PR #208).
+  const previousOpenRef = useRef<boolean | null>(null);
+
+  if (previousOpenRef.current !== open) {
+    previousOpenRef.current = open;
+    if (open) {
+      // Clean slate on every open transition: ensure the first post-open
+      // paint shows the Loading skeleton, not stale devices or a stale
+      // error from the previous session.
+      setLoading(true);
+      setDevices([]);
+      setFetchError(false);
+    }
+  }
 
   useEffect(() => {
     mountedRef.current = true;
