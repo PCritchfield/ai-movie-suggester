@@ -50,8 +50,13 @@ export class DeviceOfflineError extends ApiError {
 }
 
 /**
- * Raised when the play dispatch failed for a reason other than auth or device
- * offline (HTTP 500, transport error, unexpected backend state).
+ * Raised when the play dispatch failed with an HTTP error other than auth or
+ * device offline (e.g., HTTP 500, unexpected backend state).
+ *
+ * Note: actual network/transport failures are raised as `NetworkError` (by
+ * `networkFetch` in `client.ts`) and are NOT converted to
+ * `PlaybackFailedError` — callers that want a single type should wrap
+ * `postPlay` in their own try/catch.
  */
 export class PlaybackFailedError extends ApiError {
   constructor(status: number, body: unknown) {

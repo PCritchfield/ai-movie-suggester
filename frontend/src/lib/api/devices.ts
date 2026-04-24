@@ -14,11 +14,16 @@ export async function fetchDevices(): Promise<Device[]> {
 /**
  * Dispatch a play command to a Jellyfin session.
  *
- * Error mapping (per backend/app/play/router.py contract):
- *   200 → PlayResponse
- *   401 → ApiAuthError (pass through; picker will call clearAuth + toast.error)
- *   409 → DeviceOfflineError (picker stays open, in-place refetch)
- *   500 / other → PlaybackFailedError (picker closes + toast.error)
+ * Error mapping (per backend/app/play/router.py contract + parseResponse):
+ *   200              → PlayResponse
+ *   401 / 403        → ApiAuthError (passed through; picker's handleTap
+ *                      calls clearAuth + toast.error on this class)
+ *   409              → DeviceOfflineError (picker stays open, in-place refetch)
+ *   Other HTTP 4xx/5xx → PlaybackFailedError (picker closes + toast.error)
+ *   Non-HTTP (e.g. NetworkError from networkFetch) → re-thrown unwrapped,
+ *                      handled by the picker's generic `else` branch as a
+ *                      playback failure. Deliberately not wrapped — the
+ *                      picker's catch treats any non-typed throw the same.
  *
  * Goes through `apiPost` (not raw `fetch`) so the CSRF header + session
  * cookie are always attached. Do not bypass this — the backend enforces

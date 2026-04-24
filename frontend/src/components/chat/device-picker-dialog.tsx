@@ -25,7 +25,14 @@ interface DevicePickerDialogProps {
   item: SearchResultItem;
   open: boolean;
   onClose: () => void;
-  onDispatched: (deviceName: string) => void | Promise<void>;
+  /**
+   * Called by the picker when postPlay has succeeded. Must be synchronous
+   * (return `void`). The picker invokes this without `await` and does NOT
+   * handle rejections — a Promise-returning handler could produce an
+   * unhandled rejection. If the parent needs async work on dispatch, it
+   * should schedule that work internally (e.g., wrap in a `.catch`).
+   */
+  onDispatched: (deviceName: string) => void;
   /**
    * Test-only: forces the offline-banner rendering path without requiring a
    * real 409 dispatch. The production path uses internal `showOfflineBanner`
