@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import httpx
@@ -13,15 +14,18 @@ from app.ollama.client import OllamaEmbeddingClient
 from app.ollama.text_builder import build_sections
 from tests.conftest import make_test_client
 
+if TYPE_CHECKING:
+    from app.jellyfin.models import LibraryItem
 
-def _item_to_text(item: object) -> str:
+
+def _item_to_text(item: LibraryItem) -> str:
     """Build composite text from a LibraryItem's metadata fields."""
     return build_sections(
-        title=item.name,  # type: ignore[attr-defined]
-        overview=item.overview,  # type: ignore[attr-defined]
-        genres=item.genres,  # type: ignore[attr-defined]
-        production_year=item.production_year,  # type: ignore[attr-defined]
-        runtime_minutes=item.runtime_minutes,  # type: ignore[attr-defined]
+        title=item.name,
+        overview=item.overview,
+        genres=item.genres,
+        production_year=item.production_year,
+        runtime_minutes=item.runtime_minutes,
     )
 
 

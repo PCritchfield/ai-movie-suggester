@@ -73,7 +73,7 @@ movies.yourdomain.duckdns.org {
 
 ## Privacy
 
-**No data leaves your network.** All AI inference (chat and embeddings) runs locally on your hardware via Ollama. Movie metadata used for recommendations comes entirely from your Jellyfin server.
+**No data leaves your network.** All AI inference (chat and embeddings) runs locally on your hardware via Ollama. Movie metadata used for recommendations comes entirely from your Jellyfin server (which itself can be configured to source from external metadata providers via Jellyfin's own metadata plugins, independently of this app).
 
 ## Jellyfin Configuration
 

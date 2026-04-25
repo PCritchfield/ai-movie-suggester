@@ -44,13 +44,6 @@ def _build_overview_section(overview: str | None) -> str | None:
     return None
 
 
-def _build_genres_section(genres: list[str]) -> str | None:
-    """Build the genres section, or None if the list is empty."""
-    if genres:
-        return "Genres: " + ", ".join(genres) + "."
-    return None
-
-
 def _build_year_section(production_year: int | None) -> str | None:
     """Build the year section, or None if not set."""
     if production_year is not None:
@@ -101,19 +94,13 @@ def build_sections(
     if ov is not None:
         sections.append(ov)
 
-    g = _build_genres_section(genres)
-    if g is not None:
-        sections.append(g)
-
     y = _build_year_section(production_year)
-    if y is not None:
-        sections.append(y)
-
     rt = _build_runtime_section(runtime_minutes)
-    if rt is not None:
-        sections.append(rt)
 
     for section in (
+        _build_labeled_list_section("Genres", genres),
+        y,
+        rt,
         _build_labeled_list_section("Cast", cast, cap=_CAST_CAP),
         _build_labeled_list_section("Directed by", directors),
         _build_labeled_list_section("Written by", writers),
@@ -127,6 +114,6 @@ def build_sections(
     text = " ".join(sections)
 
     if len(text) > _LENGTH_WARNING_THRESHOLD:
-        logger.warning("composite_text_long item=%s length=%d", title, len(text))
+        logger.warning("composite_text_long title=%s length=%d", title, len(text))
 
     return text

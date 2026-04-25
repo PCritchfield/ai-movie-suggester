@@ -172,12 +172,14 @@ class TestBuildText:
         """Worker wires directors/writers/composers/studios/tags into the text."""
         row = _make_row(
             directors=["Roger Corman"],
+            writers=["Charles B. Griffith"],
             composers=["John Williams"],
             studios=["New World"],
             tags=["classic"],
         )
         text = EmbeddingWorker._build_text(row)
         assert "Directed by: Roger Corman." in text
+        assert "Written by: Charles B. Griffith." in text
         assert "Music by: John Williams." in text
         assert "Studios: New World." in text
         assert "Tags: classic." in text
