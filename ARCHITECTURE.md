@@ -22,16 +22,11 @@ graph TB
         ollama[Ollama<br/>LLM + Embeddings]
     end
 
-    subgraph Optional External — Opt-in Only
-        tmdb[TMDb API<br/>Metadata Enrichment<br/>— not yet implemented]
-    end
-
     phone -->|HTTPS| frontend
     frontend -->|API calls| backend
     backend -->|Queries + Auth| jellyfin
     backend -->|Inference| ollama
     backend -->|Read/Write| sqlite
-    backend -.->|If enabled| tmdb
     backend -->|Play command| jellyfin
     jellyfin -->|Stream| tv
 ```
@@ -162,7 +157,7 @@ Rationale: Different access patterns (sessions are small/frequent; library is la
 - **Session expiry**: Configurable (default 24h). Logout revokes Jellyfin token, purges conversation history, and invalidates the permission cache for that user.
 - **Permissions**: Enforced at query time via Jellyfin's API with in-memory TTL cache (~5min). Vector DB is not a security boundary. Permission service uses the user's own token, not the admin API key.
 - **Network**: Docker Compose maps backend port to `127.0.0.1:8000`. External access via existing reverse proxy (Caddy).
-- **Privacy**: All AI inference is local. Conversation history is in-memory only — never persisted to disk (PII constraint). TMDb enrichment is opt-in with documented data disclosure.
+- **Privacy**: All AI inference is local. Conversation history is in-memory only — never persisted to disk (PII constraint). No outbound calls to third-party metadata services — movie metadata comes from Jellyfin only.
 - **API hardening**: CORS restricted to frontend origin. `/docs` disabled in production. Rate limiting on login (5/min), chat (10/min), and search (10/min) endpoints. Security headers via middleware. Request validation errors return HTTP 422 (FastAPI/Pydantic convention), not 400.
 - **Prompt injection**: Soft mitigation via system prompt instructions. No hard sandboxing — documented as a known limitation (#114 tracks deeper hardening).
 - **Service worker**: Cache-first for static shell only. No API response or image caching — cross-user data leakage risk on shared household devices.
@@ -187,7 +182,6 @@ All configuration via environment variables (`.env` file). See `.env.example` fo
 | Search | `SEARCH_RATE_LIMIT`, `SEARCH_OVERFETCH_MULTIPLIER` | Defaults provided |
 | Chat | `CHAT_RATE_LIMIT`, `CHAT_SYSTEM_PROMPT` | Defaults provided |
 | Conversation | `CONVERSATION_MAX_TURNS`, `CONVERSATION_TTL_MINUTES`, `CONVERSATION_MAX_SESSIONS`, `CONVERSATION_CONTEXT_BUDGET` | Defaults provided |
-| TMDb | `TMDB_ENABLED`, `TMDB_API_KEY` | No (opt-in, not yet implemented) |
 | Tuning | `LOG_LEVEL`, `ENABLE_DOCS` | Defaults provided |
 
 ## Deployment Models

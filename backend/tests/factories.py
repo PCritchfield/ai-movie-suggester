@@ -24,6 +24,9 @@ def make_library_item(
     content_hash: str = "hash",
     synced_at: int = 1700000000,
     runtime_minutes: int | None = 120,
+    directors: list[str] | None = None,
+    writers: list[str] | None = None,
+    composers: list[str] | None = None,
 ) -> LibraryItemRow:
     return LibraryItemRow(
         jellyfin_id=jellyfin_id,
@@ -38,6 +41,9 @@ def make_library_item(
         content_hash=content_hash,
         synced_at=synced_at,
         runtime_minutes=runtime_minutes,
+        directors=directors if directors is not None else [],
+        writers=writers if writers is not None else [],
+        composers=composers if composers is not None else [],
     )
 
 

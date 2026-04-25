@@ -9,22 +9,16 @@ from app.ollama.errors import (
     OllamaModelError,
     OllamaTimeoutError,
 )
-from app.ollama.models import EmbeddingResult, EmbeddingSource
-from app.ollama.text_builder import (
-    TEMPLATE_VERSION,
-    CompositeTextResult,
-    build_composite_text,
-)
+from app.ollama.models import EmbeddingResult
+from app.ollama.text_builder import TEMPLATE_VERSION, build_sections
 
 __all__ = [
-    "CompositeTextResult",
     "EmbeddingResult",
-    "EmbeddingSource",
     "OllamaConnectionError",
     "OllamaEmbeddingClient",
     "OllamaError",
     "OllamaModelError",
     "OllamaTimeoutError",
     "TEMPLATE_VERSION",
-    "build_composite_text",
+    "build_sections",
 ]

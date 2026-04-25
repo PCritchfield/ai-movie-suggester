@@ -123,6 +123,8 @@ class TestBuildText:
             " A comedy about sci-fi actors in space."
             " Genres: Comedy, Sci-Fi."
             " Year: 1999."
+            " Runtime: 120 minutes."
+            " Cast: Tim Allen, Sigourney Weaver."
         )
 
     def test_prepends_search_document_prefix(self) -> None:
@@ -156,9 +158,31 @@ class TestBuildText:
         assert "Year:" not in text
 
     def test_title_only(self) -> None:
-        row = _make_row(overview=None, genres=[], production_year=None)
+        row = _make_row(
+            overview=None,
+            genres=[],
+            production_year=None,
+            runtime_minutes=None,
+            people=[],
+        )
         text = EmbeddingWorker._build_text(row)
         assert text == "search_document: Title: Galaxy Quest."
+
+    def test_crew_and_tags_flow_through_from_row(self) -> None:
+        """Worker wires directors/writers/composers/studios/tags into the text."""
+        row = _make_row(
+            directors=["Roger Corman"],
+            writers=["Charles B. Griffith"],
+            composers=["John Williams"],
+            studios=["New World"],
+            tags=["classic"],
+        )
+        text = EmbeddingWorker._build_text(row)
+        assert "Directed by: Roger Corman." in text
+        assert "Written by: Charles B. Griffith." in text
+        assert "Music by: John Williams." in text
+        assert "Studios: New World." in text
+        assert "Tags: classic." in text
 
 
 # ---------------------------------------------------------------------------

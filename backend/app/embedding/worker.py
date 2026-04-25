@@ -107,6 +107,13 @@ class EmbeddingWorker:
             overview=item.overview,
             genres=item.genres,
             production_year=item.production_year,
+            runtime_minutes=item.runtime_minutes,
+            cast=item.people,
+            directors=item.directors,
+            writers=item.writers,
+            composers=item.composers,
+            studios=item.studios,
+            tags=item.tags,
         )
 
     # ------------------------------------------------------------------

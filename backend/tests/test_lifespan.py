@@ -4,15 +4,29 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import httpx
 import pytest
 
 from app.ollama.client import OllamaEmbeddingClient
-from app.ollama.models import EmbeddingSource
-from app.ollama.text_builder import build_composite_text
+from app.ollama.text_builder import build_sections
 from tests.conftest import make_test_client
+
+if TYPE_CHECKING:
+    from app.jellyfin.models import LibraryItem
+
+
+def _item_to_text(item: LibraryItem) -> str:
+    """Build composite text from a LibraryItem's metadata fields."""
+    return build_sections(
+        title=item.name,
+        overview=item.overview,
+        genres=item.genres,
+        production_year=item.production_year,
+        runtime_minutes=item.runtime_minutes,
+    )
 
 
 class TestLifespanOllamaWiring:
@@ -110,15 +124,14 @@ class TestFullPipelineIntegration:
             }
         )
 
-        result = build_composite_text(item)
-        assert result.source == EmbeddingSource.JELLYFIN_ONLY
+        text = _item_to_text(item)
 
         async with httpx.AsyncClient(timeout=120) as http:
             client = OllamaEmbeddingClient(
                 base_url="http://localhost:11434",
                 http_client=http,
             )
-            embedding = await client.embed(result.text)
+            embedding = await client.embed(text)
 
         assert embedding.dimensions == 768
         assert len(embedding.vector) == 768
@@ -167,9 +180,9 @@ class TestFullPipelineIntegration:
             }
         )
 
-        text_alien = build_composite_text(alien).text
-        text_aliens = build_composite_text(aliens).text
-        text_romcom = build_composite_text(romcom).text
+        text_alien = _item_to_text(alien)
+        text_aliens = _item_to_text(aliens)
+        text_romcom = _item_to_text(romcom)
 
         async with httpx.AsyncClient(timeout=120) as http:
             client = OllamaEmbeddingClient(

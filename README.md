@@ -11,7 +11,6 @@ Ask it things like *"something spooky from the 80s"* or *"a comedy like Galaxy Q
 - **Privacy-first** — all AI inference runs locally via [Ollama](https://ollama.ai/). No data leaves your network by default
 - **Multi-user** — each user sees recommendations scoped to their Jellyfin permissions
 - **Play on TV** — trigger playback on any active Jellyfin device from the recommendation screen
-- **Optional TMDb enrichment** — opt-in metadata enrichment for better recommendations (see [Privacy](#privacy))
 
 ## Prerequisites
 
@@ -74,15 +73,7 @@ movies.yourdomain.duckdns.org {
 
 ## Privacy
 
-**By default, no data leaves your network.** All AI inference (chat and embeddings) runs locally on your hardware via Ollama.
-
-**Optional: TMDb enrichment.** When `TMDB_ENABLED=true`, the app queries the [TMDb API](https://www.themoviedb.org/) to enrich movie metadata (descriptions, keywords, cast). This improves recommendation quality but sends the following to TMDb's servers:
-
-- Movie title search queries
-- Your server's public IP address
-- Your TMDb API key
-
-No watch history, user credentials, or personal data are sent. TMDb enrichment can be disabled at any time by setting `TMDB_ENABLED=false` — the app works fully with Jellyfin's own metadata.
+**No data leaves your network.** All AI inference (chat and embeddings) runs locally on your hardware via Ollama. Movie metadata used for recommendations comes entirely from your Jellyfin server (which itself can be configured to source from external metadata providers via Jellyfin's own metadata plugins, independently of this app).
 
 ## Jellyfin Configuration
 
