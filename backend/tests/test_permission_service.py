@@ -300,3 +300,25 @@ class TestInvalidateUserCache:
     def test_invalidate_unknown_user_is_noop(self, service: PermissionService) -> None:
         """Invalidating a non-existent user shouldn't raise."""
         service.invalidate_user_cache("nonexistent")  # Should not raise
+
+
+class TestFetchPayloadShape:
+    """Permission lookups only need IDs — verify we don't request rich metadata."""
+
+    async def test_fetch_uses_minimal_fields(self) -> None:
+        """_fetch_permitted_ids must request fields="" so Jellyfin omits Overview,
+        Genres, Tags, Studios, People — the heavy fields we never read here.
+        """
+        captured_kwargs: dict[str, object] = {}
+
+        async def _capturing_get_all_items(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            yield _make_page(["a", "b"])
+
+        client = AsyncMock()
+        client.get_all_items = _capturing_get_all_items
+        svc = PermissionService(jellyfin_client=client, cache_ttl_seconds=300)
+
+        await svc.filter_permitted("user1", "tok", ["a"])
+
+        assert captured_kwargs.get("fields") == ""

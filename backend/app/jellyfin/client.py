@@ -166,18 +166,23 @@ class JellyfinClient:
         start_index: int = 0,
         limit: int = 50,
         recursive: bool = True,
+        fields: str | None = None,
     ) -> PaginatedItems:
         """Get library items for a user (paginated).
 
         Uses /Users/{userId}/Items so Jellyfin enforces per-user permissions.
         Raises JellyfinAuthError if the token is invalid/expired.
         Raises JellyfinConnectionError if Jellyfin is unreachable.
+
+        ``fields`` overrides the requested optional fields. Pass ``""`` for
+        ID-only lookups (e.g. permission checks) where rich metadata would
+        be discarded; defaults to ``_ITEM_FIELDS`` for full metadata.
         """
         params: dict[str, str | int | bool] = {
             "StartIndex": start_index,
             "Limit": limit,
             "Recursive": recursive,
-            "Fields": _ITEM_FIELDS,
+            "Fields": _ITEM_FIELDS if fields is None else fields,
         }
         if item_types:
             params["IncludeItemTypes"] = ",".join(item_types)
@@ -197,6 +202,7 @@ class JellyfinClient:
         *,
         item_types: list[str] | None = None,
         page_size: int = 200,
+        fields: str | None = None,
     ) -> AsyncIterator[PaginatedItems]:
         """Auto-paginate library items, yielding each page.
 
@@ -221,6 +227,7 @@ class JellyfinClient:
                 item_types=item_types,
                 start_index=start_index,
                 limit=page_size,
+                fields=fields,
             )
             page_number += 1
             logger.debug(
