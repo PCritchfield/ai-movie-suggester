@@ -85,8 +85,9 @@ def build_sections(
 
     Called directly by the embedding worker for each ``LibraryItemRow``.
     Changes here propagate — bump ``TEMPLATE_VERSION`` when the
-    template structure changes so previously-stored vectors are
-    invalidated on next sync.
+    template structure changes so the worker's
+    ``check_template_version`` re-enqueues every item for re-embedding
+    on its next startup/cycle.
     """
     sections: list[str] = [_build_title_section(title)]
 
