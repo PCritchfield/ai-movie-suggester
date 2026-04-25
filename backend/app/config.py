@@ -36,17 +36,6 @@ class Settings(BaseSettings):
     ollama_embed_timeout: int = 120
     ollama_health_timeout: int = 5
 
-    # Optional: TMDb
-    tmdb_enabled: bool = False
-    tmdb_api_key: str | None = None
-
-    @model_validator(mode="after")
-    def _validate_tmdb(self) -> Settings:
-        if self.tmdb_enabled and not self.tmdb_api_key:
-            msg = "TMDB_API_KEY is required when TMDB_ENABLED=true"
-            raise ValueError(msg)
-        return self
-
     @model_validator(mode="after")
     def _validate_session_secret(self) -> Settings:
         """Reject known-weak SESSION_SECRET values."""

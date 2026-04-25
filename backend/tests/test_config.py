@@ -22,8 +22,6 @@ def test_settings_loads_defaults() -> None:
     assert s.ollama_host == "http://ollama:11434"
     assert s.ollama_chat_model == "llama3.1:8b"
     assert s.ollama_embed_model == "nomic-embed-text"
-    assert s.tmdb_enabled is False
-    assert s.tmdb_api_key is None
     assert s.log_level == "info"
     assert s.session_expiry_hours == 24
     assert s.chat_rate_limit == "10/minute"
@@ -59,17 +57,6 @@ def test_settings_jellyfin_timeout_default() -> None:
     with patch.dict(os.environ, env, clear=True):
         s = Settings()  # type: ignore[call-arg]
     assert s.jellyfin_timeout == 10.0
-
-
-def test_settings_rejects_tmdb_enabled_without_key() -> None:
-    """TMDB_ENABLED=true requires TMDB_API_KEY."""
-    env = {
-        "JELLYFIN_URL": "http://localhost:8096",
-        "SESSION_SECRET": _VALID_SECRET,
-        "TMDB_ENABLED": "true",
-    }
-    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
-        Settings()  # type: ignore[call-arg]
 
 
 # --- cors_origin ---

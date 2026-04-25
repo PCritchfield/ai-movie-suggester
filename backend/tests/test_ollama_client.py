@@ -16,7 +16,7 @@ from app.ollama.errors import (
     OllamaModelError,
     OllamaTimeoutError,
 )
-from app.ollama.models import EmbeddingResult, EmbeddingSource
+from app.ollama.models import EmbeddingResult
 from tests.conftest import make_test_settings
 
 # ---------------------------------------------------------------------------
@@ -96,16 +96,6 @@ class TestEmbeddingResult:
     def test_model_field(self) -> None:
         result = EmbeddingResult(vector=[0.0], dimensions=1, model="custom-model")
         assert result.model == "custom-model"
-
-
-class TestEmbeddingSource:
-    def test_jellyfin_only_value(self) -> None:
-        assert EmbeddingSource.JELLYFIN_ONLY == "jellyfin_only"
-        assert EmbeddingSource.JELLYFIN_ONLY.value == "jellyfin_only"
-
-    def test_tmdb_enriched_value(self) -> None:
-        assert EmbeddingSource.TMDB_ENRICHED == "tmdb_enriched"
-        assert EmbeddingSource.TMDB_ENRICHED.value == "tmdb_enriched"
 
 
 # ---------------------------------------------------------------------------

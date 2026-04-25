@@ -136,7 +136,7 @@ def format_movie_context(
     """Format search results as a compact movie context block for the LLM.
 
     This is a distinct format from the embedding pipeline's
-    ``build_composite_text()`` — optimized for LLM context, not embeddings.
+    ``build_sections()`` — optimized for LLM context, not embeddings.
 
     Args:
         results: Search results to format.

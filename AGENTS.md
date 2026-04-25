@@ -18,7 +18,7 @@ A self-hosted AI companion for Jellyfin that uses RAG to provide conversational 
 
 ## Architecture Decisions
 
-- **TMDb enrichment is opt-in** (off by default, not yet implemented). The app works with Jellyfin metadata only. Privacy-first.
+- **No external metadata enrichment.** Movie metadata used for recommendations comes entirely from Jellyfin (which itself can be configured to source from TMDb upstream via Jellyfin's metadata plugins). The app makes no outbound calls to third-party APIs. Privacy-first.
 - **SQLite-vec** behind a repository abstraction. WAL mode (PASSIVE checkpoint) for concurrent reads. Separate reader/writer connections. Swap to Qdrant should be a one-module change.
 - **Jellyfin tokens never persisted to disk.** Stored in server-side encrypted sessions only. Frontend never sees raw tokens.
 - **CSRF protection via Double-Submit pattern.** State-changing requests require `X-CSRF-Token` header matching the `csrf_token` cookie. Login is exempt.

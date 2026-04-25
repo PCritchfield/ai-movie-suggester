@@ -92,12 +92,11 @@ def test_sync_models_importable() -> None:
 
 
 def test_text_builder_same_object() -> None:
-    """build_composite_text should be the same object from both import paths."""
+    """build_sections should be the same object from both import paths."""
     from app.library import text_builder as lib_tb
     from app.ollama import text_builder as ollama_tb
 
-    assert lib_tb.build_composite_text is ollama_tb.build_composite_text
-    assert lib_tb.CompositeTextResult is ollama_tb.CompositeTextResult
+    assert lib_tb.build_sections is ollama_tb.build_sections
     assert lib_tb.TEMPLATE_VERSION is ollama_tb.TEMPLATE_VERSION
 
 
