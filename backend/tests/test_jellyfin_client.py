@@ -667,6 +667,11 @@ class TestGetAllItems:
         assert "CommunityRating" in _ITEM_FIELDS
         assert "People" in _ITEM_FIELDS
 
+    def test_item_fields_includes_official_rating(self) -> None:
+        """Spec 24 — OfficialRating must be requested so the rating filter
+        has data to work with."""
+        assert "OfficialRating" in _ITEM_FIELDS
+
     async def test_get_all_items_forwards_fields_to_get_items(
         self, jf_client: JellyfinClient
     ) -> None:

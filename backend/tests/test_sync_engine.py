@@ -113,6 +113,7 @@ def _make_library_item(
     production_year: int | None = 2024,
     people: list[dict[str, str]] | None = None,
     run_time_ticks: int | None = None,
+    official_rating: str | None = None,
 ) -> LibraryItem:
     """Create a LibraryItem for testing."""
     if genres is None:
@@ -136,6 +137,8 @@ def _make_library_item(
     }
     if run_time_ticks is not None:
         data["RunTimeTicks"] = run_time_ticks
+    if official_rating is not None:
+        data["OfficialRating"] = official_rating
     return LibraryItem.model_validate(data)
 
 
@@ -260,6 +263,16 @@ class TestToLibraryRowCrewExtraction:
         )
         row = to_library_row(item)
         assert row.composers == ["Jerry Goldsmith"]
+
+    def test_persists_official_rating(self) -> None:
+        item = _make_library_item(item_id="jf-rated", official_rating="R")
+        row = to_library_row(item)
+        assert row.official_rating == "R"
+
+    def test_official_rating_missing_is_none(self) -> None:
+        item = _make_library_item(item_id="jf-unrated", official_rating=None)
+        row = to_library_row(item)
+        assert row.official_rating is None
 
     def test_unknown_types_discarded(self) -> None:
         """Types we don't bucket (e.g. Producer, GuestStar) don't land anywhere."""

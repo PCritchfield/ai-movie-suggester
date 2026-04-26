@@ -37,6 +37,7 @@ def _make_item(
     directors: list[str] | None = None,
     writers: list[str] | None = None,
     composers: list[str] | None = None,
+    official_rating: str | None = None,
 ) -> LibraryItemRow:
     """Helper to build LibraryItemRow with sensible defaults."""
     return LibraryItemRow(
@@ -55,6 +56,7 @@ def _make_item(
         directors=directors if directors is not None else ["Ridley Scott"],
         writers=writers if writers is not None else ["Dan O'Bannon"],
         composers=composers if composers is not None else ["Jerry Goldsmith"],
+        official_rating=official_rating,
     )
 
 
@@ -461,6 +463,86 @@ class TestValidation:
         assert fetched is not None
         assert fetched.title == "Good Movie"
         assert any("malformed" in r.message.lower() for r in caplog.records)
+
+
+class TestOfficialRating:
+    """Spec 24 Unit 3 — additive ``official_rating`` column for rating filter.
+
+    Treated as a structured filter only (Q2-C). Not embedded; not part of
+    composite text. NULL until the next sync persists a value.
+    """
+
+    async def test_official_rating_column_exists(self, store: LibraryStore) -> None:
+        cursor = await store._conn.execute("PRAGMA table_info(library_items)")
+        rows = await cursor.fetchall()
+        columns = {row[1]: row[2] for row in rows}
+        assert "official_rating" in columns
+        assert columns["official_rating"] == "TEXT"
+
+    async def test_official_rating_round_trips(self, store: LibraryStore) -> None:
+        item = _make_item(
+            jellyfin_id="jf-rated",
+            official_rating="R",
+            content_hash="h-rated",
+        )
+        await store.upsert_many([item])
+        fetched = await store.get("jf-rated")
+        assert fetched is not None
+        assert fetched.official_rating == "R"
+
+    async def test_official_rating_null_round_trips(
+        self, store: LibraryStore
+    ) -> None:
+        item = _make_item(
+            jellyfin_id="jf-unrated",
+            official_rating=None,
+            content_hash="h-unrated",
+        )
+        await store.upsert_many([item])
+        fetched = await store.get("jf-unrated")
+        assert fetched is not None
+        assert fetched.official_rating is None
+
+    async def test_official_rating_added_to_legacy_db(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Pre-existing DB without official_rating gets ALTER TABLE on init."""
+        import aiosqlite
+
+        db_path = tmp_path / "legacy_rating.db"
+        async with aiosqlite.connect(str(db_path)) as conn:
+            # Schema as of PR #218 (no official_rating column)
+            await conn.execute(
+                "CREATE TABLE library_items ("
+                " jellyfin_id TEXT PRIMARY KEY,"
+                " title TEXT NOT NULL,"
+                " overview TEXT,"
+                " production_year INTEGER,"
+                " genres TEXT NOT NULL DEFAULT '[]',"
+                " tags TEXT NOT NULL DEFAULT '[]',"
+                " studios TEXT NOT NULL DEFAULT '[]',"
+                " community_rating REAL,"
+                " people TEXT NOT NULL DEFAULT '[]',"
+                " content_hash TEXT NOT NULL,"
+                " synced_at INTEGER NOT NULL,"
+                " deleted_at INTEGER,"
+                " runtime_minutes INTEGER,"
+                " directors TEXT NOT NULL DEFAULT '[]',"
+                " writers TEXT NOT NULL DEFAULT '[]',"
+                " composers TEXT NOT NULL DEFAULT '[]'"
+                ")"
+            )
+            await conn.commit()
+
+        s = LibraryStore(str(db_path))
+        await s.init()
+        try:
+            cursor = await s._conn.execute("PRAGMA table_info(library_items)")
+            rows = await cursor.fetchall()
+            columns = {row[1] for row in rows}
+            assert "official_rating" in columns
+        finally:
+            await s.close()
 
 
 class TestGetAllPeopleNames:

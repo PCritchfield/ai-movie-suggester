@@ -29,7 +29,8 @@ _T = TypeVar("_T")
 
 # Fields to request from Jellyfin — matches our LibraryItem model
 _ITEM_FIELDS = (
-    "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,RunTimeTicks,People"
+    "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,"
+    "RunTimeTicks,People,OfficialRating"
 )
 
 # Pass to get_items() / get_all_items() when only item IDs are needed

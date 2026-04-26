@@ -86,6 +86,7 @@ def to_library_row(item: LibraryItem) -> LibraryItemRow:
         directors=buckets["directors"],
         writers=buckets["writers"],
         composers=buckets["composers"],
+        official_rating=item.official_rating,
     )
     return dataclasses.replace(row, content_hash=compute_content_hash(row))
 

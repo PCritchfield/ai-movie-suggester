@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS library_items (
     deleted_at        INTEGER,
     directors         TEXT NOT NULL DEFAULT '[]',
     writers           TEXT NOT NULL DEFAULT '[]',
-    composers         TEXT NOT NULL DEFAULT '[]'
+    composers         TEXT NOT NULL DEFAULT '[]',
+    official_rating   TEXT
 )
 """
 
@@ -155,6 +156,13 @@ class LibraryStore:
                 )
                 await self._db.commit()
 
+        # Migration: add official_rating column if table predates Spec 24
+        if "official_rating" not in existing_columns:
+            await self._db.execute(
+                "ALTER TABLE library_items ADD COLUMN official_rating TEXT"
+            )
+            await self._db.commit()
+
         await self._db.execute(_CREATE_SYNC_RUNS)
         await self._db.execute(_CREATE_INDEX_SYNC_RUNS_STARTED)
         await self._db.commit()
@@ -192,6 +200,7 @@ class LibraryStore:
          12: directors      TEXT (JSON array)
          13: writers        TEXT (JSON array)
          14: composers      TEXT (JSON array)
+         15: official_rating TEXT (nullable)
         """
         return LibraryItemRow(
             jellyfin_id=row[0],
@@ -209,6 +218,7 @@ class LibraryStore:
             directors=json.loads(row[12]),
             writers=json.loads(row[13]),
             composers=json.loads(row[14]),
+            official_rating=row[15],
         )
 
     async def _get_hashes_for_ids(self, ids: list[str]) -> dict[str, str]:
@@ -278,6 +288,7 @@ class LibraryStore:
                     json.dumps(item.directors),
                     json.dumps(item.writers),
                     json.dumps(item.composers),
+                    item.official_rating,
                 )
             )
 
@@ -289,8 +300,8 @@ class LibraryStore:
                        (jellyfin_id, title, overview, production_year,
                         genres, tags, studios, community_rating,
                         people, content_hash, synced_at, runtime_minutes,
-                        directors, writers, composers)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        directors, writers, composers, official_rating)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(jellyfin_id) DO UPDATE SET
                         title = excluded.title,
                         overview = excluded.overview,
@@ -305,7 +316,8 @@ class LibraryStore:
                         runtime_minutes = excluded.runtime_minutes,
                         directors = excluded.directors,
                         writers = excluded.writers,
-                        composers = excluded.composers""",
+                        composers = excluded.composers,
+                        official_rating = excluded.official_rating""",
                     params_list,
                 )
             except Exception:
@@ -321,7 +333,7 @@ class LibraryStore:
             """SELECT jellyfin_id, title, overview, production_year,
                       genres, tags, studios, community_rating,
                       people, content_hash, synced_at, runtime_minutes,
-                      directors, writers, composers
+                      directors, writers, composers, official_rating
                FROM library_items WHERE jellyfin_id = ?""",
             (jellyfin_id,),
         )
@@ -349,7 +361,7 @@ class LibraryStore:
                 f"""SELECT jellyfin_id, title, overview, production_year,
                           genres, tags, studios, community_rating,
                           people, content_hash, synced_at, runtime_minutes,
-                          directors, writers, composers
+                          directors, writers, composers, official_rating
                    FROM library_items WHERE jellyfin_id IN ({placeholders})""",
                 batch,
             )
