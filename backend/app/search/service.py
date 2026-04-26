@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING
 
 from app.ollama.errors import OllamaConnectionError, OllamaError, OllamaTimeoutError
+from app.search.genre_keywords import detect_query_genres
 from app.search.models import (
     QUERY_PREFIX,
     SearchResponse,
@@ -16,6 +17,9 @@ from app.search.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from app.library.models import LibraryItemRow
     from app.library.store import LibraryStore
     from app.ollama.client import OllamaEmbeddingClient
     from app.permissions.service import PermissionService
@@ -36,7 +40,7 @@ class SearchService:
         vec_repo: SqliteVecRepository,
         permission_service: PermissionService,
         library_store: LibraryStore,
-        overfetch_multiplier: int = 3,
+        overfetch_multiplier: int = 5,
         jellyfin_web_url: str | None = None,
     ) -> None:
         self._ollama = ollama_client
@@ -96,6 +100,8 @@ class SearchService:
             raise SearchUnavailableError("Embedding service returned an error") from exc
 
         # Over-fetch to compensate for items removed by permission filtering
+        # and to give the genre rerank room to find tier-1 matches at lower
+        # cosine ranks.
         fetch_limit = limit * self._overfetch
         candidates = await self._vec_repo.search(
             embedding_result.vector, limit=fetch_limit
@@ -110,15 +116,21 @@ class SearchService:
             user_id, token, candidate_ids
         )
         filtered_count = total_candidates - len(permitted_ids)
-        permitted_ids = permitted_ids[:limit]
 
         score_map = {c.jellyfin_id: c.score for c in candidates}
 
+        # Fetch metadata for ALL permitted candidates (not just the top
+        # ``limit``) so the genre rerank can see each candidate's genres.
         items = await self._library.get_many(permitted_ids)
         item_map = {item.jellyfin_id: item for item in items}
 
+        # Soft genre rerank: bucket-sort by genre match while preserving
+        # cosine order (the input ``permitted_ids`` order) within each tier.
+        ordered_ids = self._rerank_by_genre(query, permitted_ids, item_map)
+        ordered_ids = ordered_ids[:limit]
+
         results: list[SearchResultItem] = []
-        for jid in permitted_ids:
+        for jid in ordered_ids:
             item = item_map.get(jid)
             if item is None:
                 continue
@@ -159,6 +171,46 @@ class SearchService:
             filtered_count=filtered_count,
             query_time_ms=elapsed_ms,
         )
+
+    @staticmethod
+    def _rerank_by_genre(
+        query: str,
+        permitted_ids: list[str],
+        item_map: Mapping[str, LibraryItemRow],
+    ) -> list[str]:
+        """Bucket-sort permitted IDs by genre match against the query.
+
+        - Tier 1: candidate genres match **every** detected genre group
+        - Tier 2: matches **at least one** group
+        - Tier 3: matches **none**
+
+        Cosine order is preserved within each tier (input order is
+        cosine-ordered). If no genre keywords are detected in the
+        query, returns ``permitted_ids`` unchanged.
+        """
+        groups = detect_query_genres(query)
+        if not groups:
+            return permitted_ids
+
+        tier1: list[str] = []
+        tier2: list[str] = []
+        tier3: list[str] = []
+        for jid in permitted_ids:
+            item = item_map.get(jid)
+            if item is None:
+                # Lost between permission filter and metadata fetch — keep
+                # at the back rather than dropping outright.
+                tier3.append(jid)
+                continue
+            item_genres = set(item.genres or [])
+            matches = sum(1 for g in groups if g & item_genres)
+            if matches == len(groups):
+                tier1.append(jid)
+            elif matches > 0:
+                tier2.append(jid)
+            else:
+                tier3.append(jid)
+        return tier1 + tier2 + tier3
 
     async def _determine_status(self) -> SearchStatus:
         """Check embedding completeness and return status (cached 30s)."""

@@ -14,7 +14,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_VERSION: int = 4
+TEMPLATE_VERSION: int = 5
 """Template version constant. Bumping this signals that all embeddings
 built with an older version are stale and should be regenerated.
 
@@ -25,11 +25,28 @@ Version history:
   3 — Added runtime section to composite text (Spec 19).
   4 — Added cast, directors, writers, composers, studios, tags sections
       (#217).
+  5 — Prepend a natural-language genre prefix (e.g. "A comedy, science
+      fiction film.") so the embedding model surfaces genre signal at
+      the start of the document instead of burying it mid-text.
 """
 
 _CAST_CAP = 10
 
 _LENGTH_WARNING_THRESHOLD = 6000
+
+
+def _build_genre_prefix_section(genres: list[str]) -> str | None:
+    """Build the v5 natural-language genre prefix, or None if no genres.
+
+    Surfaces genre signal at the start of the composite text so
+    nomic-embed-text weights it more strongly than the labeled
+    ``Genres:`` line, which would otherwise be diluted by long
+    plot/cast text.
+    """
+    if not genres:
+        return None
+    article = "An" if genres[0][:1].lower() in {"a", "e", "i", "o", "u"} else "A"
+    return f"{article} {', '.join(g.lower() for g in genres)} film."
 
 
 def _build_title_section(name: str) -> str:
@@ -89,7 +106,13 @@ def build_sections(
     ``check_template_version`` re-enqueues every item for re-embedding
     on its next startup/cycle.
     """
-    sections: list[str] = [_build_title_section(title)]
+    sections: list[str] = []
+
+    genre_prefix = _build_genre_prefix_section(genres)
+    if genre_prefix is not None:
+        sections.append(genre_prefix)
+
+    sections.append(_build_title_section(title))
 
     ov = _build_overview_section(overview)
     if ov is not None:
