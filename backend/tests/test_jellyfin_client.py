@@ -491,6 +491,32 @@ class TestGetItems:
         assert "Overview" in params["Fields"]
         assert "Genres" in params["Fields"]
 
+    async def test_get_items_explicit_empty_fields_skips_extended_metadata(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Callers that only need IDs can pass fields="" to skip rich metadata."""
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items("tok-123", "uid-1", fields="")
+        params = mock_http.request.call_args.kwargs["params"]
+        assert params["Fields"] == ""
+
+    async def test_get_items_custom_fields_value_forwarded(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """An arbitrary fields override is passed through verbatim."""
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items("tok-123", "uid-1", fields="Genres,Tags")
+        params = mock_http.request.call_args.kwargs["params"]
+        assert params["Fields"] == "Genres,Tags"
+
     async def test_get_items_uses_per_user_endpoint(
         self, jf_client: JellyfinClient, mock_http: AsyncMock
     ) -> None:
@@ -552,6 +578,7 @@ class TestGetAllItems:
             start_index: int = 0,
             limit: int = 50,
             recursive: bool = True,
+            fields: str | None = None,
         ) -> PaginatedItems:
             nonlocal call_count
             call_count += 1
@@ -613,6 +640,7 @@ class TestGetAllItems:
             start_index: int = 0,
             limit: int = 50,
             recursive: bool = True,
+            fields: str | None = None,
         ) -> PaginatedItems:
             nonlocal call_count
             call_count += 1
@@ -638,3 +666,42 @@ class TestGetAllItems:
         assert "Studios" in _ITEM_FIELDS
         assert "CommunityRating" in _ITEM_FIELDS
         assert "People" in _ITEM_FIELDS
+
+    async def test_get_all_items_forwards_fields_to_get_items(
+        self, jf_client: JellyfinClient
+    ) -> None:
+        """fields kwarg on get_all_items must propagate to *every* get_items call."""
+        # Two non-empty pages so the loop iterates more than once — proves the
+        # forwarding contract holds for subsequent pages, not just the first.
+        page1 = PaginatedItems(
+            Items=[LibraryItem(Id="a", Name="A", Type="Movie")],
+            TotalRecordCount=2,
+            StartIndex=0,
+        )
+        page2 = PaginatedItems(
+            Items=[LibraryItem(Id="b", Name="B", Type="Movie")],
+            TotalRecordCount=2,
+            StartIndex=1,
+        )
+        captured_fields: list[str | None] = []
+
+        async def mock_get_items(
+            token: str,
+            user_id: str,
+            *,
+            item_types: list[str] | None = None,
+            start_index: int = 0,
+            limit: int = 50,
+            recursive: bool = True,
+            fields: str | None = None,
+        ) -> PaginatedItems:
+            captured_fields.append(fields)
+            return page1 if start_index == 0 else page2
+
+        with patch.object(jf_client, "get_items", side_effect=mock_get_items):
+            async for _ in jf_client.get_all_items(
+                "tok-123", "uid-1", page_size=1, fields=""
+            ):
+                pass
+
+        assert captured_fields == ["", ""]

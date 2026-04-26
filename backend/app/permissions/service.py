@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.jellyfin.client import FIELDS_IDS_ONLY
 from app.jellyfin.errors import (
     JellyfinAuthError,
     JellyfinConnectionError,
@@ -53,11 +54,15 @@ class PermissionService:
     async def _fetch_permitted_ids(self, user_id: str, token: str) -> frozenset[str]:
         """Fetch all item IDs the user can access from Jellyfin.
 
-        Only fetches Movie items. Returns a frozenset for immutable cache storage.
+        Only fetches Movie items. Requests ``fields=""`` so Jellyfin omits
+        Overview/Genres/Tags/Studios/People — payload we never read here and
+        which dominates parse latency on large libraries.
+
+        Returns a frozenset for immutable cache storage.
         """
         ids: set[str] = set()
         async for page in self._jf_client.get_all_items(
-            token=token, user_id=user_id, item_types=["Movie"]
+            token=token, user_id=user_id, item_types=["Movie"], fields=FIELDS_IDS_ONLY
         ):
             for item in page.items:
                 ids.add(item.id)

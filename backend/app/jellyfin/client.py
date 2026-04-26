@@ -32,6 +32,11 @@ _ITEM_FIELDS = (
     "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,RunTimeTicks,People"
 )
 
+# Pass to get_items() / get_all_items() when only item IDs are needed
+# (e.g. permission ID lookups). Jellyfin still returns Id/Name/Type because
+# those are base fields, but skips the heavy optional metadata.
+FIELDS_IDS_ONLY: str = ""
+
 
 class JellyfinClient:
     """Async client for the Jellyfin REST API."""
@@ -166,18 +171,23 @@ class JellyfinClient:
         start_index: int = 0,
         limit: int = 50,
         recursive: bool = True,
+        fields: str | None = None,
     ) -> PaginatedItems:
         """Get library items for a user (paginated).
 
         Uses /Users/{userId}/Items so Jellyfin enforces per-user permissions.
         Raises JellyfinAuthError if the token is invalid/expired.
         Raises JellyfinConnectionError if Jellyfin is unreachable.
+
+        ``fields`` overrides the requested optional fields. Pass ``""`` for
+        ID-only lookups (e.g. permission checks) where rich metadata would
+        be discarded; defaults to ``_ITEM_FIELDS`` for full metadata.
         """
         params: dict[str, str | int | bool] = {
             "StartIndex": start_index,
             "Limit": limit,
             "Recursive": recursive,
-            "Fields": _ITEM_FIELDS,
+            "Fields": _ITEM_FIELDS if fields is None else fields,
         }
         if item_types:
             params["IncludeItemTypes"] = ",".join(item_types)
@@ -197,6 +207,7 @@ class JellyfinClient:
         *,
         item_types: list[str] | None = None,
         page_size: int = 200,
+        fields: str | None = None,
     ) -> AsyncIterator[PaginatedItems]:
         """Auto-paginate library items, yielding each page.
 
@@ -204,6 +215,9 @@ class JellyfinClient:
         Stops when all items have been fetched (start_index >= total_count).
         Propagates JellyfinAuthError and JellyfinConnectionError without
         catching them — the caller handles partial failure.
+
+        ``fields`` is forwarded verbatim to every get_items() call;
+        see get_items() for semantics (None = full _ITEM_FIELDS).
 
         Token is passed through to get_items() on each call, never stored.
         """
@@ -221,6 +235,7 @@ class JellyfinClient:
                 item_types=item_types,
                 start_index=start_index,
                 limit=page_size,
+                fields=fields,
             )
             page_number += 1
             logger.debug(
