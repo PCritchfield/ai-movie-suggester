@@ -398,3 +398,38 @@ def test_sync_engine_config_from_env() -> None:
     assert s.sync_interval_hours == 12.0
     assert s.tombstone_ttl_days == 14
     assert s.wal_checkpoint_threshold_mb == 100.0
+
+
+# --- Spec 24 — intent filter flags ---
+
+
+def test_intent_filter_settings_default_to_true() -> None:
+    """The three per-filter disable flags default to True (router on)."""
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.intent_filter_person_enabled is True
+    assert s.intent_filter_year_enabled is True
+    assert s.intent_filter_rating_enabled is True
+
+
+def test_intent_filter_settings_validate_boolean() -> None:
+    """The flags accept env-style ``true``/``false`` and reject garbage."""
+    env_true = {
+        **_REQUIRED_ENV,
+        "INTENT_FILTER_PERSON_ENABLED": "false",
+        "INTENT_FILTER_YEAR_ENABLED": "true",
+        "INTENT_FILTER_RATING_ENABLED": "false",
+    }
+    with patch.dict(os.environ, env_true, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.intent_filter_person_enabled is False
+    assert s.intent_filter_year_enabled is True
+    assert s.intent_filter_rating_enabled is False
+
+    env_garbage = {**_REQUIRED_ENV, "INTENT_FILTER_PERSON_ENABLED": "not-a-bool"}
+    with (
+        patch.dict(os.environ, env_garbage, clear=True),
+        pytest.raises(ValidationError),
+    ):
+        Settings()  # type: ignore[call-arg]

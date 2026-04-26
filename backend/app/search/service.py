@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from app.ollama.errors import OllamaConnectionError, OllamaError, OllamaTimeoutError
 from app.search.genre_keywords import detect_query_genres
+from app.search.intent import detect_intent
 from app.search.models import (
     QUERY_PREFIX,
     SearchResponse,
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from app.library.store import LibraryStore
     from app.ollama.client import OllamaEmbeddingClient
     from app.permissions.service import PermissionService
+    from app.search.person_index import PersonIndex
     from app.vectors.repository import SqliteVecRepository
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,9 @@ logger = logging.getLogger(__name__)
 class SearchService:
     """Orchestrates the semantic search pipeline.
 
-    Pipeline: embed query → vector search → permission filter → metadata enrich.
+    Pipeline (Spec 24): detect_intent → optional structured pre-filter →
+    embed query → vector search → permission filter → metadata enrich →
+    soft genre rerank.
     """
 
     def __init__(
@@ -42,6 +46,10 @@ class SearchService:
         library_store: LibraryStore,
         overfetch_multiplier: int = 5,
         jellyfin_web_url: str | None = None,
+        person_index: PersonIndex | None = None,
+        intent_filter_person_enabled: bool = True,
+        intent_filter_year_enabled: bool = True,
+        intent_filter_rating_enabled: bool = True,
     ) -> None:
         self._ollama = ollama_client
         self._vec_repo = vec_repo
@@ -51,6 +59,10 @@ class SearchService:
         self._jellyfin_web_url = (
             jellyfin_web_url.rstrip("/") if jellyfin_web_url else None
         )
+        self._person_index = person_index
+        self._filter_person = intent_filter_person_enabled
+        self._filter_year = intent_filter_year_enabled
+        self._filter_rating = intent_filter_rating_enabled
         self._status_cache: SearchStatus | None = None
         self._status_cache_time: float = 0.0
         self._status_cache_ttl: float = 30.0  # seconds
@@ -92,6 +104,25 @@ class SearchService:
                 query_time_ms=elapsed_ms,
             )
 
+        # Spec 24: detect intent and (optionally) pre-filter the candidate set
+        # before cosine. ``filter_ids`` is None when no filter applied — caller
+        # falls through to full vec0; an empty set means AND-empty (Q3-D contract).
+        filter_ids = await self._maybe_prefilter(query)
+        if filter_ids is not None and len(filter_ids) == 0:
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            logger.info(
+                "search_filter_empty query_len=%d ms=%d",
+                len(query),
+                elapsed_ms,
+            )
+            return SearchResponse(
+                status=status,
+                results=[],
+                total_candidates=0,
+                filtered_count=0,
+                query_time_ms=elapsed_ms,
+            )
+
         try:
             embedding_result = await self._ollama.embed(QUERY_PREFIX + query)
         except (OllamaTimeoutError, OllamaConnectionError) as exc:
@@ -107,6 +138,14 @@ class SearchService:
             embedding_result.vector, limit=fetch_limit
         )
         total_candidates = len(candidates)
+
+        # Constrain cosine candidates to the structured pre-filter set when
+        # one applied. Post-cosine Python filter is acceptable at the current
+        # 1805-item library scale; vec0's lack of an IN-clause makes a
+        # vector-side intersection awkward enough that this is the agreed
+        # approach (Spec 24 Task 3.7).
+        if filter_ids is not None:
+            candidates = [c for c in candidates if c.jellyfin_id in filter_ids]
 
         if exclude_ids:
             candidates = [c for c in candidates if c.jellyfin_id not in exclude_ids]
@@ -171,6 +210,49 @@ class SearchService:
             filtered_count=filtered_count,
             query_time_ms=elapsed_ms,
         )
+
+    async def _maybe_prefilter(self, query: str) -> set[str] | None:
+        """Run intent detection and structured pre-filter when applicable.
+
+        Returns ``None`` when no filter signal fired (caller falls through
+        to raw cosine). Returns a (possibly empty) ``set`` when the
+        structured filter ran. The empty-set case implements the Q3-D
+        contract: honest empty results > silent fallback.
+        """
+        if self._person_index is None:
+            return None
+
+        intent = detect_intent(query, self._person_index)
+        people = intent.people if (self._filter_person and intent.people) else None
+        year_range = (
+            intent.year_range
+            if (self._filter_year and intent.year_range is not None)
+            else None
+        )
+        ratings = intent.ratings if (self._filter_rating and intent.ratings) else None
+
+        if not people and year_range is None and not ratings:
+            return None
+
+        filter_ids = await self._library.search_filtered_ids(
+            people=people, year_range=year_range, ratings=ratings
+        )
+        # Counts only — never names, never query text (architecture rule).
+        signals = [
+            label
+            for label, present in (
+                ("person", bool(people)),
+                ("year", year_range is not None),
+                ("rating", bool(ratings)),
+            )
+            if present
+        ]
+        logger.info(
+            "search_filtered_ids signals=%s pool_size=%d",
+            signals,
+            len(filter_ids) if filter_ids is not None else -1,
+        )
+        return filter_ids
 
     @staticmethod
     def _rerank_by_genre(

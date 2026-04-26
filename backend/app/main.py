@@ -265,6 +265,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             library_store=library_store,
             overfetch_multiplier=settings.search_overfetch_multiplier,
             jellyfin_web_url=settings.effective_jellyfin_web_url,
+            person_index=person_index,
+            intent_filter_person_enabled=settings.intent_filter_person_enabled,
+            intent_filter_year_enabled=settings.intent_filter_year_enabled,
+            intent_filter_rating_enabled=settings.intent_filter_rating_enabled,
         )
         app.state.search_service = search_service
         search_router = create_search_router(

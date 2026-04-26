@@ -465,6 +465,153 @@ class TestValidation:
         assert any("malformed" in r.message.lower() for r in caplog.records)
 
 
+class TestSearchFilteredIds:
+    """Spec 24 Unit 4 — AND-intersect structured filter on people/year/rating.
+
+    Returns ``None`` when no filter signal is supplied (caller falls back to
+    full vec0 search). Returns an empty set on AND-empty (Q3-D contract).
+    """
+
+    async def test_no_filters_returns_none(self, store: LibraryStore) -> None:
+        await store.upsert_many([_make_item(jellyfin_id="jf-1", content_hash="h1")])
+        ids = await store.search_filtered_ids(
+            people=None, year_range=None, ratings=None
+        )
+        assert ids is None
+
+    async def test_person_filter_matches_actor(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-em",
+                    title="Beverly Hills Cop",
+                    people=["Eddie Murphy"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h-em",
+                ),
+                _make_item(
+                    jellyfin_id="jf-other",
+                    title="Other Movie",
+                    people=["Sigourney Weaver"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h-o",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=["eddie murphy"], year_range=None, ratings=None
+        )
+        assert ids == {"jf-em"}
+
+    async def test_person_filter_matches_director(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-jh",
+                    title="Sixteen Candles",
+                    people=[],
+                    directors=["John Hughes"],
+                    writers=[],
+                    content_hash="h-jh",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=["john hughes"], year_range=None, ratings=None
+        )
+        assert ids == {"jf-jh"}
+
+    async def test_year_range_filter(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-80",
+                    production_year=1985,
+                    content_hash="h-80",
+                ),
+                _make_item(
+                    jellyfin_id="jf-90",
+                    production_year=1995,
+                    content_hash="h-90",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=None, year_range=(1980, 1989), ratings=None
+        )
+        assert ids == {"jf-80"}
+
+    async def test_rating_filter(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-r",
+                    official_rating="R",
+                    content_hash="h-r",
+                ),
+                _make_item(
+                    jellyfin_id="jf-pg",
+                    official_rating="PG",
+                    content_hash="h-pg",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=None, year_range=None, ratings=["R"]
+        )
+        assert ids == {"jf-r"}
+
+    async def test_combined_filters_intersect(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-match",
+                    production_year=1984,
+                    official_rating="R",
+                    people=["Eddie Murphy"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h-match",
+                ),
+                _make_item(
+                    jellyfin_id="jf-rating-only",
+                    production_year=2010,
+                    official_rating="R",
+                    people=[],
+                    directors=[],
+                    writers=[],
+                    content_hash="h-r-only",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=["eddie murphy"], year_range=(1980, 1989), ratings=["R"]
+        )
+        assert ids == {"jf-match"}
+
+    async def test_empty_intersection_returns_empty_set(
+        self, store: LibraryStore
+    ) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-1",
+                    people=["Eddie Murphy"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h1",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=["nonexistent person"], year_range=None, ratings=None
+        )
+        # AND-empty: empty set, not None and not exception (Q3-D)
+        assert ids == set()
+
+
 class TestOfficialRating:
     """Spec 24 Unit 3 — additive ``official_rating`` column for rating filter.
 
@@ -490,9 +637,7 @@ class TestOfficialRating:
         assert fetched is not None
         assert fetched.official_rating == "R"
 
-    async def test_official_rating_null_round_trips(
-        self, store: LibraryStore
-    ) -> None:
+    async def test_official_rating_null_round_trips(self, store: LibraryStore) -> None:
         item = _make_item(
             jellyfin_id="jf-unrated",
             official_rating=None,
@@ -557,9 +702,7 @@ class TestGetAllPeopleNames:
         names = await store.get_all_people_names()
         assert names == frozenset()
 
-    async def test_unions_actors_directors_writers(
-        self, store: LibraryStore
-    ) -> None:
+    async def test_unions_actors_directors_writers(self, store: LibraryStore) -> None:
         await store.upsert_many(
             [
                 _make_item(

@@ -387,6 +387,55 @@ class LibraryStore:
         row = await cursor.fetchone()
         return row[0] if row else 0
 
+    async def search_filtered_ids(
+        self,
+        *,
+        people: list[str] | None,
+        year_range: tuple[int, int] | None,
+        ratings: list[str] | None,
+    ) -> set[str] | None:
+        """Return the AND-intersected set of jellyfin_ids matching every filter.
+
+        Returns ``None`` when no filter signal is supplied — the caller
+        should fall through to full vec0 cosine search. Returns the empty
+        set on AND-empty so the caller can honour the Q3-D "empty results,
+        no exception" contract for over-constrained intents.
+
+        Person matching uses LIKE because the JSON columns store names as
+        a JSON array; year matching uses BETWEEN; rating matching uses IN.
+        """
+        if not people and year_range is None and not ratings:
+            return None
+
+        clauses: list[str] = ["deleted_at IS NULL"]
+        params: list[object] = []
+
+        if people:
+            person_clauses: list[str] = []
+            for name in people:
+                like = f"%{name}%"
+                person_clauses.append(
+                    "(LOWER(directors) LIKE ?"
+                    " OR LOWER(writers) LIKE ?"
+                    " OR LOWER(people) LIKE ?)"
+                )
+                params.extend([like, like, like])
+            clauses.append("(" + " AND ".join(person_clauses) + ")")
+
+        if year_range is not None:
+            clauses.append("production_year BETWEEN ? AND ?")
+            params.extend([year_range[0], year_range[1]])
+
+        if ratings:
+            placeholders = ",".join("?" * len(ratings))
+            clauses.append(f"official_rating IN ({placeholders})")
+            params.extend(ratings)
+
+        sql = "SELECT jellyfin_id FROM library_items WHERE " + " AND ".join(clauses)
+        cursor = await self._conn.execute(sql, params)
+        rows = await cursor.fetchall()
+        return {row[0] for row in rows}
+
     async def get_all_people_names(self) -> frozenset[str]:
         """Return distinct lowercased names from people, directors, writers.
 

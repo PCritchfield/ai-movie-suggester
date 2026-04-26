@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     search_overfetch_multiplier: Annotated[int, Field(ge=1, le=10)] = 3
     search_rate_limit: Annotated[str, Field(pattern=_RATE_LIMIT_RE)] = "10/minute"
 
+    # Spec 24 — query router per-filter disable switches. All default to
+    # True (router on); flip individually to demonstrate regression at
+    # eval time or to mute a noisy filter without redeploying code.
+    intent_filter_person_enabled: bool = True
+    intent_filter_year_enabled: bool = True
+    intent_filter_rating_enabled: bool = True
+
     # Conversation memory
     conversation_max_turns: Annotated[int, Field(ge=1, le=100)] = 10
     conversation_ttl_minutes: Annotated[int, Field(ge=1)] = 120
