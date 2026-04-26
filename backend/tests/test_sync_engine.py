@@ -793,3 +793,49 @@ async def test_delete_from_embedding_queue() -> None:
         import os
 
         os.unlink(db_path)
+
+
+# ---------------------------------------------------------------------------
+# Spec 24, Task 1.7 — on_sync_complete hook for PersonIndex rebuild
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sync_invokes_on_complete_callbacks() -> None:
+    """run_sync awaits each on_sync_complete callback after save_sync_run.
+
+    Spec 24 wires PersonIndex.rebuild_from_store to this hook so the
+    person-name index stays in step with the library.
+    """
+    page = _make_paginated([_make_library_item("jf-001", "Movie One")])
+    store = _make_mock_store()
+    client = _make_mock_client([page])
+    settings = _make_mock_settings()
+
+    callback = AsyncMock()
+    engine = SyncEngine(store, client, settings, on_sync_complete=[callback])
+    await engine.run_sync()
+
+    callback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_sync_callback_failure_does_not_break_sync() -> None:
+    """A failing on_sync_complete hook is logged and swallowed so the
+    primary sync result still succeeds."""
+    page = _make_paginated([_make_library_item("jf-001", "Movie One")])
+    store = _make_mock_store()
+    client = _make_mock_client([page])
+    settings = _make_mock_settings()
+
+    failing = AsyncMock(side_effect=RuntimeError("rebuild boom"))
+    surviving = AsyncMock()
+
+    engine = SyncEngine(
+        store, client, settings, on_sync_complete=[failing, surviving]
+    )
+    result = await engine.run_sync()
+
+    assert result.status == SYNC_STATUS_COMPLETED
+    failing.assert_awaited_once()
+    surviving.assert_awaited_once()

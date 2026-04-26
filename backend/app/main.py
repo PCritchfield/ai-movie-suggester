@@ -41,6 +41,7 @@ from app.models import (
 )
 from app.ollama.client import OllamaEmbeddingClient
 from app.play.router import create_play_router
+from app.search.person_index import PersonIndex
 from app.search.router import create_search_router
 from app.sync.engine import SyncEngine
 from app.sync.router import router as sync_router
@@ -201,6 +202,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Create embedding event (shared between SyncEngine and EmbeddingWorker)
         embedding_event = asyncio.Event()
 
+        # Build the person-name index from the library store. Subscribed to
+        # the sync-completed hook below so newly-synced cast/crew names
+        # become discoverable without a backend restart.
+        person_index = PersonIndex(names=frozenset())
+        await person_index.rebuild_from_store(library_store)
+        app.state.person_index = person_index
+
+        async def _rebuild_person_index() -> None:
+            await person_index.rebuild_from_store(library_store)
+
         # Create SyncEngine (uses sync client if available, else main client)
         sync_engine = SyncEngine(
             library_store=library_store,
@@ -208,6 +219,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings=settings,
             vector_repository=vec_repo,
             embedding_event=embedding_event,
+            on_sync_complete=[_rebuild_person_index],
         )
         app.state.sync_engine = sync_engine
 

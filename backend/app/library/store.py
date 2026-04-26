@@ -375,6 +375,27 @@ class LibraryStore:
         row = await cursor.fetchone()
         return row[0] if row else 0
 
+    async def get_all_people_names(self) -> frozenset[str]:
+        """Return distinct lowercased names from people, directors, writers.
+
+        Composers are intentionally excluded — single-token composer names
+        (``Hans``, ``John``) would dominate person-intent detection with low
+        signal. Used by ``PersonIndex`` to build a precomputed match set
+        at startup and on each sync-completed event.
+        """
+        cursor = await self._conn.execute(
+            "SELECT people, directors, writers FROM library_items"
+            " WHERE deleted_at IS NULL"
+        )
+        rows = await cursor.fetchall()
+        names: set[str] = set()
+        for row in rows:
+            for column in row:
+                for name in json.loads(column):
+                    if isinstance(name, str) and name.strip():
+                        names.add(name.strip().lower())
+        return frozenset(names)
+
     # --- Sync engine methods (Spec 08, Task 2.0) ---
 
     async def get_all_ids(self) -> set[str]:

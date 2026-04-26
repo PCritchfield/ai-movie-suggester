@@ -461,3 +461,81 @@ class TestValidation:
         assert fetched is not None
         assert fetched.title == "Good Movie"
         assert any("malformed" in r.message.lower() for r in caplog.records)
+
+
+class TestGetAllPeopleNames:
+    """Spec 24 (Unit 2) — distinct names across people/directors/writers
+    are returned lowercased and deduplicated for ``PersonIndex`` build.
+
+    The composers column is intentionally excluded — single-token composer
+    names (e.g. ``Hans``) would dominate intent matching with low signal.
+    """
+
+    async def test_empty_store_returns_empty_set(self, store: LibraryStore) -> None:
+        names = await store.get_all_people_names()
+        assert names == frozenset()
+
+    async def test_unions_actors_directors_writers(
+        self, store: LibraryStore
+    ) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-A",
+                    people=["Sigourney Weaver"],
+                    directors=["Ridley Scott"],
+                    writers=["Dan O'Bannon"],
+                    composers=["Jerry Goldsmith"],  # excluded from index
+                    content_hash="hA",
+                ),
+            ]
+        )
+        names = await store.get_all_people_names()
+        assert "sigourney weaver" in names
+        assert "ridley scott" in names
+        assert "dan o'bannon" in names
+        # composers are NOT included in the people-index
+        assert "jerry goldsmith" not in names
+
+    async def test_lowercases_names(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-1",
+                    people=["EDDIE Murphy"],
+                    directors=["John HUGHES"],
+                    writers=[],
+                    content_hash="h1",
+                ),
+            ]
+        )
+        names = await store.get_all_people_names()
+        assert "eddie murphy" in names
+        assert "john hughes" in names
+
+    async def test_dedupes_across_columns(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-1",
+                    people=["Clint Eastwood"],
+                    directors=["Clint Eastwood"],  # both an actor and a director
+                    writers=[],
+                    content_hash="h1",
+                ),
+                _make_item(
+                    jellyfin_id="jf-2",
+                    people=["Clint Eastwood"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h2",
+                ),
+            ]
+        )
+        names = await store.get_all_people_names()
+        clint_count = sum(1 for n in names if n == "clint eastwood")
+        assert clint_count == 1
+
+    async def test_returns_frozenset(self, store: LibraryStore) -> None:
+        names = await store.get_all_people_names()
+        assert isinstance(names, frozenset)
