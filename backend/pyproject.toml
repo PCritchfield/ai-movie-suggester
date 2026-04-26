@@ -12,7 +12,11 @@ dependencies = [
     "cryptography>=44.0.0",
     "aiosqlite>=0.20.0",
     "slowapi>=0.1.9",
-    "sqlite-vec>=0.1.6",
+    # Pinned to 0.1.6: 0.1.7 broke DELETE on the vec0 PRIMARY KEY column,
+    # which the repository's DELETE+INSERT upsert pattern depends on.
+    # Tracked in #227 — once the upsert is rewritten as UPDATE-or-INSERT,
+    # this pin can be removed.
+    "sqlite-vec==0.1.6",
 ]
 
 [project.optional-dependencies]

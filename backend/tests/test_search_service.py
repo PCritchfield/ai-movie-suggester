@@ -14,7 +14,7 @@ def _make_service(
     vec_repo: AsyncMock | None = None,
     permissions: AsyncMock | None = None,
     library: AsyncMock | None = None,
-    overfetch: int = 3,
+    overfetch: int = 5,
 ) -> SearchService:
     """Build a SearchService with mocked dependencies.
 
@@ -93,6 +93,37 @@ class TestSearchAppliesOverfetchMultiplier:
         vec_repo.search.assert_awaited_once()
         _, kwargs = vec_repo.search.call_args
         assert kwargs.get("limit") == 15  # 5 * 3
+
+    async def test_default_overfetch_is_5(self) -> None:
+        """Default multiplier bumped 3 → 5 in v5 to give the genre rerank
+        more headroom to find tier-1 matches at lower cosine ranks."""
+        from app.search.service import SearchService
+
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = SearchService(
+            ollama_client=ollama,
+            vec_repo=vec_repo,
+            permission_service=permissions,
+            library_store=library,
+        )
+        await service.search("test", limit=10, user_id="u1", token="tok")
+
+        _, kwargs = vec_repo.search.call_args
+        assert kwargs.get("limit") == 50  # 10 * 5
 
 
 class TestSearchEnrichesWithMetadata:
@@ -451,6 +482,143 @@ class TestSearchExcludeIds:
         assert len(result.results) == 1
         candidate_ids = permissions.filter_permitted.call_args[0][2]
         assert "m1" in candidate_ids
+
+
+class TestGenreRerank:
+    """v5 — when the query mentions a genre, candidates whose genres match
+    are bucket-sorted to the top of the result set, preserving cosine
+    order within each tier. Without genre keywords in the query, behaviour
+    is unchanged."""
+
+    async def test_rerank_bumps_genre_match_above_non_match(self) -> None:
+        """Cosine order: m1 (highest), m2, m3. Genre tags:
+        - m1 = ['Comedy']                    (matches comedy only)
+        - m2 = ['Comedy', 'Science Fiction'] (matches both — tier 1)
+        - m3 = ['Action']                    (matches none — tier 3)
+        Query 'sci-fi comedy' → output order should be m2, m1, m3.
+        """
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("m1", 0.90),
+            make_search_result("m2", 0.80),
+            make_search_result("m3", 0.70),
+        ]
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1", "m2", "m3"]
+        library = AsyncMock()
+        library.get_many.return_value = [
+            make_library_item("m1", title="Stand-Up Special", genres=["Comedy"]),
+            make_library_item(
+                "m2", title="Galaxy Quest", genres=["Comedy", "Science Fiction"]
+            ),
+            make_library_item("m3", title="Die Hard", genres=["Action"]),
+        ]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        result = await service.search(
+            "sci-fi comedy", limit=10, user_id="u1", token="tok"
+        )
+
+        ids = [r.jellyfin_id for r in result.results]
+        assert ids == ["m2", "m1", "m3"]
+
+    async def test_no_genre_keyword_preserves_cosine_order(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("m1", 0.90),
+            make_search_result("m2", 0.80),
+            make_search_result("m3", 0.70),
+        ]
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = ["m1", "m2", "m3"]
+        library = AsyncMock()
+        library.get_many.return_value = [
+            make_library_item("m1", genres=["Comedy"]),
+            make_library_item("m2", genres=["Comedy", "Science Fiction"]),
+            make_library_item("m3", genres=["Action"]),
+        ]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        # Query with no detectable genre keyword — order untouched
+        result = await service.search(
+            "something good", limit=10, user_id="u1", token="tok"
+        )
+
+        ids = [r.jellyfin_id for r in result.results]
+        assert ids == ["m1", "m2", "m3"]
+
+    async def test_rerank_preserves_cosine_order_within_tier(self) -> None:
+        """Two candidates in tier 1 (both match all detected genres);
+        their relative order should be by cosine score (highest first)."""
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            # Higher cosine but only matches one genre
+            make_search_result("standup", 0.95),
+            # Lower cosine, matches both — should still come above standup
+            make_search_result("galaxy_quest", 0.70),
+            # Even lower, matches both — third
+            make_search_result("evolution", 0.60),
+        ]
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = [
+            "standup",
+            "galaxy_quest",
+            "evolution",
+        ]
+        library = AsyncMock()
+        library.get_many.return_value = [
+            make_library_item("standup", genres=["Comedy"]),
+            make_library_item("galaxy_quest", genres=["Comedy", "Science Fiction"]),
+            make_library_item("evolution", genres=["Comedy", "Science Fiction"]),
+        ]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        result = await service.search(
+            "sci-fi comedy", limit=10, user_id="u1", token="tok"
+        )
+
+        ids = [r.jellyfin_id for r in result.results]
+        # tier 1 (galaxy_quest, evolution by cosine), then tier 2 (standup)
+        assert ids == ["galaxy_quest", "evolution", "standup"]
 
 
 class TestSearchResponseMetadata:

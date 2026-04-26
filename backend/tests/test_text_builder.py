@@ -119,8 +119,8 @@ class TestBuildSectionsNewFields:
         assert text == "Title: Alien."
 
     def test_section_ordering(self) -> None:
-        """Sections appear in: title, overview, genres, year, runtime,
-        cast, directed by, written by, music by, studios, tags."""
+        """Sections appear in: genre-prefix, title, overview, genres, year,
+        runtime, cast, directed by, written by, music by, studios, tags."""
         text = build_sections(
             title="Alien",
             overview="Space horror.",
@@ -135,7 +135,7 @@ class TestBuildSectionsNewFields:
             tags=["classic"],
         )
         assert text == (
-            "Title: Alien. Space horror. Genres: Horror. Year: 1979. "
+            "A horror film. Title: Alien. Space horror. Genres: Horror. Year: 1979. "
             "Runtime: 117 minutes. Cast: Sigourney Weaver. "
             "Directed by: Ridley Scott. Written by: Dan O'Bannon. "
             "Music by: Jerry Goldsmith. Studios: 20th Century Fox. Tags: classic."
@@ -145,8 +145,103 @@ class TestBuildSectionsNewFields:
 class TestTemplateVersion:
     """TEMPLATE_VERSION drift detection."""
 
-    def test_is_version_4(self) -> None:
-        assert TEMPLATE_VERSION == 4
+    def test_is_version_5(self) -> None:
+        assert TEMPLATE_VERSION == 5
+
+
+class TestGenrePrefix:
+    """v5 — natural-language genre prefix prepended when genres are present.
+
+    Surfaces genre signal at the start of the composite text so the
+    embedding model weights it more strongly than mid-text labels in the
+    Genres: section, which get diluted by long plot/cast text.
+    """
+
+    def test_single_genre_produces_lowercased_prefix(self) -> None:
+        text = build_sections(
+            title="Bill Engvall: Here's Your Sign",
+            overview=None,
+            genres=["Comedy"],
+            production_year=None,
+        )
+        assert text.startswith("A comedy film. ")
+
+    def test_multiple_genres_comma_joined_lowercased(self) -> None:
+        text = build_sections(
+            title="Galaxy Quest",
+            overview=None,
+            genres=["Comedy", "Science Fiction", "Adventure"],
+            production_year=None,
+        )
+        assert text.startswith("A comedy, science fiction, adventure film. ")
+
+    def test_genres_still_appear_in_labeled_section(self) -> None:
+        """The labeled Genres: line is preserved — prefix is reinforcement,
+        not replacement."""
+        text = build_sections(
+            title="Galaxy Quest",
+            overview=None,
+            genres=["Comedy", "Science Fiction"],
+            production_year=None,
+        )
+        assert text.startswith("A comedy, science fiction film. ")
+        assert "Genres: Comedy, Science Fiction." in text
+
+    def test_no_genres_omits_prefix(self) -> None:
+        text = build_sections(
+            title="Untagged Movie",
+            overview=None,
+            genres=[],
+            production_year=None,
+        )
+        assert not text.lower().startswith("a ")
+        assert text == "Title: Untagged Movie."
+
+    def test_vowel_article_for_single_vowel_initial_genre(self) -> None:
+        """Genres starting with a vowel get ``An`` instead of ``A``.
+        Locked here so the article rule can't silently regress."""
+        text = build_sections(
+            title="Indiana Jones",
+            overview=None,
+            genres=["Action"],
+            production_year=None,
+        )
+        assert text.startswith("An action film. ")
+
+    def test_empty_string_genre_entries_are_dropped(self) -> None:
+        """Whitespace/empty-string entries should not produce ``A  film.``."""
+        text = build_sections(
+            title="Edge Case",
+            overview=None,
+            genres=["", "Comedy", "  "],
+            production_year=None,
+        )
+        assert text.startswith("A comedy film. ")
+        # No double space, no empty filler word
+        assert "  " not in text.split("Title:")[0]
+
+    def test_only_empty_string_genres_omits_prefix(self) -> None:
+        """If every genre entry is empty/whitespace, no prefix at all."""
+        text = build_sections(
+            title="No Genres Tagged",
+            overview=None,
+            genres=["", "  "],
+            production_year=None,
+        )
+        assert text == "Title: No Genres Tagged."
+
+    def test_prefix_precedes_overview(self) -> None:
+        text = build_sections(
+            title="Galaxy Quest",
+            overview="Aliens recruit washed-up actors to fight a real war.",
+            genres=["Comedy", "Science Fiction"],
+            production_year=1999,
+        )
+        # Order: prefix → title → overview → genres → year
+        prefix_idx = text.index("A comedy, science fiction film.")
+        title_idx = text.index("Title: Galaxy Quest.")
+        overview_idx = text.index("Aliens recruit")
+        assert prefix_idx < title_idx < overview_idx
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +260,8 @@ class TestBuildSections:
             production_year=1999,
         )
         assert text == (
-            "Title: Galaxy Quest. A great comedy about actors in space. "
+            "A comedy, sci-fi film. Title: Galaxy Quest. "
+            "A great comedy about actors in space. "
             "Genres: Comedy, Sci-Fi. Year: 1999."
         )
 
@@ -208,7 +304,9 @@ class TestMissingFieldCombinations:
             genres=["Sci-Fi", "Horror"],
             production_year=1979,
         )
-        assert text == "Title: Alien. Genres: Sci-Fi, Horror. Year: 1979."
+        assert text == (
+            "A sci-fi, horror film. Title: Alien. Genres: Sci-Fi, Horror. Year: 1979."
+        )
 
     def test_empty_genres_omits_genres(self) -> None:
         text = build_sections(
@@ -230,7 +328,8 @@ class TestMissingFieldCombinations:
             production_year=None,
         )
         assert text == (
-            "Title: Alien. In space, no one can hear you scream. "
+            "A sci-fi, horror film. Title: Alien. "
+            "In space, no one can hear you scream. "
             "Genres: Sci-Fi, Horror."
         )
         assert "Year:" not in text
@@ -251,7 +350,7 @@ class TestMissingFieldCombinations:
             genres=["Sci-Fi", "Horror"],
             production_year=None,
         )
-        assert text == "Title: Alien. Genres: Sci-Fi, Horror."
+        assert text == ("A sci-fi, horror film. Title: Alien. Genres: Sci-Fi, Horror.")
 
     def test_only_year_no_overview_no_genres(self) -> None:
         text = build_sections(
@@ -324,6 +423,7 @@ class TestBuildSectionsSnapshots:
             production_year=1979,
         )
         assert text == (
+            "A science fiction, horror film. "
             "Title: Alien. In space, no one can hear you scream. A crew aboard a "
             "deep-space vessel encounters a terrifying alien lifeform. "
             "Genres: Science Fiction, Horror. Year: 1979."
@@ -347,7 +447,7 @@ class TestBuildSectionsSnapshots:
             production_year=2020,
         )
         expected = (
-            f"Title: The Long Film. {long_overview.strip()} "
+            f"An adventure film. Title: The Long Film. {long_overview.strip()} "
             "Genres: Adventure. Year: 2020."
         )
         assert text == expected
@@ -368,6 +468,7 @@ class TestBuildSectionsSnapshots:
             production_year=2023,
         )
         assert text == (
+            "An action, comedy, drama, horror, romance, sci-fi, thriller film. "
             "Title: Genre Mashup. "
             "Genres: Action, Comedy, Drama, Horror, Romance, Sci-Fi, Thriller. "
             "Year: 2023."

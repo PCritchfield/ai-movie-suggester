@@ -24,6 +24,9 @@ CMD ["npm", "run", "dev"]
 # =============================================================================
 FROM base AS build
 
+ARG BACKEND_URL=http://localhost:8000
+ENV BACKEND_URL=${BACKEND_URL}
+
 COPY . .
 ENV NODE_ENV=production
 RUN npm run build

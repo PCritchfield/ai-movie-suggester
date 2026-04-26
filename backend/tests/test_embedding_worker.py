@@ -119,7 +119,8 @@ class TestBuildText:
         row = _make_row()
         text = EmbeddingWorker._build_text(row)
         assert text == (
-            "search_document: Title: Galaxy Quest."
+            "search_document: A comedy, sci-fi film."
+            " Title: Galaxy Quest."
             " A comedy about sci-fi actors in space."
             " Genres: Comedy, Sci-Fi."
             " Year: 1999."
@@ -137,7 +138,9 @@ class TestBuildText:
         row = _make_row(overview=None)
         text = EmbeddingWorker._build_text(row)
         assert "Title: Galaxy Quest." in text
-        assert "A comedy" not in text
+        # The narrative overview ("about sci-fi actors in space") is absent;
+        # the v5 genre prefix ("A comedy, sci-fi film.") is still expected.
+        assert "about sci-fi actors in space" not in text
 
     def test_empty_overview(self) -> None:
         row = _make_row(overview="   ")

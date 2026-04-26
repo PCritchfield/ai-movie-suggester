@@ -40,6 +40,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # Next.js's rewrites() runs at build time; the URL is baked into the
+      # standalone bundle. Pass BACKEND_URL as a build arg so the runtime
+      # ``environment:`` value below isn't silently overridden by the
+      # Dockerfile's ARG default (``http://localhost:8000``).
+      args:
+        BACKEND_URL: http://backend:8000
     environment:
       - BACKEND_URL=http://backend:8000
     ports:
