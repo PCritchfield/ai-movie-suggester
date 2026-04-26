@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     intent_filter_year_enabled: bool = True
     intent_filter_rating_enabled: bool = True
 
+    # Spec 24 — paraphrastic LLM rewriter + cache.
+    rewrite_timeout_seconds: Annotated[float, Field(ge=0.1, le=10.0)] = 2.0
+    rewrite_max_output_chars: Annotated[int, Field(ge=1, le=1000)] = 200
+    rewrite_cache_max_entries: Annotated[int, Field(ge=1, le=100000)] = 1000
+    rewrite_cache_ttl_hours: Annotated[int, Field(ge=1, le=168)] = 24
+
     # Conversation memory
     conversation_max_turns: Annotated[int, Field(ge=1, le=100)] = 10
     conversation_ttl_minutes: Annotated[int, Field(ge=1)] = 120

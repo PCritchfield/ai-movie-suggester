@@ -780,6 +780,83 @@ class TestSearchPipelineWithIntent:
         vec_repo.search.assert_awaited_once()
 
 
+class TestSearchPipelineRewriterGating:
+    """Spec 24 Unit 5 — paraphrastic rewriter is invoked ONLY when intent
+    has no structured signal AND the query is paraphrastic."""
+
+    async def test_rewriter_not_invoked_for_signal_query(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value={"x"})
+
+        rewriter = AsyncMock()
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        service._rewriter = rewriter  # type: ignore[attr-defined]
+
+        await service.search("Eddie Murphy films", limit=10, user_id="u1", token="tok")
+        rewriter.rewrite.assert_not_awaited()
+
+    async def test_rewriter_invoked_for_paraphrastic_query(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value=None)
+
+        rewriter = AsyncMock()
+        rewriter.rewrite = AsyncMock(return_value="rewritten short paraphrase")
+        index = PersonIndex(names=frozenset())
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        service._rewriter = rewriter  # type: ignore[attr-defined]
+
+        await service.search(
+            "something like alien but funny and uplifting",
+            limit=10,
+            user_id="u1",
+            token="tok",
+        )
+        rewriter.rewrite.assert_awaited_once()
+        # The rewrite must be the string passed to the embedder
+        ollama.embed.assert_awaited_once()
+        embed_input = ollama.embed.call_args.args[0]
+        assert "rewritten short paraphrase" in embed_input
+
+
 class TestSearchResponseMetadata:
     async def test_response_includes_metadata_fields(self) -> None:
         ollama = AsyncMock()

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from app.ollama.client import OllamaEmbeddingClient
     from app.permissions.service import PermissionService
     from app.search.person_index import PersonIndex
+    from app.search.rewriter import QueryRewriter
     from app.vectors.repository import SqliteVecRepository
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class SearchService:
         intent_filter_person_enabled: bool = True,
         intent_filter_year_enabled: bool = True,
         intent_filter_rating_enabled: bool = True,
+        rewriter: QueryRewriter | None = None,
     ) -> None:
         self._ollama = ollama_client
         self._vec_repo = vec_repo
@@ -63,6 +65,7 @@ class SearchService:
         self._filter_person = intent_filter_person_enabled
         self._filter_year = intent_filter_year_enabled
         self._filter_rating = intent_filter_rating_enabled
+        self._rewriter = rewriter
         self._status_cache: SearchStatus | None = None
         self._status_cache_time: float = 0.0
         self._status_cache_ttl: float = 30.0  # seconds
@@ -107,7 +110,9 @@ class SearchService:
         # Spec 24: detect intent and (optionally) pre-filter the candidate set
         # before cosine. ``filter_ids`` is None when no filter applied — caller
         # falls through to full vec0; an empty set means AND-empty (Q3-D contract).
-        filter_ids = await self._maybe_prefilter(query)
+        # On a paraphrastic miss we rewrite the query and re-feed through the
+        # intent layer (Q4-C default-on).
+        effective_query, filter_ids = await self._route_query(query)
         if filter_ids is not None and len(filter_ids) == 0:
             elapsed_ms = int((time.perf_counter() - t0) * 1000)
             logger.info(
@@ -124,7 +129,7 @@ class SearchService:
             )
 
         try:
-            embedding_result = await self._ollama.embed(QUERY_PREFIX + query)
+            embedding_result = await self._ollama.embed(QUERY_PREFIX + effective_query)
         except (OllamaTimeoutError, OllamaConnectionError) as exc:
             raise SearchUnavailableError("Embedding service is unavailable") from exc
         except OllamaError as exc:
@@ -165,7 +170,7 @@ class SearchService:
 
         # Soft genre rerank: bucket-sort by genre match while preserving
         # cosine order (the input ``permitted_ids`` order) within each tier.
-        ordered_ids = self._rerank_by_genre(query, permitted_ids, item_map)
+        ordered_ids = self._rerank_by_genre(effective_query, permitted_ids, item_map)
         ordered_ids = ordered_ids[:limit]
 
         results: list[SearchResultItem] = []
@@ -211,18 +216,41 @@ class SearchService:
             query_time_ms=elapsed_ms,
         )
 
-    async def _maybe_prefilter(self, query: str) -> set[str] | None:
-        """Run intent detection and structured pre-filter when applicable.
+    async def _route_query(self, query: str) -> tuple[str, set[str] | None]:
+        """Route the query through intent detection + optional rewriter.
 
-        Returns ``None`` when no filter signal fired (caller falls through
-        to raw cosine). Returns a (possibly empty) ``set`` when the
-        structured filter ran. The empty-set case implements the Q3-D
-        contract: honest empty results > silent fallback.
+        Returns the effective query string (possibly rewritten) and the
+        structured pre-filter set (None = no filter, empty set = AND-empty).
+
+        Routing strategy (Spec 24 Q1-B + Q4-C):
+          - No PersonIndex → return (query, None) and skip everything.
+          - Intent has a structured signal → run filter, no rewrite.
+          - Intent paraphrastic AND no structured signal → rewrite, then
+            re-feed through detect_intent. New signals trigger
+            ``rewrite_chained_to_<signal>`` log line.
         """
         if self._person_index is None:
-            return None
+            return query, None
 
         intent = detect_intent(query, self._person_index)
+        if intent.has_signals():
+            return query, await self._apply_filter(intent)
+
+        # Paraphrastic-fallback path: rewrite, re-detect intent, log chaining.
+        if intent.is_paraphrastic and self._rewriter is not None:
+            rewritten = await self._rewriter.rewrite(query)
+            if rewritten != query:
+                rewritten_intent = detect_intent(rewritten, self._person_index)
+                self._log_chain(intent, rewritten_intent)
+                if rewritten_intent.has_signals():
+                    return rewritten, await self._apply_filter(rewritten_intent)
+                return rewritten, None
+
+        return query, None
+
+    async def _apply_filter(self, intent) -> set[str] | None:  # type: ignore[no-untyped-def]
+        """Translate an intent into a filter call respecting the per-flag
+        switches; logs signal counts only (no names, no query text)."""
         people = intent.people if (self._filter_person and intent.people) else None
         year_range = (
             intent.year_range
@@ -237,7 +265,6 @@ class SearchService:
         filter_ids = await self._library.search_filtered_ids(
             people=people, year_range=year_range, ratings=ratings
         )
-        # Counts only — never names, never query text (architecture rule).
         signals = [
             label
             for label, present in (
@@ -253,6 +280,23 @@ class SearchService:
             len(filter_ids) if filter_ids is not None else -1,
         )
         return filter_ids
+
+    @staticmethod
+    def _log_chain(original, rewritten) -> None:  # type: ignore[no-untyped-def]
+        """Emit ``rewrite_chained_to_<signal>`` when the rewrite surfaces
+        a structured signal the raw query did not. One log line per signal
+        type (Q4-C resolution)."""
+        gained = []
+        if rewritten.people and not original.people:
+            gained.append("person_filter")
+        if rewritten.year_range is not None and original.year_range is None:
+            gained.append("year_filter")
+        if rewritten.ratings and not original.ratings:
+            gained.append("rating_filter")
+        if rewritten.genres and not original.genres:
+            gained.append("genre_rerank")
+        for kind in gained:
+            logger.info("rewrite_chained_to_%s", kind)
 
     @staticmethod
     def _rerank_by_genre(

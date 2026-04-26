@@ -42,6 +42,8 @@ from app.models import (
 from app.ollama.client import OllamaEmbeddingClient
 from app.play.router import create_play_router
 from app.search.person_index import PersonIndex
+from app.search.rewrite_cache import RewriteCache
+from app.search.rewriter import QueryRewriter
 from app.search.router import create_search_router
 from app.sync.engine import SyncEngine
 from app.sync.router import router as sync_router
@@ -240,6 +242,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_sessions_per_user=settings.max_sessions_per_user,
             conversation_store=conversation_store,
         )
+        # Rewrite cache: process-local LRU+TTL keyed by SHA-256(normalised query).
+        # Built before auth_router so the logout cascade can clear it.
+        rewrite_cache = RewriteCache(
+            max_entries=settings.rewrite_cache_max_entries,
+            ttl_seconds=settings.rewrite_cache_ttl_hours * 3600,
+        )
+        app.state.rewrite_cache = rewrite_cache
+
         auth_router = create_auth_router(
             auth_service=auth_service,
             session_store=store,
@@ -248,6 +258,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             limiter=limiter,
             permission_service=permission_service,
             watch_history_service=watch_history_service,
+            rewrite_cache=rewrite_cache,
         )
         app.include_router(auth_router)
 
@@ -301,6 +312,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             chat_model=settings.ollama_chat_model,
         )
         app.state.ollama_chat_client = ollama_chat_client
+
+        # Spec 24 — paraphrastic LLM rewriter (shares the chat client).
+        query_rewriter = QueryRewriter(
+            chat_client=ollama_chat_client,
+            cache=rewrite_cache,
+            timeout_seconds=settings.rewrite_timeout_seconds,
+            max_output_chars=settings.rewrite_max_output_chars,
+        )
+        app.state.query_rewriter = query_rewriter
+        # Make rewriter available to the (already-built) SearchService.
+        # The constructor accepted it as None; we attach now because chat
+        # client lives further down the lifespan dependency tree.
+        search_service._rewriter = query_rewriter
 
         pause_counter = ChatPauseCounter()
         app.state.pause_counter = pause_counter

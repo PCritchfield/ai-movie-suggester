@@ -433,3 +433,36 @@ def test_intent_filter_settings_validate_boolean() -> None:
         pytest.raises(ValidationError),
     ):
         Settings()  # type: ignore[call-arg]
+
+
+# --- Spec 24 — rewriter / rewrite cache settings ---
+
+
+def test_rewriter_settings_defaults() -> None:
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.rewrite_timeout_seconds == 2.0
+    assert s.rewrite_max_output_chars == 200
+    assert s.rewrite_cache_max_entries == 1000
+    assert s.rewrite_cache_ttl_hours == 24
+
+
+def test_rewriter_settings_bounds() -> None:
+    """Each rewriter field rejects out-of-bound values."""
+    for field, bad in (
+        ("REWRITE_TIMEOUT_SECONDS", "0.05"),
+        ("REWRITE_TIMEOUT_SECONDS", "10.5"),
+        ("REWRITE_MAX_OUTPUT_CHARS", "0"),
+        ("REWRITE_MAX_OUTPUT_CHARS", "1001"),
+        ("REWRITE_CACHE_MAX_ENTRIES", "0"),
+        ("REWRITE_CACHE_MAX_ENTRIES", "100001"),
+        ("REWRITE_CACHE_TTL_HOURS", "0"),
+        ("REWRITE_CACHE_TTL_HOURS", "169"),
+    ):
+        env = {**_REQUIRED_ENV, field: bad}
+        with (
+            patch.dict(os.environ, env, clear=True),
+            pytest.raises(ValidationError),
+        ):
+            Settings()  # type: ignore[call-arg]
