@@ -17,6 +17,18 @@ import re
 # (keyword, canonical-genre-group). Detection uses word-boundary regex so
 # ``warning`` does not match ``war`` and ``scientific`` does not match
 # ``science fiction``.
+#
+# The canonical genre strings on the right-hand side must match what
+# Jellyfin actually emits in ``LibraryItem.genres`` for this deployment.
+# Jellyfin's metadata plugins vary — TMDb-backed libraries typically use
+# ``Science Fiction``, while the built-in Emby-style plugin uses
+# ``Sci-Fi & Fantasy``. Both forms are listed here so the rerank
+# survives either casing. If a deployment sees no rerank lift on a
+# valid genre query, that is the first place to look.
+#
+# ``rom-com`` and ``romcom`` deliberately appear twice each — once for
+# the ``Romance`` group and once for ``Comedy`` — so they enforce both
+# as independent tier-1 requirements.
 _KEYWORD_GROUPS: tuple[tuple[str, frozenset[str]], ...] = (
     # sci-fi family
     ("sci-fi", frozenset({"Science Fiction", "Sci-Fi & Fantasy"})),

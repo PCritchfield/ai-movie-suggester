@@ -14,7 +14,8 @@ dependencies = [
     "slowapi>=0.1.9",
     # Pinned to 0.1.6: 0.1.7 broke DELETE on the vec0 PRIMARY KEY column,
     # which the repository's DELETE+INSERT upsert pattern depends on.
-    # Track the underlying fix and re-bump (or rewrite the upsert) later.
+    # Tracked in #227 — once the upsert is rewritten as UPDATE-or-INSERT,
+    # this pin can be removed.
     "sqlite-vec==0.1.6",
 ]
 

@@ -41,7 +41,8 @@ def _build_genre_prefix_section(genres: list[str]) -> str | None:
     Surfaces genre signal at the start of the composite text so
     nomic-embed-text weights it more strongly than the labeled
     ``Genres:`` line, which would otherwise be diluted by long
-    plot/cast text.
+    plot/cast text. ``genres`` is expected to be already cleaned of
+    empty/whitespace entries by ``build_sections``.
     """
     if not genres:
         return None
@@ -106,6 +107,11 @@ def build_sections(
     ``check_template_version`` re-enqueues every item for re-embedding
     on its next startup/cycle.
     """
+    # Clean once; both the v5 prefix and the labeled Genres: section
+    # share this cleaned list so empty/whitespace entries don't bake
+    # malformed text into the embedding document.
+    genres = [g for g in genres if g and g.strip()]
+
     sections: list[str] = []
 
     genre_prefix = _build_genre_prefix_section(genres)

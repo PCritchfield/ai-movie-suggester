@@ -56,6 +56,12 @@ class TestDetectQueryGenres:
         assert detect_query_genres("a scientific documentary about") == [
             frozenset({"Documentary"})
         ]
+        # "star wars" must not trip the {War} group: the "s" in "wars"
+        # is the boundary stopper.
+        assert detect_query_genres("a film like star wars") == []
+        assert detect_query_genres("star trek style adventure") == [
+            frozenset({"Adventure"})
+        ]
 
     def test_case_insensitive(self) -> None:
         groups = detect_query_genres("HORROR Comedy")

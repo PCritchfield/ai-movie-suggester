@@ -197,6 +197,39 @@ class TestGenrePrefix:
         assert not text.lower().startswith("a ")
         assert text == "Title: Untagged Movie."
 
+    def test_vowel_article_for_single_vowel_initial_genre(self) -> None:
+        """Genres starting with a vowel get ``An`` instead of ``A``.
+        Locked here so the article rule can't silently regress."""
+        text = build_sections(
+            title="Indiana Jones",
+            overview=None,
+            genres=["Action"],
+            production_year=None,
+        )
+        assert text.startswith("An action film. ")
+
+    def test_empty_string_genre_entries_are_dropped(self) -> None:
+        """Whitespace/empty-string entries should not produce ``A  film.``."""
+        text = build_sections(
+            title="Edge Case",
+            overview=None,
+            genres=["", "Comedy", "  "],
+            production_year=None,
+        )
+        assert text.startswith("A comedy film. ")
+        # No double space, no empty filler word
+        assert "  " not in text.split("Title:")[0]
+
+    def test_only_empty_string_genres_omits_prefix(self) -> None:
+        """If every genre entry is empty/whitespace, no prefix at all."""
+        text = build_sections(
+            title="No Genres Tagged",
+            overview=None,
+            genres=["", "  "],
+            production_year=None,
+        )
+        assert text == "Title: No Genres Tagged."
+
     def test_prefix_precedes_overview(self) -> None:
         text = build_sections(
             title="Galaxy Quest",

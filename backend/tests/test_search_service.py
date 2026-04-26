@@ -14,7 +14,7 @@ def _make_service(
     vec_repo: AsyncMock | None = None,
     permissions: AsyncMock | None = None,
     library: AsyncMock | None = None,
-    overfetch: int = 3,
+    overfetch: int = 5,
 ) -> SearchService:
     """Build a SearchService with mocked dependencies.
 
