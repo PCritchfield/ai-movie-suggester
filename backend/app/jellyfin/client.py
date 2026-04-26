@@ -32,6 +32,11 @@ _ITEM_FIELDS = (
     "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,RunTimeTicks,People"
 )
 
+# Pass to get_items() / get_all_items() when only item IDs are needed
+# (e.g. permission ID lookups). Jellyfin still returns Id/Name/Type because
+# those are base fields, but skips the heavy optional metadata.
+FIELDS_IDS_ONLY: str = ""
+
 
 class JellyfinClient:
     """Async client for the Jellyfin REST API."""
@@ -210,6 +215,9 @@ class JellyfinClient:
         Stops when all items have been fetched (start_index >= total_count).
         Propagates JellyfinAuthError and JellyfinConnectionError without
         catching them — the caller handles partial failure.
+
+        ``fields`` is forwarded verbatim to every get_items() call;
+        see get_items() for semantics (None = full _ITEM_FIELDS).
 
         Token is passed through to get_items() on each call, never stored.
         """

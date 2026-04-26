@@ -670,8 +670,19 @@ class TestGetAllItems:
     async def test_get_all_items_forwards_fields_to_get_items(
         self, jf_client: JellyfinClient
     ) -> None:
-        """fields kwarg on get_all_items must propagate to each get_items call."""
-        empty_page = PaginatedItems(Items=[], TotalRecordCount=0, StartIndex=0)
+        """fields kwarg on get_all_items must propagate to *every* get_items call."""
+        # Two non-empty pages so the loop iterates more than once — proves the
+        # forwarding contract holds for subsequent pages, not just the first.
+        page1 = PaginatedItems(
+            Items=[LibraryItem(Id="a", Name="A", Type="Movie")],
+            TotalRecordCount=2,
+            StartIndex=0,
+        )
+        page2 = PaginatedItems(
+            Items=[LibraryItem(Id="b", Name="B", Type="Movie")],
+            TotalRecordCount=2,
+            StartIndex=1,
+        )
         captured_fields: list[str | None] = []
 
         async def mock_get_items(
@@ -685,10 +696,12 @@ class TestGetAllItems:
             fields: str | None = None,
         ) -> PaginatedItems:
             captured_fields.append(fields)
-            return empty_page
+            return page1 if start_index == 0 else page2
 
         with patch.object(jf_client, "get_items", side_effect=mock_get_items):
-            async for _ in jf_client.get_all_items("tok-123", "uid-1", fields=""):
+            async for _ in jf_client.get_all_items(
+                "tok-123", "uid-1", page_size=1, fields=""
+            ):
                 pass
 
-        assert captured_fields == [""]
+        assert captured_fields == ["", ""]

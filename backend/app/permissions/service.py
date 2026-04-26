@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from app.jellyfin.client import FIELDS_IDS_ONLY
 from app.jellyfin.errors import (
     JellyfinAuthError,
     JellyfinConnectionError,
@@ -61,7 +62,7 @@ class PermissionService:
         """
         ids: set[str] = set()
         async for page in self._jf_client.get_all_items(
-            token=token, user_id=user_id, item_types=["Movie"], fields=""
+            token=token, user_id=user_id, item_types=["Movie"], fields=FIELDS_IDS_ONLY
         ):
             for item in page.items:
                 ids.add(item.id)

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.jellyfin.client import FIELDS_IDS_ONLY
 from app.jellyfin.errors import (
     JellyfinAuthError,
     JellyfinConnectionError,
@@ -321,4 +322,5 @@ class TestFetchPayloadShape:
 
         await svc.filter_permitted("user1", "tok", ["a"])
 
-        assert captured_kwargs.get("fields") == ""
+        assert captured_kwargs.get("fields") == FIELDS_IDS_ONLY
+        assert FIELDS_IDS_ONLY == ""  # Lock the contract — Jellyfin convention
