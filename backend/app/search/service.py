@@ -70,13 +70,14 @@ class SearchService:
         self._status_cache_time: float = 0.0
         self._status_cache_ttl: float = 30.0  # seconds
 
-    def set_rewriter(self, rewriter: QueryRewriter) -> None:
-        """Attach a rewriter post-construction.
+    @property
+    def person_index(self) -> PersonIndex | None:
+        """Read-only handle to the injected ``PersonIndex`` (or ``None``).
 
-        The rewriter shares the chat client, which is built later in the
-        FastAPI lifespan than ``SearchService`` itself — see ``app.main``.
+        Exposed so tests and the eval harness can introspect routing
+        configuration without reaching into private state.
         """
-        self._rewriter = rewriter
+        return self._person_index
 
     async def search(
         self,
@@ -169,7 +170,13 @@ class SearchService:
         permitted_ids = await self._permissions.filter_permitted(
             user_id, token, candidate_ids
         )
-        filtered_count = total_candidates - len(permitted_ids)
+        # ``filtered_count`` is reported back to the client as the number of
+        # candidates removed by the permission filter — not by the structured
+        # pre-filter or ``exclude_ids``. Compute it from the pre-permission
+        # candidate count rather than ``total_candidates`` so the metadata
+        # stays accurate when the router or the watch-history exclusion
+        # narrowed the candidate pool first (Copilot review #2).
+        filtered_count = len(candidate_ids) - len(permitted_ids)
 
         score_map = {c.jellyfin_id: c.score for c in candidates}
 

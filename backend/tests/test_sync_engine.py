@@ -844,9 +844,7 @@ async def test_sync_callback_failure_does_not_break_sync() -> None:
     failing = AsyncMock(side_effect=RuntimeError("rebuild boom"))
     surviving = AsyncMock()
 
-    engine = SyncEngine(
-        store, client, settings, on_sync_complete=[failing, surviving]
-    )
+    engine = SyncEngine(store, client, settings, on_sync_complete=[failing, surviving])
     result = await engine.run_sync()
 
     assert result.status == SYNC_STATUS_COMPLETED

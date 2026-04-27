@@ -20,6 +20,7 @@ def _make_service(
     intent_filter_person_enabled: bool = True,
     intent_filter_year_enabled: bool = True,
     intent_filter_rating_enabled: bool = True,
+    rewriter: AsyncMock | None = None,
 ) -> SearchService:
     """Build a SearchService with mocked dependencies.
 
@@ -56,6 +57,7 @@ def _make_service(
         intent_filter_person_enabled=intent_filter_person_enabled,
         intent_filter_year_enabled=intent_filter_year_enabled,
         intent_filter_rating_enabled=intent_filter_rating_enabled,
+        rewriter=rewriter,
     )
 
 
@@ -809,8 +811,8 @@ class TestSearchPipelineRewriterGating:
             permissions=permissions,
             library=library,
             person_index=index,
+            rewriter=rewriter,
         )
-        service._rewriter = rewriter  # type: ignore[attr-defined]
 
         await service.search("Eddie Murphy films", limit=10, user_id="u1", token="tok")
         rewriter.rewrite.assert_not_awaited()
@@ -841,8 +843,8 @@ class TestSearchPipelineRewriterGating:
             permissions=permissions,
             library=library,
             person_index=index,
+            rewriter=rewriter,
         )
-        service._rewriter = rewriter  # type: ignore[attr-defined]
 
         await service.search(
             "something like alien but funny and uplifting",
@@ -896,3 +898,44 @@ class TestSearchResponseMetadata:
         assert result.filtered_count == 1
         assert isinstance(result.query_time_ms, int)
         assert result.query_time_ms >= 0
+
+    async def test_filtered_count_excludes_pre_filter_drops(self) -> None:
+        """``filtered_count`` reports permission drops only — not items
+        removed by the structured pre-filter or exclude_ids (Copilot #2).
+        """
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("keep", 0.9),
+            make_search_result("drop_by_filter_a", 0.8),
+            make_search_result("drop_by_filter_b", 0.7),
+        ]
+        permissions = AsyncMock()
+        # The single survivor of the pre-filter is also permitted.
+        permissions.filter_permitted.return_value = ["keep"]
+        library = AsyncMock()
+        library.get_many.return_value = [make_library_item("keep")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        # Pre-filter narrows {keep, drop_by_filter_a, drop_by_filter_b} → {keep}.
+        library.search_filtered_ids = AsyncMock(return_value={"keep"})
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        result = await service.search(
+            "Eddie Murphy films", limit=10, user_id="u1", token="tok"
+        )
+        # Two items were removed by the pre-filter, ZERO by permissions.
+        assert result.filtered_count == 0
+        # total_candidates still reports the raw vector-search count.
+        assert result.total_candidates == 3

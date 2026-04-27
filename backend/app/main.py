@@ -266,38 +266,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.include_router(sync_router)
         app.include_router(embedding_router)
 
-        # Create search service and mount router
-        from app.search.service import SearchService
-
-        search_service = SearchService(
-            ollama_client=ollama_client,
-            vec_repo=vec_repo,
-            permission_service=permission_service,
-            library_store=library_store,
-            overfetch_multiplier=settings.search_overfetch_multiplier,
-            jellyfin_web_url=settings.effective_jellyfin_web_url,
-            person_index=person_index,
-            intent_filter_person_enabled=settings.intent_filter_person_enabled,
-            intent_filter_year_enabled=settings.intent_filter_year_enabled,
-            intent_filter_rating_enabled=settings.intent_filter_rating_enabled,
-        )
-        app.state.search_service = search_service
-        search_router = create_search_router(
-            settings=settings,
-            limiter=limiter,
-        )
-        app.include_router(search_router)
-
-        # Mount image proxy router
-        from app.images.router import create_images_router
-
-        images_router = create_images_router(settings=settings, limiter=limiter)
-        app.include_router(images_router)
-
-        # Create chat client, service, pause counter, and mount router.
-        # NOTE: pause_counter is created here because EmbeddingWorker
-        # receives it during startup below.  Both consumers must share
-        # the same instance.
+        # Build the chat client + query rewriter BEFORE SearchService so
+        # the rewriter can be passed via the constructor — avoids the
+        # post-init mutation pattern Granny flagged on PR #228.
         from app.chat.router import create_chat_router
         from app.chat.service import ChatPauseCounter, ChatService
         from app.ollama.chat_client import OllamaChatClient
@@ -321,10 +292,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_output_chars=settings.rewrite_max_output_chars,
         )
         app.state.query_rewriter = query_rewriter
-        # Make rewriter available to the (already-built) SearchService.
-        # The constructor accepted it as None; we attach now because chat
-        # client lives further down the lifespan dependency tree.
-        search_service.set_rewriter(query_rewriter)
+
+        # Create search service and mount router
+        from app.search.service import SearchService
+
+        search_service = SearchService(
+            ollama_client=ollama_client,
+            vec_repo=vec_repo,
+            permission_service=permission_service,
+            library_store=library_store,
+            overfetch_multiplier=settings.search_overfetch_multiplier,
+            jellyfin_web_url=settings.effective_jellyfin_web_url,
+            person_index=person_index,
+            intent_filter_person_enabled=settings.intent_filter_person_enabled,
+            intent_filter_year_enabled=settings.intent_filter_year_enabled,
+            intent_filter_rating_enabled=settings.intent_filter_rating_enabled,
+            rewriter=query_rewriter,
+        )
+        app.state.search_service = search_service
+        search_router = create_search_router(
+            settings=settings,
+            limiter=limiter,
+        )
+        app.include_router(search_router)
+
+        # Mount image proxy router
+        from app.images.router import create_images_router
+
+        images_router = create_images_router(settings=settings, limiter=limiter)
+        app.include_router(images_router)
 
         pause_counter = ChatPauseCounter()
         app.state.pause_counter = pause_counter

@@ -111,7 +111,7 @@ async def test_query_router_case(
     query_router_service: SearchService,
     pipeline_library_store: LibraryStore,
 ) -> None:
-    person_index = query_router_service._person_index  # type: ignore[attr-defined]
+    person_index = query_router_service.person_index
     assert person_index is not None
     detected = _detect_path(case.query, person_index)
     if case.expected_path != "rating":
