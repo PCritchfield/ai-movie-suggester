@@ -324,7 +324,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Make rewriter available to the (already-built) SearchService.
         # The constructor accepted it as None; we attach now because chat
         # client lives further down the lifespan dependency tree.
-        search_service._rewriter = query_rewriter
+        search_service.set_rewriter(query_rewriter)
 
         pause_counter = ChatPauseCounter()
         app.state.pause_counter = pause_counter

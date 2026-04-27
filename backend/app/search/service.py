@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from app.ollama.errors import OllamaConnectionError, OllamaError, OllamaTimeoutError
 from app.search.genre_keywords import detect_query_genres
-from app.search.intent import detect_intent
+from app.search.intent import QueryIntent, detect_intent
 from app.search.models import (
     QUERY_PREFIX,
     SearchResponse,
@@ -70,6 +70,14 @@ class SearchService:
         self._status_cache_time: float = 0.0
         self._status_cache_ttl: float = 30.0  # seconds
 
+    def set_rewriter(self, rewriter: QueryRewriter) -> None:
+        """Attach a rewriter post-construction.
+
+        The rewriter shares the chat client, which is built later in the
+        FastAPI lifespan than ``SearchService`` itself — see ``app.main``.
+        """
+        self._rewriter = rewriter
+
     async def search(
         self,
         query: str,
@@ -111,8 +119,10 @@ class SearchService:
         # before cosine. ``filter_ids`` is None when no filter applied — caller
         # falls through to full vec0; an empty set means AND-empty (Q3-D contract).
         # On a paraphrastic miss we rewrite the query and re-feed through the
-        # intent layer (Q4-C default-on).
-        effective_query, filter_ids = await self._route_query(query)
+        # intent layer (Q4-C default-on). ``effective_intent`` carries the
+        # detected genre groups through to ``_rerank_by_genre`` so we don't
+        # call ``detect_query_genres`` twice per request.
+        effective_query, filter_ids, effective_intent = await self._route_query(query)
         if filter_ids is not None and len(filter_ids) == 0:
             elapsed_ms = int((time.perf_counter() - t0) * 1000)
             logger.info(
@@ -170,7 +180,14 @@ class SearchService:
 
         # Soft genre rerank: bucket-sort by genre match while preserving
         # cosine order (the input ``permitted_ids`` order) within each tier.
-        ordered_ids = self._rerank_by_genre(effective_query, permitted_ids, item_map)
+        # Reuse the genre groups already computed by ``detect_intent`` if
+        # available — otherwise fall back to a fresh detection so callers
+        # bypassing the router (e.g. unit tests) still get the rerank.
+        if effective_intent is not None and effective_intent.genres:
+            genre_groups = effective_intent.genres
+        else:
+            genre_groups = detect_query_genres(effective_query)
+        ordered_ids = self._rerank_by_genre(genre_groups, permitted_ids, item_map)
         ordered_ids = ordered_ids[:limit]
 
         results: list[SearchResultItem] = []
@@ -216,25 +233,31 @@ class SearchService:
             query_time_ms=elapsed_ms,
         )
 
-    async def _route_query(self, query: str) -> tuple[str, set[str] | None]:
+    async def _route_query(
+        self, query: str
+    ) -> tuple[str, set[str] | None, QueryIntent | None]:
         """Route the query through intent detection + optional rewriter.
 
-        Returns the effective query string (possibly rewritten) and the
-        structured pre-filter set (None = no filter, empty set = AND-empty).
+        Returns ``(effective_query, filter_ids, effective_intent)``:
+          - ``filter_ids`` is None when no filter applied; an empty set
+            means AND-empty (Q3-D).
+          - ``effective_intent`` is the intent detected against the
+            *effective* query (after any rewrite), exposed so callers can
+            reuse its genre groups without re-running detection.
 
         Routing strategy (Spec 24 Q1-B + Q4-C):
-          - No PersonIndex → return (query, None) and skip everything.
+          - No PersonIndex → return (query, None, None) and skip everything.
           - Intent has a structured signal → run filter, no rewrite.
           - Intent paraphrastic AND no structured signal → rewrite, then
             re-feed through detect_intent. New signals trigger
             ``rewrite_chained_to_<signal>`` log line.
         """
         if self._person_index is None:
-            return query, None
+            return query, None, None
 
         intent = detect_intent(query, self._person_index)
         if intent.has_signals():
-            return query, await self._apply_filter(intent)
+            return query, await self._apply_filter(intent), intent
 
         # Paraphrastic-fallback path: rewrite, re-detect intent, log chaining.
         if intent.is_paraphrastic and self._rewriter is not None:
@@ -243,12 +266,16 @@ class SearchService:
                 rewritten_intent = detect_intent(rewritten, self._person_index)
                 self._log_chain(intent, rewritten_intent)
                 if rewritten_intent.has_signals():
-                    return rewritten, await self._apply_filter(rewritten_intent)
-                return rewritten, None
+                    return (
+                        rewritten,
+                        await self._apply_filter(rewritten_intent),
+                        rewritten_intent,
+                    )
+                return rewritten, None, rewritten_intent
 
-        return query, None
+        return query, None, intent
 
-    async def _apply_filter(self, intent) -> set[str] | None:  # type: ignore[no-untyped-def]
+    async def _apply_filter(self, intent: QueryIntent) -> set[str] | None:
         """Translate an intent into a filter call respecting the per-flag
         switches; logs signal counts only (no names, no query text)."""
         people = intent.people if (self._filter_person and intent.people) else None
@@ -282,7 +309,7 @@ class SearchService:
         return filter_ids
 
     @staticmethod
-    def _log_chain(original, rewritten) -> None:  # type: ignore[no-untyped-def]
+    def _log_chain(original: QueryIntent, rewritten: QueryIntent) -> None:
         """Emit ``rewrite_chained_to_<signal>`` when the rewrite surfaces
         a structured signal the raw query did not. One log line per signal
         type (Q4-C resolution)."""
@@ -300,21 +327,21 @@ class SearchService:
 
     @staticmethod
     def _rerank_by_genre(
-        query: str,
+        groups: list[frozenset[str]],
         permitted_ids: list[str],
         item_map: Mapping[str, LibraryItemRow],
     ) -> list[str]:
-        """Bucket-sort permitted IDs by genre match against the query.
+        """Bucket-sort permitted IDs by precomputed genre match groups.
 
         - Tier 1: candidate genres match **every** detected genre group
         - Tier 2: matches **at least one** group
         - Tier 3: matches **none**
 
         Cosine order is preserved within each tier (input order is
-        cosine-ordered). If no genre keywords are detected in the
-        query, returns ``permitted_ids`` unchanged.
+        cosine-ordered). If ``groups`` is empty, returns ``permitted_ids``
+        unchanged. The caller is responsible for genre detection so we
+        don't run ``detect_query_genres`` twice per request.
         """
-        groups = detect_query_genres(query)
         if not groups:
             return permitted_ids
 
