@@ -47,15 +47,20 @@ _RESET = "\033[0m" if _supports_color() else ""
 
 async def _login(
     client: httpx.AsyncClient, base_url: str, user: str, password: str
-) -> dict[str, str]:
-    """Return cookie + CSRF dicts after a successful Jellyfin login."""
+) -> str:
+    """Authenticate against /api/auth/login and return the CSRF token.
+
+    The session cookie is stored on the client's cookie jar as a side
+    effect, which the rest of the script relies on for subsequent
+    authenticated calls. The returned CSRF token must be sent back as
+    the ``X-CSRF-Token`` header on state-changing requests.
+    """
     resp = await client.post(
         f"{base_url}/api/auth/login",
         json={"username": user, "password": password},
     )
     resp.raise_for_status()
-    csrf = resp.cookies.get("csrf_token")
-    return {"csrf": csrf or ""}
+    return resp.cookies.get("csrf_token") or ""
 
 
 class _SearchHttpError(Exception):
@@ -123,11 +128,10 @@ async def _amain(args: argparse.Namespace) -> int:
     timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         try:
-            await _login(client, args.base_url, args.user, args.password)
+            csrf = await _login(client, args.base_url, args.user, args.password)
         except httpx.HTTPStatusError as exc:
             print(f"Login failed: {exc}")
             return 2
-        csrf = client.cookies.get("csrf_token") or ""
 
         passed = 0
         failed = 0

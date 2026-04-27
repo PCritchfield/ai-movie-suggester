@@ -179,9 +179,16 @@ class SearchService:
             candidates = [c for c in candidates if c.jellyfin_id not in exclude_ids]
 
         candidate_ids = [c.jellyfin_id for c in candidates]
-        permitted_ids = await self._permissions.filter_permitted(
-            user_id, token, candidate_ids
-        )
+        # Short-circuit when nothing survived pre-filter / exclude_ids — calling
+        # PermissionService.filter_permitted([]) would still incur a Jellyfin
+        # round-trip (cache miss → permission fetch) for an empty result set
+        # (Copilot review #8).
+        if not candidate_ids:
+            permitted_ids: list[str] = []
+        else:
+            permitted_ids = await self._permissions.filter_permitted(
+                user_id, token, candidate_ids
+            )
         # ``filtered_count`` is reported back to the client as the number of
         # candidates removed by the permission filter — not by the structured
         # pre-filter or ``exclude_ids``. Compute it from the pre-permission

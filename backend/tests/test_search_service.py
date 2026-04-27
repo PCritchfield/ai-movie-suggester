@@ -926,6 +926,78 @@ class TestSearchPipelineRewriterGating:
         assert "rewritten short paraphrase" in embed_input
 
 
+class TestSearchSkipsPermissionFilterWhenEmpty:
+    """Spec 24 / Copilot #8 — short-circuit ``filter_permitted([])``.
+
+    With a real ``PermissionService`` the empty-list call still triggers a
+    Jellyfin permission fetch on cache miss. Skipping it avoids that
+    round-trip when the prior filter steps already produced no survivors.
+    """
+
+    async def test_no_permission_call_when_exclude_drains_all(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("watched-1", 0.9),
+            make_search_result("watched-2", 0.8),
+        ]
+        permissions = AsyncMock()
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        # exclude_ids removes every cosine result, so candidate_ids = [].
+        await service.search(
+            "test",
+            limit=10,
+            user_id="u1",
+            token="tok",
+            exclude_ids={"watched-1", "watched-2"},
+        )
+        permissions.filter_permitted.assert_not_awaited()
+
+    async def test_no_permission_call_when_filter_drops_all(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("m-other", 0.9),
+        ]
+        permissions = AsyncMock()
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        # Pre-filter narrows to an id the cosine search did NOT surface,
+        # so the post-cosine intersection produces an empty list.
+        library.search_filtered_ids = AsyncMock(return_value={"m-not-in-cosine"})
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        await service.search("Eddie Murphy films", limit=10, user_id="u1", token="tok")
+        permissions.filter_permitted.assert_not_awaited()
+
+
 class TestSearchResponseMetadata:
     async def test_response_includes_metadata_fields(self) -> None:
         ollama = AsyncMock()
