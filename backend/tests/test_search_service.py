@@ -677,6 +677,73 @@ class TestSearchPipelineWithIntent:
         # Only the matched candidate survived the pre-filter intersection
         assert [r.jellyfin_id for r in result.results] == ["m-em"]
 
+    async def test_filter_active_expands_fetch_limit_to_library_size(self) -> None:
+        """Spec 24 / live-deploy recall fix.
+
+        When a structured filter is active, the cosine fetch window must
+        widen to the full library size so filter-matched items that don't
+        rank in the default top-N can still surface. Without this, the
+        post-cosine intersection silently empties out for queries whose
+        embedding doesn't naturally rank the filter set highly.
+        """
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 1805  # full live library size
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value={"jf-bw"})
+
+        index = PersonIndex(names=frozenset({"bruce willis"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+            overfetch=5,
+        )
+        await service.search(
+            "movies starring Bruce Willis", limit=10, user_id="u1", token="tok"
+        )
+        # Filter active → fetch_limit must reach the full library size,
+        # NOT the default limit×overfetch=50.
+        vec_repo.search.assert_awaited_once()
+        assert vec_repo.search.call_args.kwargs["limit"] == 1805
+
+    async def test_filter_inactive_keeps_default_fetch_limit(self) -> None:
+        """Sanity check: without a filter, fetch_limit stays at limit×overfetch."""
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 1805
+        vec_repo.search.return_value = []
+        library = AsyncMock()
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value=None)
+        index = PersonIndex(names=frozenset())
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            library=library,
+            person_index=index,
+            overfetch=5,
+        )
+        await service.search("anything", limit=10, user_id="u1", token="tok")
+        assert vec_repo.search.call_args.kwargs["limit"] == 50
+
     async def test_search_pipeline_skips_filter_when_intent_empty(self) -> None:
         ollama = AsyncMock()
         ollama.embed.return_value = make_embedding_result()

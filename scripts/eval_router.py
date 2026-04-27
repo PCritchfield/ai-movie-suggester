@@ -131,7 +131,12 @@ async def _amain(args: argparse.Namespace) -> int:
 
         passed = 0
         failed = 0
-        for case in cases:
+        for i, case in enumerate(cases):
+            # Throttle to stay under the search rate limit. SEARCH_RATE_LIMIT
+            # defaults to "10/minute" — without spacing, the eval blows
+            # through 10 in ~5 seconds and the rest 429.
+            if i > 0 and args.throttle_seconds > 0:
+                await asyncio.sleep(args.throttle_seconds)
             try:
                 results = await _run_search(
                     client, args.base_url, csrf, case.query, args.limit
@@ -198,6 +203,15 @@ def main() -> None:
         type=int,
         default=10,
         help="Top-N results per query (default: 10).",
+    )
+    parser.add_argument(
+        "--throttle-seconds",
+        type=float,
+        default=7.0,
+        help=(
+            "Sleep between requests to respect the backend SEARCH_RATE_LIMIT "
+            "(default: 7.0 — keeps under 10/minute). Set to 0 to disable."
+        ),
     )
     parser.add_argument(
         "--fixtures",

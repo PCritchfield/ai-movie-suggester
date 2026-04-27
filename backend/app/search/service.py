@@ -149,17 +149,29 @@ class SearchService:
         # Over-fetch to compensate for items removed by permission filtering
         # and to give the genre rerank room to find tier-1 matches at lower
         # cosine ranks.
+        #
+        # Spec 24 / live deploy April 2026 finding: when a structured filter
+        # is active, the post-cosine intersection has a severe recall problem
+        # for queries whose embedding doesn't naturally rank the filter set
+        # highly. Example: "movies starring Bruce Willis" — the embeddings
+        # are plot-based, not cast-based, so Bruce Willis's films can sit at
+        # rank 200+ in cosine results. With the default limit×overfetch=50
+        # window the intersection then drops everything and the user gets
+        # an empty response despite the filter SQL having matched correctly.
+        #
+        # Mitigation: when ``filter_ids`` is set, expand the fetch window to
+        # the full embedded library size so every filter-matched item has a
+        # chance to surface. ``vec0`` cosine over ~2k items is sub-millisecond
+        # and Spec 24 Task 3.7 explicitly contemplated this trade-off.
         fetch_limit = limit * self._overfetch
+        if filter_ids is not None:
+            fetch_limit = max(fetch_limit, await self._vec_repo.count())
         candidates = await self._vec_repo.search(
             embedding_result.vector, limit=fetch_limit
         )
         total_candidates = len(candidates)
 
-        # Constrain cosine candidates to the structured pre-filter set when
-        # one applied. Post-cosine Python filter is acceptable at the current
-        # 1805-item library scale; vec0's lack of an IN-clause makes a
-        # vector-side intersection awkward enough that this is the agreed
-        # approach (Spec 24 Task 3.7).
+        # Constrain cosine candidates to the structured pre-filter set.
         if filter_ids is not None:
             candidates = [c for c in candidates if c.jellyfin_id in filter_ids]
 
