@@ -59,6 +59,14 @@ CREATE INDEX IF NOT EXISTS idx_library_items_deleted_at
 ON library_items(deleted_at)
 """
 
+# Spec 24 — supports the year-range pre-filter in ``search_filtered_ids``.
+# Without this, year filters fall back to a full scan of ``library_items``
+# which is fine at 1.8k rows but degrades superlinearly past ~10k.
+_CREATE_INDEX_PRODUCTION_YEAR = """
+CREATE INDEX IF NOT EXISTS idx_library_items_production_year
+ON library_items(production_year)
+"""
+
 _CREATE_EMBEDDING_QUEUE = """
 CREATE TABLE IF NOT EXISTS embedding_queue (
     jellyfin_id    TEXT PRIMARY KEY,
@@ -162,6 +170,11 @@ class LibraryStore:
                 "ALTER TABLE library_items ADD COLUMN official_rating TEXT"
             )
             await self._db.commit()
+
+        # Spec 24 — production_year index supports the year-range filter
+        # in search_filtered_ids. CREATE INDEX IF NOT EXISTS is a no-op
+        # on subsequent boots.
+        await self._db.execute(_CREATE_INDEX_PRODUCTION_YEAR)
 
         await self._db.execute(_CREATE_SYNC_RUNS)
         await self._db.execute(_CREATE_INDEX_SYNC_RUNS_STARTED)

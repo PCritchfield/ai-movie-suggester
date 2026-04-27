@@ -90,6 +90,29 @@ class TestPersonIndexMatch:
         idx = PersonIndex(names=frozenset({"eddie murphy"}))
         assert idx.match("Eddie Murphy and Eddie Murphy films") == ["eddie murphy"]
 
+    def test_match_order_follows_query_appearance(self) -> None:
+        """Pin the deterministic-order contract documented in the docstring.
+
+        Without this pin, a frozenset-iteration regression would silently
+        change the order across Python runs (Spec 24 / Carrot review).
+        """
+        idx = PersonIndex(
+            names=frozenset({"eddie murphy", "john hughes", "ridley scott"})
+        )
+        assert idx.match("a Ridley Scott film with Eddie Murphy and John Hughes") == [
+            "ridley scott",
+            "eddie murphy",
+            "john hughes",
+        ]
+        # Reversing the query reverses the match order.
+        assert idx.match(
+            "with John Hughes and Eddie Murphy in a Ridley Scott film"
+        ) == [
+            "john hughes",
+            "eddie murphy",
+            "ridley scott",
+        ]
+
 
 class TestPersonIndexRebuild:
     """FR-2.5 — rebuild swaps the underlying frozenset atomically."""

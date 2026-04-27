@@ -58,6 +58,14 @@ async def _login(
     return {"csrf": csrf or ""}
 
 
+class _SearchHttpError(Exception):
+    """Backend returned a non-200 response for a router-eval query.
+
+    Surfaced as an explicit case-level failure so a 401/500 can never
+    look the same as "no results required" (Copilot review #6).
+    """
+
+
 async def _run_search(
     client: httpx.AsyncClient,
     base_url: str,
@@ -71,7 +79,8 @@ async def _run_search(
         headers={"X-CSRF-Token": csrf},
     )
     if resp.status_code != 200:
-        return []
+        body_preview = resp.text[:200].replace("\n", " ")
+        raise _SearchHttpError(f"HTTP {resp.status_code}: {body_preview}")
     payload = resp.json()
     return list(payload.get("results", []))
 
@@ -123,9 +132,17 @@ async def _amain(args: argparse.Namespace) -> int:
         passed = 0
         failed = 0
         for case in cases:
-            results = await _run_search(
-                client, args.base_url, csrf, case.query, args.limit
-            )
+            try:
+                results = await _run_search(
+                    client, args.base_url, csrf, case.query, args.limit
+                )
+            except _SearchHttpError as exc:
+                # Hard failure path — never let a non-200 silently PASS a case
+                # that has no must_include_titles (Copilot review #6).
+                _print_row(case, [], passed=False)
+                print(f"      {_RED}- backend error: {exc}{_RESET}")
+                failed += 1
+                continue
             titles = [r.get("title", "") for r in results if isinstance(r, dict)]
             ok, reasons = _evaluate_case(case, titles)
             _print_row(case, titles, ok)
@@ -159,7 +176,22 @@ def main() -> None:
     parser.add_argument(
         "--password",
         default=None,
-        help="Jellyfin password.",
+        help=(
+            "Jellyfin password. WARNING: passing a password as a CLI "
+            "argument exposes it in the host's process list (`ps aux`). "
+            "On shared hosts prefer --password-env to read from an "
+            "environment variable instead."
+        ),
+    )
+    parser.add_argument(
+        "--password-env",
+        default=None,
+        metavar="VAR",
+        help=(
+            "Read the Jellyfin password from environment variable VAR "
+            "(e.g. EVAL_PASSWORD). Takes precedence over --password when "
+            "both are set."
+        ),
     )
     parser.add_argument(
         "--limit",
@@ -176,6 +208,16 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    if args.password_env:
+        import os
+
+        env_value = os.environ.get(args.password_env)
+        if env_value is None:
+            parser.error(
+                f"--password-env points to {args.password_env!r} "
+                "which is not set in the environment"
+            )
+        args.password = env_value
     sys.exit(asyncio.run(_amain(args)))
 
 

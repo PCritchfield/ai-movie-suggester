@@ -107,7 +107,11 @@ class Settings(BaseSettings):
 
     # Spec 24 — paraphrastic LLM rewriter + cache.
     rewrite_timeout_seconds: Annotated[float, Field(ge=0.1, le=10.0)] = 2.0
-    rewrite_max_output_chars: Annotated[int, Field(ge=1, le=1000)] = 200
+    # Hard cap at 200 to match ``rewriter_prompts.py``'s "Never produce
+    # more than 200 characters" instruction. Raising this above 200 would
+    # create a config/prompt mismatch — the model would still target 200
+    # while the code silently accepts more (Spec 24 / Angua review).
+    rewrite_max_output_chars: Annotated[int, Field(ge=1, le=200)] = 200
     rewrite_cache_max_entries: Annotated[int, Field(ge=1, le=100000)] = 1000
     rewrite_cache_ttl_hours: Annotated[int, Field(ge=1, le=168)] = 24
 

@@ -454,7 +454,7 @@ def test_rewriter_settings_bounds() -> None:
         ("REWRITE_TIMEOUT_SECONDS", "0.05"),
         ("REWRITE_TIMEOUT_SECONDS", "10.5"),
         ("REWRITE_MAX_OUTPUT_CHARS", "0"),
-        ("REWRITE_MAX_OUTPUT_CHARS", "1001"),
+        ("REWRITE_MAX_OUTPUT_CHARS", "201"),
         ("REWRITE_CACHE_MAX_ENTRIES", "0"),
         ("REWRITE_CACHE_MAX_ENTRIES", "100001"),
         ("REWRITE_CACHE_TTL_HOURS", "0"),

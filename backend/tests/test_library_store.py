@@ -86,12 +86,15 @@ class TestInit:
             "SELECT name FROM sqlite_master WHERE type='index' "
             "AND name IN ("
             "'idx_library_items_content_hash', "
-            "'idx_library_items_synced_at')"
+            "'idx_library_items_synced_at', "
+            "'idx_library_items_production_year')"
         )
         rows = await cursor.fetchall()
         index_names = {r[0] for r in rows}
         assert "idx_library_items_content_hash" in index_names
         assert "idx_library_items_synced_at" in index_names
+        # Spec 24 — production_year index supports the year-range filter
+        assert "idx_library_items_production_year" in index_names
 
     async def test_wal_mode(self, store: LibraryStore) -> None:
         cursor = await store._conn.execute("PRAGMA journal_mode")

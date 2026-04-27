@@ -84,6 +84,10 @@ class PersonIndex:
         Multi-token names always require strict word-boundary phrase match.
         Single-token names additionally require at least one intent token
         elsewhere in the query (per Spec 24 Q1-D).
+
+        The returned list is deterministic: names appear in the order they
+        occur in ``query``, deduplicated. Callers can safely compare two
+        lists for equality.
         """
         if self._combined_re is None:
             return []
