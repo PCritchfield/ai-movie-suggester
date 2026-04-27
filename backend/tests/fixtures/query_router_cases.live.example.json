@@ -1,0 +1,165 @@
+[
+  {
+    "query": "a comedy movie",
+    "expected_path": "keyword",
+    "expected_genres": ["Comedy"],
+    "must_include_titles": [],
+    "notes": "Pure genre keyword. With a 1.8k library this returns many comedies; we don't pin a specific title because cosine ranking varies."
+  },
+  {
+    "query": "horror film",
+    "expected_path": "keyword",
+    "expected_genres": ["Horror"],
+    "must_include_titles": [],
+    "notes": "Pure genre keyword."
+  },
+  {
+    "query": "a sci-fi adventure",
+    "expected_path": "keyword",
+    "expected_genres": ["Science Fiction", "Adventure"],
+    "must_include_titles": [],
+    "notes": "Two-genre keyword."
+  },
+  {
+    "query": "a Ridley Scott film",
+    "expected_path": "person",
+    "expected_genres": [],
+    "must_include_titles": ["Alien"],
+    "must_exclude_titles": [],
+    "notes": "Library has only 2 Ridley Scott films (Alien, Gladiator). With limit=10 and the recall fix, both should appear."
+  },
+  {
+    "query": "Steven Spielberg movies",
+    "expected_path": "person",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "must_exclude_titles": [],
+    "notes": "Library has 8+ Spielberg titles. Path-only assertion — let cosine pick which 5 surface."
+  },
+  {
+    "query": "movies starring Bruce Willis",
+    "expected_path": "person",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Library has 20 Bruce Willis films. Path-only — cosine picks among them."
+  },
+  {
+    "query": "Eddie Murphy films",
+    "expected_path": "person",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Original session-note motivating query #6. Library has 14 Eddie Murphy titles (Trading Places, Shrek series, Dr. Dolittle 2, etc.)."
+  },
+  {
+    "query": "a john Hughes comedy",
+    "expected_path": "person",
+    "expected_genres": ["Comedy"],
+    "must_include_titles": [],
+    "notes": "Original session-note motivating query #5 (corrected spelling). Library has 3 John Hughes films, all 80s comedies."
+  },
+  {
+    "query": "an 80s adventure",
+    "expected_path": "year",
+    "expected_genres": ["Adventure"],
+    "must_include_titles": [],
+    "notes": "1980-89 adventure films. Library has many; assertion is path-only."
+  },
+  {
+    "query": "early 80s sci-fi",
+    "expected_path": "year",
+    "expected_genres": ["Science Fiction"],
+    "must_include_titles": [],
+    "notes": "Prefixed-decade era detection (1980-1984)."
+  },
+  {
+    "query": "a 1979 film",
+    "expected_path": "year",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Explicit-year filter. Library has 14 films from 1979."
+  },
+  {
+    "query": "an 80s adventure film for kids",
+    "expected_path": "year",
+    "expected_genres": ["Adventure"],
+    "must_include_titles": [],
+    "notes": "Original session-note motivating query #1. 80s + adventure narrows the set; cosine within picks family-leaning entries."
+  },
+  {
+    "query": "a fun movie to watch with my 5 year old",
+    "expected_path": "rewrite",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Original session-note motivating query #2. Paraphrastic — the rewriter should produce family/kid-friendly framing. Pre-router this query returned standup specials."
+  },
+  {
+    "query": "family movie for my daughter",
+    "expected_path": "rewrite",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Original session-note motivating query #3. Paraphrastic — rewriter targets family content."
+  },
+  {
+    "query": "R rated action duos",
+    "expected_path": "rating",
+    "expected_genres": ["Action"],
+    "must_include_titles": [],
+    "notes": "Original session-note motivating query #4. Rating filter is inert until next sync populates official_rating; cosine alone handles for now."
+  },
+  {
+    "query": "Kungfu action",
+    "expected_path": "keyword",
+    "expected_genres": ["Action"],
+    "must_include_titles": [],
+    "notes": "Original session-note motivating query #7. Library has Enter the Dragon, 36th Chamber of Shaolin, etc."
+  },
+  {
+    "query": "an R-rated thriller",
+    "expected_path": "rating",
+    "expected_genres": ["Thriller"],
+    "must_include_titles": [],
+    "notes": "Rating + genre. Rating column is NULL until next material sync (Q2-C); listed for path coverage."
+  },
+  {
+    "query": "a PG-13 family movie",
+    "expected_path": "rating",
+    "expected_genres": ["Family"],
+    "must_include_titles": [],
+    "notes": "Same NULL-data caveat."
+  },
+  {
+    "query": "something like Alien but funny",
+    "expected_path": "rewrite",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Paraphrastic — rewriter should produce sci-fi-comedy framing. Library has Spaceballs / Galaxy Quest analogues."
+  },
+  {
+    "query": "a thoughtful movie about loss and memory",
+    "expected_path": "rewrite",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Paraphrastic mood query."
+  },
+  {
+    "query": "tell me a film",
+    "expected_path": "semantic",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Short, no-signal — too short to be paraphrastic, falls through to raw cosine."
+  },
+  {
+    "query": "anything good",
+    "expected_path": "semantic",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Two-word query with no signal. Raw cosine path."
+  },
+  {
+    "query": "an 80s John McTiernan action film",
+    "expected_path": "person",
+    "expected_genres": ["Action"],
+    "must_include_titles": ["Die Hard"],
+    "notes": "Three-signal AND-intersect (person+year+genre). Library has McTiernan directing Die Hard, Die Hard 3, Medicine Man — only Die Hard fits 80s + action."
+  }
+]
