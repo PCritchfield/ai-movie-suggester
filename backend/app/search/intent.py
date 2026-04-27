@@ -40,6 +40,19 @@ _EXPLICIT_YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 _RATING_TOKEN_RE = re.compile(r"\b(NC-17|PG-13|PG|G|R)\b")
 _RATING_COLLOQUIAL_RE = re.compile(r"\b(NC-17|PG-13|PG|G|R)[- ]rated\b", re.IGNORECASE)
 
+# Per-token disambiguation patterns for bare 'PG' / 'G' / 'R'. Precompiled
+# once at module load — _detect_ratings is on the per-query hot path and
+# the previous inline ``re.compile(...)`` recompiled both patterns for
+# every match the rating finditer produced.
+_RATED_PREFIX_RES: dict[str, re.Pattern[str]] = {
+    token: re.compile(rf"\brated\s+{token}\b", re.IGNORECASE)
+    for token in ("PG", "G", "R")
+}
+_RATING_NOUN_SUFFIX_RES: dict[str, re.Pattern[str]] = {
+    token: re.compile(rf"\b{token}\b\s+(movie|film|rated)", re.IGNORECASE)
+    for token in ("PG", "G", "R")
+}
+
 _PARAPHRASTIC_MIN_WORDS = 4
 
 
@@ -118,12 +131,12 @@ def _detect_ratings(query: str) -> list[str]:
         if token in {"PG-13", "NC-17"}:
             found.add(token)
             continue
-        if re.search(rf"\brated\s+{token}\b", query, flags=re.IGNORECASE):
+        if _RATED_PREFIX_RES[token].search(query):
             found.add(token)
             continue
         # Allow 'PG' / 'R' / 'G' alone if the query is short and the token
         # is the only candidate — e.g. "a PG movie for kids".
-        if re.search(rf"\b{token}\b\s+(movie|film|rated)", query, flags=re.IGNORECASE):
+        if _RATING_NOUN_SUFFIX_RES[token].search(query):
             found.add(token)
             continue
         # 'R-rated' / 'r rated' colloquial form already handled above.

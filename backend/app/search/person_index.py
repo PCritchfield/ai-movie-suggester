@@ -43,14 +43,35 @@ class PersonIndex:
 
     The set of names is held as a private attribute and replaced atomically
     on rebuild. Callers should NEVER mutate the underlying set directly.
+
+    Performance: a single combined alternation regex is compiled at build
+    time covering every name in the index. ``match()`` runs one
+    ``finditer`` over the query rather than one ``re.compile`` + search
+    per name — the previous shape was O(N) compiles per query on what is
+    expected to be a thousands-of-names index.
     """
 
     def __init__(self, names: frozenset[str]) -> None:
         self._names: frozenset[str] = self._filter_short(names)
+        self._combined_re = self._compile_combined(self._names)
 
     @staticmethod
     def _filter_short(names: frozenset[str]) -> frozenset[str]:
         return frozenset(n for n in names if len(n) >= _MIN_NAME_LEN)
+
+    @staticmethod
+    def _compile_combined(names: frozenset[str]) -> re.Pattern[str] | None:
+        """Build a single ``\\b(name1|name2|...)\\b`` alternation regex.
+
+        Longer names sort first so a multi-token name shadows any
+        single-token substring of itself in the alternation. Returns
+        ``None`` for an empty index — callers must short-circuit.
+        """
+        if not names:
+            return None
+        ordered = sorted(names, key=lambda n: (-len(n), n))
+        alternation = "|".join(re.escape(n) for n in ordered)
+        return re.compile(rf"\b({alternation})\b", re.IGNORECASE)
 
     def contains(self, name: str) -> bool:
         """Return True if ``name`` (lowercased) is in the index."""
@@ -64,23 +85,22 @@ class PersonIndex:
         Single-token names additionally require at least one intent token
         elsewhere in the query (per Spec 24 Q1-D).
         """
-        if not self._names:
+        if self._combined_re is None:
             return []
 
         has_intent_token = bool(_INTENT_TOKEN_RE.search(query))
         matched: list[str] = []
         seen: set[str] = set()
 
-        for name in self._names:
+        for raw_match in self._combined_re.finditer(query):
+            name = raw_match.group(1).lower()
             if name in seen:
                 continue
             is_single_token = " " not in name
             if is_single_token and not has_intent_token:
                 continue
-            pattern = re.compile(rf"\b{re.escape(name)}\b", re.IGNORECASE)
-            if pattern.search(query):
-                matched.append(name)
-                seen.add(name)
+            matched.append(name)
+            seen.add(name)
         return matched
 
     async def rebuild_from_store(self, store: LibraryStore) -> None:
@@ -91,4 +111,5 @@ class PersonIndex:
         """
         new_names = await store.get_all_people_names()
         self._names = self._filter_short(new_names)
+        self._combined_re = self._compile_combined(self._names)
         logger.info("person_index_built count=%d", len(self._names))
