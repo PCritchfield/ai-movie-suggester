@@ -110,9 +110,24 @@ class QueryRewriter:
         """Issue the chat call, accumulate streaming tokens, return the result."""
         messages = [
             {"role": "system", "content": REWRITE_SYSTEM_PROMPT},
-            {"role": "user", "content": f"<user-query>{query}</user-query>"},
+            {
+                "role": "user",
+                "content": f"<user-query>{_sanitise_for_tag(query)}</user-query>",
+            },
         ]
         chunks: list[str] = []
         async for chunk in self._chat.chat_stream(messages):
             chunks.append(chunk)
         return "".join(chunks)
+
+
+def _sanitise_for_tag(query: str) -> str:
+    """Strip ``<`` and ``>`` from user input before wrapping in tag delimiters.
+
+    Without this, a user query containing a stray ``</user-query>`` could
+    terminate the framing block and let subsequent text be interpreted as
+    instructions rather than data (Copilot review #4). The downstream
+    ``_TAG_TOKEN_RE`` filter catches model-side tag injection; this is the
+    matching input-side defence.
+    """
+    return query.replace("<", "").replace(">", "")

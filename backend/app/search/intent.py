@@ -37,7 +37,9 @@ _EXPLICIT_YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 
 # Rating tokens. Order matters in the alternation — longer tokens first
 # so PG-13 wins against PG when both could match the same span.
-_RATING_TOKEN_RE = re.compile(r"\b(NC-17|PG-13|PG|G|R)\b")
+# IGNORECASE matches user input like "pg-13", "r", "nc-17" — the
+# canonical UPPER form is restored in ``_detect_ratings``.
+_RATING_TOKEN_RE = re.compile(r"\b(NC-17|PG-13|PG|G|R)\b", re.IGNORECASE)
 _RATING_COLLOQUIAL_RE = re.compile(r"\b(NC-17|PG-13|PG|G|R)[- ]rated\b", re.IGNORECASE)
 
 # Per-token disambiguation patterns for bare 'PG' / 'G' / 'R'. Precompiled
@@ -73,10 +75,21 @@ class QueryIntent(BaseModel):
 
 
 def _detect_year_range(query: str) -> tuple[int, int] | None:
-    """Return the most specific year span found in ``query``.
+    """Return the year span detected in ``query``, or ``None``.
 
-    Priority: prefixed decade (``early 90s``) > 2-digit decade (``80s``)
-    > 4-digit decade (``1980s``) > explicit 4-digit year (``1985``).
+    The four detectors run in declared precedence order and the first
+    match wins:
+
+    1. **Prefixed decade** (``early 90s`` / ``late 70s``) — half-decade
+       span. Most specific because it carries an explicit modifier.
+    2. **4-digit decade** (``1980s``) — full decade.
+    3. **2-digit decade** (``80s``) — full decade.
+    4. **Explicit 4-digit year** (``1985``) — single year.
+
+    Note: with this ordering, a query containing both a decade and an
+    explicit year (e.g. ``"1980s film like 1985"``) yields the decade
+    span. The eval fixtures don't currently exercise that case; if you
+    want the narrower span to win, swap rules 4 and 1–3.
     """
     prefix = _DECADE_PREFIXED_RE.search(query)
     if prefix:

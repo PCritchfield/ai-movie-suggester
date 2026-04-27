@@ -74,6 +74,17 @@ class TestDetectIntentEra:
         intent = detect_intent("1980s sci-fi", _EMPTY_INDEX)
         assert intent.year_range == (1980, 1989)
 
+    def test_decade_wins_over_explicit_year_when_both_present(self) -> None:
+        """Pin the documented precedence (Copilot #1).
+
+        The docstring on ``_detect_year_range`` declares decade > explicit
+        year. This test guards against an accidental rewrite reversing
+        that precedence.
+        """
+        intent = detect_intent("a 1980s film like 1985 in vibe", _EMPTY_INDEX)
+        # 1980s wins; the trailing 1985 is ignored.
+        assert intent.year_range == (1980, 1989)
+
 
 class TestDetectIntentRating:
     """FR-1.5, FR-1.6 — rating tokens + colloquial phrasings."""
@@ -95,6 +106,13 @@ class TestDetectIntentRating:
         assert "PG" in intent.ratings
         # PG should not also match PG-13
         assert "PG-13" not in intent.ratings
+
+    def test_lowercase_rating_tokens_normalised(self) -> None:
+        """Spec 24 / Copilot review — `pg-13`, `nc-17`, lowercase `rated r`
+        all normalise to the canonical UPPER form."""
+        assert "PG-13" in detect_intent("a pg-13 film", _EMPTY_INDEX).ratings
+        assert "NC-17" in detect_intent("an nc-17 thriller", _EMPTY_INDEX).ratings
+        assert "R" in detect_intent("rated r movie", _EMPTY_INDEX).ratings
 
 
 class TestDetectIntentPeople:
