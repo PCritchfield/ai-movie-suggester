@@ -88,7 +88,7 @@ export function ChatInput({ onSend, isStreaming }: ChatInputProps) {
           rows={1}
           disabled={isStreaming}
           aria-label="Chat message"
-          className="flex-1 resize-none rounded-xl border bg-muted px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          className="flex-1 resize-none rounded-xl border bg-muted px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           style={{ overflow: "hidden" }}
         />
         <button
