@@ -31,7 +31,7 @@ export function EmptyState({ onSend }: EmptyStateProps) {
             key={chip}
             type="button"
             onClick={() => onSend(chip)}
-            className="rounded-full border bg-background px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="rounded-full border bg-background px-4 py-2 text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
           >
             {chip}
           </button>

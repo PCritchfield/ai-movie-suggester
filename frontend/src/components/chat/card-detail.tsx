@@ -117,7 +117,7 @@ export function CardDetail({ item, open, onClose }: CardDetailProps) {
                 href={item.jellyfin_web_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-11 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
               >
                 View in Jellyfin
               </a>
