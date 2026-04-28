@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS library_items (
     deleted_at        INTEGER,
     directors         TEXT NOT NULL DEFAULT '[]',
     writers           TEXT NOT NULL DEFAULT '[]',
-    composers         TEXT NOT NULL DEFAULT '[]'
+    composers         TEXT NOT NULL DEFAULT '[]',
+    official_rating   TEXT
 )
 """
 
@@ -56,6 +57,14 @@ ON library_items(synced_at)
 _CREATE_INDEX_DELETED = """
 CREATE INDEX IF NOT EXISTS idx_library_items_deleted_at
 ON library_items(deleted_at)
+"""
+
+# Spec 24 — supports the year-range pre-filter in ``search_filtered_ids``.
+# Without this, year filters fall back to a full scan of ``library_items``
+# which is fine at 1.8k rows but degrades superlinearly past ~10k.
+_CREATE_INDEX_PRODUCTION_YEAR = """
+CREATE INDEX IF NOT EXISTS idx_library_items_production_year
+ON library_items(production_year)
 """
 
 _CREATE_EMBEDDING_QUEUE = """
@@ -155,6 +164,18 @@ class LibraryStore:
                 )
                 await self._db.commit()
 
+        # Migration: add official_rating column if table predates Spec 24
+        if "official_rating" not in existing_columns:
+            await self._db.execute(
+                "ALTER TABLE library_items ADD COLUMN official_rating TEXT"
+            )
+            await self._db.commit()
+
+        # Spec 24 — production_year index supports the year-range filter
+        # in search_filtered_ids. CREATE INDEX IF NOT EXISTS is a no-op
+        # on subsequent boots.
+        await self._db.execute(_CREATE_INDEX_PRODUCTION_YEAR)
+
         await self._db.execute(_CREATE_SYNC_RUNS)
         await self._db.execute(_CREATE_INDEX_SYNC_RUNS_STARTED)
         await self._db.commit()
@@ -192,6 +213,7 @@ class LibraryStore:
          12: directors      TEXT (JSON array)
          13: writers        TEXT (JSON array)
          14: composers      TEXT (JSON array)
+         15: official_rating TEXT (nullable)
         """
         return LibraryItemRow(
             jellyfin_id=row[0],
@@ -209,6 +231,7 @@ class LibraryStore:
             directors=json.loads(row[12]),
             writers=json.loads(row[13]),
             composers=json.loads(row[14]),
+            official_rating=row[15],
         )
 
     async def _get_hashes_for_ids(self, ids: list[str]) -> dict[str, str]:
@@ -278,6 +301,7 @@ class LibraryStore:
                     json.dumps(item.directors),
                     json.dumps(item.writers),
                     json.dumps(item.composers),
+                    item.official_rating,
                 )
             )
 
@@ -289,8 +313,8 @@ class LibraryStore:
                        (jellyfin_id, title, overview, production_year,
                         genres, tags, studios, community_rating,
                         people, content_hash, synced_at, runtime_minutes,
-                        directors, writers, composers)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        directors, writers, composers, official_rating)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(jellyfin_id) DO UPDATE SET
                         title = excluded.title,
                         overview = excluded.overview,
@@ -305,7 +329,8 @@ class LibraryStore:
                         runtime_minutes = excluded.runtime_minutes,
                         directors = excluded.directors,
                         writers = excluded.writers,
-                        composers = excluded.composers""",
+                        composers = excluded.composers,
+                        official_rating = excluded.official_rating""",
                     params_list,
                 )
             except Exception:
@@ -321,7 +346,7 @@ class LibraryStore:
             """SELECT jellyfin_id, title, overview, production_year,
                       genres, tags, studios, community_rating,
                       people, content_hash, synced_at, runtime_minutes,
-                      directors, writers, composers
+                      directors, writers, composers, official_rating
                FROM library_items WHERE jellyfin_id = ?""",
             (jellyfin_id,),
         )
@@ -349,7 +374,7 @@ class LibraryStore:
                 f"""SELECT jellyfin_id, title, overview, production_year,
                           genres, tags, studios, community_rating,
                           people, content_hash, synced_at, runtime_minutes,
-                          directors, writers, composers
+                          directors, writers, composers, official_rating
                    FROM library_items WHERE jellyfin_id IN ({placeholders})""",
                 batch,
             )
@@ -374,6 +399,76 @@ class LibraryStore:
         )
         row = await cursor.fetchone()
         return row[0] if row else 0
+
+    async def search_filtered_ids(
+        self,
+        *,
+        people: list[str] | None,
+        year_range: tuple[int, int] | None,
+        ratings: list[str] | None,
+    ) -> set[str] | None:
+        """Return the AND-intersected set of jellyfin_ids matching every filter.
+
+        Returns ``None`` when no filter signal is supplied — the caller
+        should fall through to full vec0 cosine search. Returns the empty
+        set on AND-empty so the caller can honour the Q3-D "empty results,
+        no exception" contract for over-constrained intents.
+
+        Person matching uses LIKE because the JSON columns store names as
+        a JSON array; year matching uses BETWEEN; rating matching uses IN.
+        """
+        if not people and year_range is None and not ratings:
+            return None
+
+        clauses: list[str] = ["deleted_at IS NULL"]
+        params: list[object] = []
+
+        if people:
+            person_clauses: list[str] = []
+            for name in people:
+                like = f"%{name}%"
+                person_clauses.append(
+                    "(LOWER(directors) LIKE ?"
+                    " OR LOWER(writers) LIKE ?"
+                    " OR LOWER(people) LIKE ?)"
+                )
+                params.extend([like, like, like])
+            clauses.append("(" + " AND ".join(person_clauses) + ")")
+
+        if year_range is not None:
+            clauses.append("production_year BETWEEN ? AND ?")
+            params.extend([year_range[0], year_range[1]])
+
+        if ratings:
+            placeholders = ",".join("?" * len(ratings))
+            clauses.append(f"official_rating IN ({placeholders})")
+            params.extend(ratings)
+
+        sql = "SELECT jellyfin_id FROM library_items WHERE " + " AND ".join(clauses)
+        cursor = await self._conn.execute(sql, params)
+        rows = await cursor.fetchall()
+        return {row[0] for row in rows}
+
+    async def get_all_people_names(self) -> frozenset[str]:
+        """Return distinct lowercased names from people, directors, writers.
+
+        Composers are intentionally excluded — single-token composer names
+        (``Hans``, ``John``) would dominate person-intent detection with low
+        signal. Used by ``PersonIndex`` to build a precomputed match set
+        at startup and on each sync-completed event.
+        """
+        cursor = await self._conn.execute(
+            "SELECT people, directors, writers FROM library_items"
+            " WHERE deleted_at IS NULL"
+        )
+        rows = await cursor.fetchall()
+        names: set[str] = set()
+        for row in rows:
+            for column in row:
+                for name in json.loads(column):
+                    if isinstance(name, str) and name.strip():
+                        names.add(name.strip().lower())
+        return frozenset(names)
 
     # --- Sync engine methods (Spec 08, Task 2.0) ---
 

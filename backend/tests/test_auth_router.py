@@ -52,17 +52,20 @@ def auth_app(tmp_path: object, mock_jf: AsyncMock) -> Iterator[TestClient]:
         max_sessions_per_user=settings.max_sessions_per_user,
     )
 
+    rewrite_cache_mock = MagicMock()
     app = FastAPI()
     auth_router = create_auth_router(
         auth_service=service,
         session_store=store,
         settings=settings,
         cookie_key=TEST_COOKIE_KEY,
+        rewrite_cache=rewrite_cache_mock,
     )
     app.include_router(auth_router)
     app.state.session_store = store
     app.state.cookie_key = TEST_COOKIE_KEY
     app.state.jellyfin_client = mock_jf
+    app.state.rewrite_cache = rewrite_cache_mock
     conversation_store = ConversationStore(
         max_turns=10, ttl_seconds=7200, max_sessions=100
     )
@@ -334,6 +337,20 @@ class TestLogout:
         resp = auth_app.post("/api/auth/logout")
         assert resp.status_code == 200
         assert resp.json()["detail"] == "Logged out"
+
+    def test_logout_clears_rewrite_cache(
+        self, auth_app: TestClient, mock_jf: AsyncMock
+    ) -> None:
+        """Spec 24 Task 4.14 — logout cascades a clear() onto the rewrite
+        cache after the conversation purge and permission invalidation."""
+        cookies = self._login(auth_app)
+        # ``auth_app.app`` is typed as Starlette's internal _WrapASGI2 by
+        # the TestClient stubs even though we passed a real FastAPI; the
+        # rewrite_cache mock was attached in the auth_app fixture above.
+        rewrite_cache = auth_app.app.state.rewrite_cache  # type: ignore[attr-defined]
+        resp = auth_app.post("/api/auth/logout", cookies=cookies)
+        assert resp.status_code == 200
+        rewrite_cache.clear.assert_called_once()
 
 
 class TestCookieFixes:

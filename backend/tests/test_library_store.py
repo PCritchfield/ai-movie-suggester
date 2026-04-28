@@ -37,6 +37,7 @@ def _make_item(
     directors: list[str] | None = None,
     writers: list[str] | None = None,
     composers: list[str] | None = None,
+    official_rating: str | None = None,
 ) -> LibraryItemRow:
     """Helper to build LibraryItemRow with sensible defaults."""
     return LibraryItemRow(
@@ -55,6 +56,7 @@ def _make_item(
         directors=directors if directors is not None else ["Ridley Scott"],
         writers=writers if writers is not None else ["Dan O'Bannon"],
         composers=composers if composers is not None else ["Jerry Goldsmith"],
+        official_rating=official_rating,
     )
 
 
@@ -84,12 +86,15 @@ class TestInit:
             "SELECT name FROM sqlite_master WHERE type='index' "
             "AND name IN ("
             "'idx_library_items_content_hash', "
-            "'idx_library_items_synced_at')"
+            "'idx_library_items_synced_at', "
+            "'idx_library_items_production_year')"
         )
         rows = await cursor.fetchall()
         index_names = {r[0] for r in rows}
         assert "idx_library_items_content_hash" in index_names
         assert "idx_library_items_synced_at" in index_names
+        # Spec 24 — production_year index supports the year-range filter
+        assert "idx_library_items_production_year" in index_names
 
     async def test_wal_mode(self, store: LibraryStore) -> None:
         cursor = await store._conn.execute("PRAGMA journal_mode")
@@ -461,3 +466,304 @@ class TestValidation:
         assert fetched is not None
         assert fetched.title == "Good Movie"
         assert any("malformed" in r.message.lower() for r in caplog.records)
+
+
+class TestSearchFilteredIds:
+    """Spec 24 Unit 4 — AND-intersect structured filter on people/year/rating.
+
+    Returns ``None`` when no filter signal is supplied (caller falls back to
+    full vec0 search). Returns an empty set on AND-empty (Q3-D contract).
+    """
+
+    async def test_no_filters_returns_none(self, store: LibraryStore) -> None:
+        await store.upsert_many([_make_item(jellyfin_id="jf-1", content_hash="h1")])
+        ids = await store.search_filtered_ids(
+            people=None, year_range=None, ratings=None
+        )
+        assert ids is None
+
+    async def test_person_filter_matches_actor(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-em",
+                    title="Beverly Hills Cop",
+                    people=["Eddie Murphy"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h-em",
+                ),
+                _make_item(
+                    jellyfin_id="jf-other",
+                    title="Other Movie",
+                    people=["Sigourney Weaver"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h-o",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=["eddie murphy"], year_range=None, ratings=None
+        )
+        assert ids == {"jf-em"}
+
+    async def test_person_filter_matches_director(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-jh",
+                    title="Sixteen Candles",
+                    people=[],
+                    directors=["John Hughes"],
+                    writers=[],
+                    content_hash="h-jh",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=["john hughes"], year_range=None, ratings=None
+        )
+        assert ids == {"jf-jh"}
+
+    async def test_year_range_filter(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-80",
+                    production_year=1985,
+                    content_hash="h-80",
+                ),
+                _make_item(
+                    jellyfin_id="jf-90",
+                    production_year=1995,
+                    content_hash="h-90",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=None, year_range=(1980, 1989), ratings=None
+        )
+        assert ids == {"jf-80"}
+
+    async def test_rating_filter(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-r",
+                    official_rating="R",
+                    content_hash="h-r",
+                ),
+                _make_item(
+                    jellyfin_id="jf-pg",
+                    official_rating="PG",
+                    content_hash="h-pg",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=None, year_range=None, ratings=["R"]
+        )
+        assert ids == {"jf-r"}
+
+    async def test_combined_filters_intersect(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-match",
+                    production_year=1984,
+                    official_rating="R",
+                    people=["Eddie Murphy"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h-match",
+                ),
+                _make_item(
+                    jellyfin_id="jf-rating-only",
+                    production_year=2010,
+                    official_rating="R",
+                    people=[],
+                    directors=[],
+                    writers=[],
+                    content_hash="h-r-only",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=["eddie murphy"], year_range=(1980, 1989), ratings=["R"]
+        )
+        assert ids == {"jf-match"}
+
+    async def test_empty_intersection_returns_empty_set(
+        self, store: LibraryStore
+    ) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-1",
+                    people=["Eddie Murphy"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h1",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=["nonexistent person"], year_range=None, ratings=None
+        )
+        # AND-empty: empty set, not None and not exception (Q3-D)
+        assert ids == set()
+
+
+class TestOfficialRating:
+    """Spec 24 Unit 3 — additive ``official_rating`` column for rating filter.
+
+    Treated as a structured filter only (Q2-C). Not embedded; not part of
+    composite text. NULL until the next sync persists a value.
+    """
+
+    async def test_official_rating_column_exists(self, store: LibraryStore) -> None:
+        cursor = await store._conn.execute("PRAGMA table_info(library_items)")
+        rows = await cursor.fetchall()
+        columns = {row[1]: row[2] for row in rows}
+        assert "official_rating" in columns
+        assert columns["official_rating"] == "TEXT"
+
+    async def test_official_rating_round_trips(self, store: LibraryStore) -> None:
+        item = _make_item(
+            jellyfin_id="jf-rated",
+            official_rating="R",
+            content_hash="h-rated",
+        )
+        await store.upsert_many([item])
+        fetched = await store.get("jf-rated")
+        assert fetched is not None
+        assert fetched.official_rating == "R"
+
+    async def test_official_rating_null_round_trips(self, store: LibraryStore) -> None:
+        item = _make_item(
+            jellyfin_id="jf-unrated",
+            official_rating=None,
+            content_hash="h-unrated",
+        )
+        await store.upsert_many([item])
+        fetched = await store.get("jf-unrated")
+        assert fetched is not None
+        assert fetched.official_rating is None
+
+    async def test_official_rating_added_to_legacy_db(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Pre-existing DB without official_rating gets ALTER TABLE on init."""
+        import aiosqlite
+
+        db_path = tmp_path / "legacy_rating.db"
+        async with aiosqlite.connect(str(db_path)) as conn:
+            # Schema as of PR #218 (no official_rating column)
+            await conn.execute(
+                "CREATE TABLE library_items ("
+                " jellyfin_id TEXT PRIMARY KEY,"
+                " title TEXT NOT NULL,"
+                " overview TEXT,"
+                " production_year INTEGER,"
+                " genres TEXT NOT NULL DEFAULT '[]',"
+                " tags TEXT NOT NULL DEFAULT '[]',"
+                " studios TEXT NOT NULL DEFAULT '[]',"
+                " community_rating REAL,"
+                " people TEXT NOT NULL DEFAULT '[]',"
+                " content_hash TEXT NOT NULL,"
+                " synced_at INTEGER NOT NULL,"
+                " deleted_at INTEGER,"
+                " runtime_minutes INTEGER,"
+                " directors TEXT NOT NULL DEFAULT '[]',"
+                " writers TEXT NOT NULL DEFAULT '[]',"
+                " composers TEXT NOT NULL DEFAULT '[]'"
+                ")"
+            )
+            await conn.commit()
+
+        s = LibraryStore(str(db_path))
+        await s.init()
+        try:
+            cursor = await s._conn.execute("PRAGMA table_info(library_items)")
+            rows = await cursor.fetchall()
+            columns = {row[1] for row in rows}
+            assert "official_rating" in columns
+        finally:
+            await s.close()
+
+
+class TestGetAllPeopleNames:
+    """Spec 24 (Unit 2) — distinct names across people/directors/writers
+    are returned lowercased and deduplicated for ``PersonIndex`` build.
+
+    The composers column is intentionally excluded — single-token composer
+    names (e.g. ``Hans``) would dominate intent matching with low signal.
+    """
+
+    async def test_empty_store_returns_empty_set(self, store: LibraryStore) -> None:
+        names = await store.get_all_people_names()
+        assert names == frozenset()
+
+    async def test_unions_actors_directors_writers(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-A",
+                    people=["Sigourney Weaver"],
+                    directors=["Ridley Scott"],
+                    writers=["Dan O'Bannon"],
+                    composers=["Jerry Goldsmith"],  # excluded from index
+                    content_hash="hA",
+                ),
+            ]
+        )
+        names = await store.get_all_people_names()
+        assert "sigourney weaver" in names
+        assert "ridley scott" in names
+        assert "dan o'bannon" in names
+        # composers are NOT included in the people-index
+        assert "jerry goldsmith" not in names
+
+    async def test_lowercases_names(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-1",
+                    people=["EDDIE Murphy"],
+                    directors=["John HUGHES"],
+                    writers=[],
+                    content_hash="h1",
+                ),
+            ]
+        )
+        names = await store.get_all_people_names()
+        assert "eddie murphy" in names
+        assert "john hughes" in names
+
+    async def test_dedupes_across_columns(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-1",
+                    people=["Clint Eastwood"],
+                    directors=["Clint Eastwood"],  # both an actor and a director
+                    writers=[],
+                    content_hash="h1",
+                ),
+                _make_item(
+                    jellyfin_id="jf-2",
+                    people=["Clint Eastwood"],
+                    directors=[],
+                    writers=[],
+                    content_hash="h2",
+                ),
+            ]
+        )
+        names = await store.get_all_people_names()
+        clint_count = sum(1 for n in names if n == "clint eastwood")
+        assert clint_count == 1
+
+    async def test_returns_frozenset(self, store: LibraryStore) -> None:
+        names = await store.get_all_people_names()
+        assert isinstance(names, frozenset)

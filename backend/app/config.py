@@ -98,6 +98,23 @@ class Settings(BaseSettings):
     search_overfetch_multiplier: Annotated[int, Field(ge=1, le=10)] = 3
     search_rate_limit: Annotated[str, Field(pattern=_RATE_LIMIT_RE)] = "10/minute"
 
+    # Spec 24 — query router per-filter disable switches. All default to
+    # True (router on); flip individually to demonstrate regression at
+    # eval time or to mute a noisy filter without redeploying code.
+    intent_filter_person_enabled: bool = True
+    intent_filter_year_enabled: bool = True
+    intent_filter_rating_enabled: bool = True
+
+    # Spec 24 — paraphrastic LLM rewriter + cache.
+    rewrite_timeout_seconds: Annotated[float, Field(ge=0.1, le=10.0)] = 2.0
+    # Hard cap at 200 to match ``rewriter_prompts.py``'s "Never produce
+    # more than 200 characters" instruction. Raising this above 200 would
+    # create a config/prompt mismatch — the model would still target 200
+    # while the code silently accepts more (Spec 24 / Angua review).
+    rewrite_max_output_chars: Annotated[int, Field(ge=1, le=200)] = 200
+    rewrite_cache_max_entries: Annotated[int, Field(ge=1, le=100000)] = 1000
+    rewrite_cache_ttl_hours: Annotated[int, Field(ge=1, le=168)] = 24
+
     # Conversation memory
     conversation_max_turns: Annotated[int, Field(ge=1, le=100)] = 10
     conversation_ttl_minutes: Annotated[int, Field(ge=1)] = 120

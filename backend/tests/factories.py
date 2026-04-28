@@ -27,6 +27,7 @@ def make_library_item(
     directors: list[str] | None = None,
     writers: list[str] | None = None,
     composers: list[str] | None = None,
+    official_rating: str | None = None,
 ) -> LibraryItemRow:
     return LibraryItemRow(
         jellyfin_id=jellyfin_id,
@@ -44,6 +45,7 @@ def make_library_item(
         directors=directors if directors is not None else [],
         writers=writers if writers is not None else [],
         composers=composers if composers is not None else [],
+        official_rating=official_rating,
     )
 
 

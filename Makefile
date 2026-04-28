@@ -1,4 +1,4 @@
-.PHONY: help dev dev-full dev-ui dev-down build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down
+.PHONY: help dev dev-full dev-ui dev-down build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down eval-router
 
 .DEFAULT_GOAL := help
 
@@ -101,6 +101,10 @@ pipeline-down: ## Stop pipeline infrastructure
 validate-pipeline: ## Full RAG pipeline validation (one-shot)
 	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama first, or run: make pipeline-up"; exit 1; }
 	@$(MAKE) jellyfin-up && JELLYFIN_TEST_URL=http://localhost:8096 uv run --directory backend pytest -m pipeline -v ; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
+
+eval-router: ## Run query-router eval cases against live stack (Spec 24)
+	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama first, or run: make pipeline-up"; exit 1; }
+	@$(MAKE) jellyfin-up && JELLYFIN_TEST_URL=http://localhost:8096 uv run --directory backend pytest -m pipeline -v tests/pipeline/test_query_router_eval.py ; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
 
 # ---------------------------------------------------------------------------
 # Adversarial injection test harness

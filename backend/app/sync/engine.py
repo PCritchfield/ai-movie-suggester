@@ -26,11 +26,15 @@ from app.sync.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from app.config import Settings
     from app.jellyfin.client import JellyfinClient
     from app.jellyfin.models import LibraryItem
     from app.library.store import LibraryStore
     from app.vectors.repository import SqliteVecRepository
+
+    SyncCompleteCallback = Callable[[], Awaitable[None]]
 
 _logger = logging.getLogger(__name__)
 
@@ -82,6 +86,7 @@ def to_library_row(item: LibraryItem) -> LibraryItemRow:
         directors=buckets["directors"],
         writers=buckets["writers"],
         composers=buckets["composers"],
+        official_rating=item.official_rating,
     )
     return dataclasses.replace(row, content_hash=compute_content_hash(row))
 
@@ -102,12 +107,16 @@ class SyncEngine:
         settings: Settings,
         vector_repository: SqliteVecRepository | None = None,
         embedding_event: asyncio.Event | None = None,
+        on_sync_complete: list[SyncCompleteCallback] | None = None,
     ) -> None:
         self._library_store = library_store
         self._jellyfin_client = jellyfin_client
         self._settings = settings
         self._vector_repo = vector_repository
         self._embedding_event = embedding_event
+        self._on_sync_complete: list[SyncCompleteCallback] = list(
+            on_sync_complete or []
+        )
         self._lock = asyncio.Lock()
         self._current_state: SyncState | None = None
 
@@ -312,6 +321,19 @@ class SyncEngine:
             )
 
             await self._library_store.save_sync_run(result)
+
+            # Fire on-sync-complete hooks (e.g. PersonIndex rebuild). Each
+            # hook is awaited in registration order; failures are logged
+            # and swallowed so a broken listener never wedges sync.
+            for cb in self._on_sync_complete:
+                try:
+                    await cb()
+                except Exception:
+                    _logger.warning(
+                        "sync_completion_hook_failed callback=%s",
+                        getattr(cb, "__name__", repr(cb)),
+                        exc_info=True,
+                    )
 
             # Wake embedding worker after sync completes
             if self._embedding_event:

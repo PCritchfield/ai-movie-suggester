@@ -1,0 +1,125 @@
+[
+  {
+    "query": "a comedy movie",
+    "expected_path": "keyword",
+    "expected_genres": ["Comedy"],
+    "must_include_titles": ["Galaxy Quest", "Ghostbusters"],
+    "notes": "Pure genre keyword — exercises the soft genre rerank."
+  },
+  {
+    "query": "horror film",
+    "expected_path": "keyword",
+    "expected_genres": ["Horror"],
+    "must_include_titles": ["Alien", "The Shining"],
+    "notes": "Pure genre keyword."
+  },
+  {
+    "query": "a sci-fi adventure",
+    "expected_path": "keyword",
+    "expected_genres": ["Science Fiction", "Adventure"],
+    "must_include_titles": ["Jurassic Park", "Galaxy Quest"],
+    "notes": "Two-genre keyword query."
+  },
+  {
+    "query": "a Ridley Scott film",
+    "expected_path": "person",
+    "expected_genres": [],
+    "must_include_titles": ["Alien", "Blade Runner"],
+    "must_exclude_titles": ["The Goonies", "Ghostbusters"],
+    "notes": "Director person filter — the sharpest case for regression detection. Without the filter the cosine ranker often drifts to other 80s films."
+  },
+  {
+    "query": "Steven Spielberg movies",
+    "expected_path": "person",
+    "expected_genres": [],
+    "must_include_titles": ["Jurassic Park", "Raiders of the Lost Ark"],
+    "must_exclude_titles": ["The Shining"],
+    "notes": "Director person filter, multi-token name."
+  },
+  {
+    "query": "movies starring Bruce Willis",
+    "expected_path": "person",
+    "expected_genres": [],
+    "must_include_titles": ["Die Hard"],
+    "notes": "Actor filter via 'starring' intent token."
+  },
+  {
+    "query": "an 80s adventure",
+    "expected_path": "year",
+    "expected_genres": ["Adventure"],
+    "must_include_titles": ["The Goonies", "Raiders of the Lost Ark"],
+    "must_exclude_titles": ["Mad Max Fury Road"],
+    "notes": "Decade + genre. Without the year filter, recent adventure-genre films drift in."
+  },
+  {
+    "query": "early 80s sci-fi",
+    "expected_path": "year",
+    "expected_genres": ["Science Fiction"],
+    "must_include_titles": ["Blade Runner"],
+    "notes": "Prefixed-decade era detection (1980-1984)."
+  },
+  {
+    "query": "a 1979 film",
+    "expected_path": "year",
+    "expected_genres": [],
+    "must_include_titles": ["Alien"],
+    "notes": "Explicit-year filter."
+  },
+  {
+    "query": "an R-rated thriller",
+    "expected_path": "rating",
+    "expected_genres": ["Thriller"],
+    "must_include_titles": [],
+    "notes": "Rating + genre. Rating data is NULL until next sync (Q2-C); listed for path coverage and future regression."
+  },
+  {
+    "query": "a PG-13 family movie",
+    "expected_path": "rating",
+    "expected_genres": ["Family"],
+    "must_include_titles": [],
+    "notes": "Rating + genre. Same NULL-data caveat as above."
+  },
+  {
+    "query": "something like Alien but funny",
+    "expected_path": "rewrite",
+    "expected_genres": [],
+    "must_include_titles": ["Galaxy Quest", "Mars Attacks!", "Shaun of the Dead"],
+    "must_exclude_titles": ["The Shining", "Sicario"],
+    "notes": "Paraphrastic — no signal. The rewriter is the only way this query lands well."
+  },
+  {
+    "query": "a fun movie to watch with my five year old",
+    "expected_path": "rewrite",
+    "expected_genres": [],
+    "must_include_titles": ["The Goonies", "Spirited Away"],
+    "notes": "Paraphrastic family request. Pre-router this query drifted to standup specials."
+  },
+  {
+    "query": "a thoughtful movie about loss and memory",
+    "expected_path": "rewrite",
+    "expected_genres": [],
+    "must_include_titles": ["Arrival", "Moonlight"],
+    "notes": "Paraphrastic mood query — leans on rewrite + semantic embedding."
+  },
+  {
+    "query": "tell me a film",
+    "expected_path": "semantic",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Short, no-signal query — too short to be paraphrastic. Falls through to raw cosine."
+  },
+  {
+    "query": "anything good",
+    "expected_path": "semantic",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Two-word query with no signal. Raw cosine path."
+  },
+  {
+    "query": "an 80s John McTiernan action film",
+    "expected_path": "person",
+    "expected_genres": ["Action"],
+    "must_include_titles": ["Die Hard"],
+    "notes": "Person + year + genre — the rare three-signal intent. AND-intersect should keep Die Hard as the survivor."
+  }
+]

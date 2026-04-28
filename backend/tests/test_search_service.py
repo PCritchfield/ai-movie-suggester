@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
+from app.search.person_index import PersonIndex
 from app.search.service import SearchService
 from tests.factories import make_embedding_result, make_library_item, make_search_result
 
@@ -15,6 +16,11 @@ def _make_service(
     permissions: AsyncMock | None = None,
     library: AsyncMock | None = None,
     overfetch: int = 5,
+    person_index: PersonIndex | None = None,
+    intent_filter_person_enabled: bool = True,
+    intent_filter_year_enabled: bool = True,
+    intent_filter_rating_enabled: bool = True,
+    rewriter: AsyncMock | None = None,
 ) -> SearchService:
     """Build a SearchService with mocked dependencies.
 
@@ -39,6 +45,7 @@ def _make_service(
             "processing": 0,
             "failed": 0,
         }
+        library.search_filtered_ids = AsyncMock(return_value=None)
 
     return SearchService(
         ollama_client=ollama,
@@ -46,6 +53,11 @@ def _make_service(
         permission_service=permissions,
         library_store=library,
         overfetch_multiplier=overfetch,
+        person_index=person_index,
+        intent_filter_person_enabled=intent_filter_person_enabled,
+        intent_filter_year_enabled=intent_filter_year_enabled,
+        intent_filter_rating_enabled=intent_filter_rating_enabled,
+        rewriter=rewriter,
     )
 
 
@@ -621,6 +633,371 @@ class TestGenreRerank:
         assert ids == ["galaxy_quest", "evolution", "standup"]
 
 
+class TestSearchPipelineWithIntent:
+    """Spec 24 Unit 4 — pre-filter routing tests."""
+
+    async def test_search_pipeline_uses_filter_when_intent_present(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("m-em", 0.9),
+            make_search_result("m-other", 0.8),
+        ]
+        permissions = AsyncMock()
+        permissions.filter_permitted.side_effect = lambda *a, **k: a[2]
+        library = AsyncMock()
+        library.get_many.return_value = [
+            make_library_item("m-em", "Beverly Hills Cop"),
+        ]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value={"m-em"})
+
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        result = await service.search(
+            "Eddie Murphy films", limit=10, user_id="u1", token="tok"
+        )
+
+        # Filter was consulted with the matched person
+        library.search_filtered_ids.assert_awaited_once()
+        kwargs = library.search_filtered_ids.call_args.kwargs
+        assert kwargs.get("people") == ["eddie murphy"]
+        # Only the matched candidate survived the pre-filter intersection
+        assert [r.jellyfin_id for r in result.results] == ["m-em"]
+
+    async def test_filter_active_expands_fetch_limit_to_library_size(self) -> None:
+        """Spec 24 / live-deploy recall fix.
+
+        When a structured filter is active, the cosine fetch window must
+        widen to the full library size so filter-matched items that don't
+        rank in the default top-N can still surface. Without this, the
+        post-cosine intersection silently empties out for queries whose
+        embedding doesn't naturally rank the filter set highly.
+        """
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 1805  # full live library size
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value={"jf-bw"})
+
+        index = PersonIndex(names=frozenset({"bruce willis"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+            overfetch=5,
+        )
+        await service.search(
+            "movies starring Bruce Willis", limit=10, user_id="u1", token="tok"
+        )
+        # Filter active → fetch_limit must reach the full library size,
+        # NOT the default limit×overfetch=50.
+        vec_repo.search.assert_awaited_once()
+        assert vec_repo.search.call_args.kwargs["limit"] == 1805
+
+    async def test_filter_inactive_keeps_default_fetch_limit(self) -> None:
+        """Sanity check: without a filter, fetch_limit stays at limit×overfetch."""
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 1805
+        vec_repo.search.return_value = []
+        library = AsyncMock()
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value=None)
+        index = PersonIndex(names=frozenset())
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            library=library,
+            person_index=index,
+            overfetch=5,
+        )
+        await service.search("anything", limit=10, user_id="u1", token="tok")
+        assert vec_repo.search.call_args.kwargs["limit"] == 50
+
+    async def test_search_pipeline_skips_filter_when_intent_empty(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock()
+
+        # Empty PersonIndex; query has no era / rating signals either
+        index = PersonIndex(names=frozenset())
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        await service.search("ok", limit=10, user_id="u1", token="tok")
+
+        library.search_filtered_ids.assert_not_awaited()
+
+    async def test_search_pipeline_returns_empty_response_on_over_constrained_intent(
+        self,
+    ) -> None:
+        """Q3-D contract: an over-constrained intent (e.g. nonexistent person
+        + impossible year) returns an empty SearchResponse, not an exception."""
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        library = AsyncMock()
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        # Filter says: nothing matches your AND-intersection
+        library.search_filtered_ids = AsyncMock(return_value=set())
+
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        resp = await service.search(
+            "Eddie Murphy films", limit=10, user_id="u1", token="tok"
+        )
+
+        assert resp.results == []
+        assert resp.filtered_count == 0
+        # Cosine search wasn't called because the pre-filter already returned empty
+        vec_repo.search.assert_not_awaited()
+
+    async def test_intent_filter_person_disabled_bypasses_person_filter(
+        self,
+    ) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value=None)
+
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+            intent_filter_person_enabled=False,
+        )
+        await service.search("Eddie Murphy films", limit=10, user_id="u1", token="tok")
+
+        # Detected person, but the flag is off → people not passed to filter
+        if library.search_filtered_ids.await_count:
+            kwargs = library.search_filtered_ids.call_args.kwargs
+            assert kwargs.get("people") in (None, [])
+        # Cosine still ran (we're falling through to raw cosine)
+        vec_repo.search.assert_awaited_once()
+
+
+class TestSearchPipelineRewriterGating:
+    """Spec 24 Unit 5 — paraphrastic rewriter is invoked ONLY when intent
+    has no structured signal AND the query is paraphrastic."""
+
+    async def test_rewriter_not_invoked_for_signal_query(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value={"x"})
+
+        rewriter = AsyncMock()
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+            rewriter=rewriter,
+        )
+
+        await service.search("Eddie Murphy films", limit=10, user_id="u1", token="tok")
+        rewriter.rewrite.assert_not_awaited()
+
+    async def test_rewriter_invoked_for_paraphrastic_query(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value=None)
+
+        rewriter = AsyncMock()
+        rewriter.rewrite = AsyncMock(return_value="rewritten short paraphrase")
+        index = PersonIndex(names=frozenset())
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+            rewriter=rewriter,
+        )
+
+        await service.search(
+            "something like alien but funny and uplifting",
+            limit=10,
+            user_id="u1",
+            token="tok",
+        )
+        rewriter.rewrite.assert_awaited_once()
+        # The rewrite must be the string passed to the embedder
+        ollama.embed.assert_awaited_once()
+        embed_input = ollama.embed.call_args.args[0]
+        assert "rewritten short paraphrase" in embed_input
+
+
+class TestSearchSkipsPermissionFilterWhenEmpty:
+    """Spec 24 / Copilot #8 — short-circuit ``filter_permitted([])``.
+
+    With a real ``PermissionService`` the empty-list call still triggers a
+    Jellyfin permission fetch on cache miss. Skipping it avoids that
+    round-trip when the prior filter steps already produced no survivors.
+    """
+
+    async def test_no_permission_call_when_exclude_drains_all(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("watched-1", 0.9),
+            make_search_result("watched-2", 0.8),
+        ]
+        permissions = AsyncMock()
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+        )
+        # exclude_ids removes every cosine result, so candidate_ids = [].
+        await service.search(
+            "test",
+            limit=10,
+            user_id="u1",
+            token="tok",
+            exclude_ids={"watched-1", "watched-2"},
+        )
+        permissions.filter_permitted.assert_not_awaited()
+
+    async def test_no_permission_call_when_filter_drops_all(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("m-other", 0.9),
+        ]
+        permissions = AsyncMock()
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        # Pre-filter narrows to an id the cosine search did NOT surface,
+        # so the post-cosine intersection produces an empty list.
+        library.search_filtered_ids = AsyncMock(return_value={"m-not-in-cosine"})
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        await service.search("Eddie Murphy films", limit=10, user_id="u1", token="tok")
+        permissions.filter_permitted.assert_not_awaited()
+
+
 class TestSearchResponseMetadata:
     async def test_response_includes_metadata_fields(self) -> None:
         ollama = AsyncMock()
@@ -660,3 +1037,44 @@ class TestSearchResponseMetadata:
         assert result.filtered_count == 1
         assert isinstance(result.query_time_ms, int)
         assert result.query_time_ms >= 0
+
+    async def test_filtered_count_excludes_pre_filter_drops(self) -> None:
+        """``filtered_count`` reports permission drops only — not items
+        removed by the structured pre-filter or exclude_ids (Copilot #2).
+        """
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [
+            make_search_result("keep", 0.9),
+            make_search_result("drop_by_filter_a", 0.8),
+            make_search_result("drop_by_filter_b", 0.7),
+        ]
+        permissions = AsyncMock()
+        # The single survivor of the pre-filter is also permitted.
+        permissions.filter_permitted.return_value = ["keep"]
+        library = AsyncMock()
+        library.get_many.return_value = [make_library_item("keep")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        # Pre-filter narrows {keep, drop_by_filter_a, drop_by_filter_b} → {keep}.
+        library.search_filtered_ids = AsyncMock(return_value={"keep"})
+        index = PersonIndex(names=frozenset({"eddie murphy"}))
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=index,
+        )
+        result = await service.search(
+            "Eddie Murphy films", limit=10, user_id="u1", token="tok"
+        )
+        # Two items were removed by the pre-filter, ZERO by permissions.
+        assert result.filtered_count == 0
+        # total_candidates still reports the raw vector-search count.
+        assert result.total_candidates == 3

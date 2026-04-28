@@ -34,6 +34,9 @@ class LibraryItemRow:
     directors: list[str] = field(default_factory=list)
     writers: list[str] = field(default_factory=list)
     composers: list[str] = field(default_factory=list)
+    # Spec 24 Unit 3 — Jellyfin OfficialRating (e.g. "G", "PG", "PG-13",
+    # "R", "NC-17"). Used as a structured filter only; not embedded.
+    official_rating: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

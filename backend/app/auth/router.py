@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from app.auth.session_store import SessionStore
     from app.config import Settings
     from app.permissions.service import PermissionService
+    from app.search.rewrite_cache import RewriteCache
     from app.watch_history.service import WatchHistoryService
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ def create_auth_router(
     limiter: Limiter | None = None,
     permission_service: PermissionService | None = None,
     watch_history_service: WatchHistoryService | None = None,
+    rewrite_cache: RewriteCache | None = None,
 ) -> APIRouter:
     """Build the auth APIRouter with closures over service dependencies."""
     router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -207,6 +209,12 @@ def create_auth_router(
         # Invalidate watch history cache for the user
         if watch_history_service is not None:
             watch_history_service.invalidate(session.user_id)
+
+        # Spec 24 — drop every cached LLM rewrite. Rewrites are not
+        # per-user but a logout cascade is the cheapest moment to flush
+        # any borderline-PII-adjacent state from the process.
+        if rewrite_cache is not None:
+            rewrite_cache.clear()
 
         # Best-effort Jellyfin token revocation
         try:

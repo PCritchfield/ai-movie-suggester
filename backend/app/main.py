@@ -41,6 +41,9 @@ from app.models import (
 )
 from app.ollama.client import OllamaEmbeddingClient
 from app.play.router import create_play_router
+from app.search.person_index import PersonIndex
+from app.search.rewrite_cache import RewriteCache
+from app.search.rewriter import QueryRewriter
 from app.search.router import create_search_router
 from app.sync.engine import SyncEngine
 from app.sync.router import router as sync_router
@@ -201,6 +204,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Create embedding event (shared between SyncEngine and EmbeddingWorker)
         embedding_event = asyncio.Event()
 
+        # Build the person-name index from the library store. Subscribed to
+        # the sync-completed hook below so newly-synced cast/crew names
+        # become discoverable without a backend restart.
+        person_index = PersonIndex(names=frozenset())
+        await person_index.rebuild_from_store(library_store)
+        app.state.person_index = person_index
+
+        async def _rebuild_person_index() -> None:
+            await person_index.rebuild_from_store(library_store)
+
         # Create SyncEngine (uses sync client if available, else main client)
         sync_engine = SyncEngine(
             library_store=library_store,
@@ -208,6 +221,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings=settings,
             vector_repository=vec_repo,
             embedding_event=embedding_event,
+            on_sync_complete=[_rebuild_person_index],
         )
         app.state.sync_engine = sync_engine
 
@@ -228,6 +242,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_sessions_per_user=settings.max_sessions_per_user,
             conversation_store=conversation_store,
         )
+        # Rewrite cache: process-local LRU+TTL keyed by SHA-256(normalised query).
+        # Built before auth_router so the logout cascade can clear it.
+        rewrite_cache = RewriteCache(
+            max_entries=settings.rewrite_cache_max_entries,
+            ttl_seconds=settings.rewrite_cache_ttl_hours * 3600,
+        )
+        app.state.rewrite_cache = rewrite_cache
+
         auth_router = create_auth_router(
             auth_service=auth_service,
             session_store=store,
@@ -236,6 +258,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             limiter=limiter,
             permission_service=permission_service,
             watch_history_service=watch_history_service,
+            rewrite_cache=rewrite_cache,
         )
         app.include_router(auth_router)
 
@@ -243,34 +266,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.include_router(sync_router)
         app.include_router(embedding_router)
 
-        # Create search service and mount router
-        from app.search.service import SearchService
-
-        search_service = SearchService(
-            ollama_client=ollama_client,
-            vec_repo=vec_repo,
-            permission_service=permission_service,
-            library_store=library_store,
-            overfetch_multiplier=settings.search_overfetch_multiplier,
-            jellyfin_web_url=settings.effective_jellyfin_web_url,
-        )
-        app.state.search_service = search_service
-        search_router = create_search_router(
-            settings=settings,
-            limiter=limiter,
-        )
-        app.include_router(search_router)
-
-        # Mount image proxy router
-        from app.images.router import create_images_router
-
-        images_router = create_images_router(settings=settings, limiter=limiter)
-        app.include_router(images_router)
-
-        # Create chat client, service, pause counter, and mount router.
-        # NOTE: pause_counter is created here because EmbeddingWorker
-        # receives it during startup below.  Both consumers must share
-        # the same instance.
+        # Build the chat client + query rewriter BEFORE SearchService so
+        # the rewriter can be passed via the constructor — avoids the
+        # post-init mutation pattern Granny flagged on PR #228.
         from app.chat.router import create_chat_router
         from app.chat.service import ChatPauseCounter, ChatService
         from app.ollama.chat_client import OllamaChatClient
@@ -285,6 +283,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             chat_model=settings.ollama_chat_model,
         )
         app.state.ollama_chat_client = ollama_chat_client
+
+        # Spec 24 — paraphrastic LLM rewriter (shares the chat client).
+        query_rewriter = QueryRewriter(
+            chat_client=ollama_chat_client,
+            cache=rewrite_cache,
+            timeout_seconds=settings.rewrite_timeout_seconds,
+            max_output_chars=settings.rewrite_max_output_chars,
+        )
+        app.state.query_rewriter = query_rewriter
+
+        # Create search service and mount router
+        from app.search.service import SearchService
+
+        search_service = SearchService(
+            ollama_client=ollama_client,
+            vec_repo=vec_repo,
+            permission_service=permission_service,
+            library_store=library_store,
+            overfetch_multiplier=settings.search_overfetch_multiplier,
+            jellyfin_web_url=settings.effective_jellyfin_web_url,
+            person_index=person_index,
+            intent_filter_person_enabled=settings.intent_filter_person_enabled,
+            intent_filter_year_enabled=settings.intent_filter_year_enabled,
+            intent_filter_rating_enabled=settings.intent_filter_rating_enabled,
+            rewriter=query_rewriter,
+        )
+        app.state.search_service = search_service
+        search_router = create_search_router(
+            settings=settings,
+            limiter=limiter,
+        )
+        app.include_router(search_router)
+
+        # Mount image proxy router
+        from app.images.router import create_images_router
+
+        images_router = create_images_router(settings=settings, limiter=limiter)
+        app.include_router(images_router)
 
         pause_counter = ChatPauseCounter()
         app.state.pause_counter = pause_counter
