@@ -161,6 +161,86 @@ class TestInit:
         finally:
             await s.close()
 
+    async def test_country_columns_exist_on_fresh_db(
+        self, store: LibraryStore
+    ) -> None:
+        """Spec 25 — production_countries and country_synced_at on fresh init."""
+        cursor = await store._conn.execute("PRAGMA table_info(library_items)")
+        rows = await cursor.fetchall()
+        # Each row from PRAGMA table_info is (cid, name, type, notnull, dflt_value, pk)
+        col_by_name = {row[1]: row for row in rows}
+
+        assert "production_countries" in col_by_name
+        prod = col_by_name["production_countries"]
+        assert prod[2] == "TEXT"
+        assert prod[3] == 1  # NOT NULL
+        assert prod[4] == "'[]'"  # default JSON-array sentinel
+
+        assert "country_synced_at" in col_by_name
+        synced = col_by_name["country_synced_at"]
+        assert synced[2] == "INTEGER"
+        assert synced[3] == 0  # nullable
+
+    async def test_country_columns_added_to_legacy_db(
+        self, tmp_path: pathlib.Path
+    ) -> None:
+        """Spec 25 — opening a pre-Spec-25 DB adds country columns via ALTER TABLE.
+
+        Uses PRAGMA table_info introspection (per Granny+Vimes architecture
+        ruling) so SQLite < 3.35's lack of `ADD COLUMN IF NOT EXISTS` is a
+        non-issue. Re-opening must be idempotent.
+        """
+        import aiosqlite
+
+        db_path = tmp_path / "legacy_pre_spec25.db"
+        async with aiosqlite.connect(str(db_path)) as conn:
+            # Schema as it existed post-Spec-24, pre-Spec-25 (no country cols).
+            await conn.execute(
+                "CREATE TABLE library_items ("
+                " jellyfin_id TEXT PRIMARY KEY,"
+                " title TEXT NOT NULL,"
+                " overview TEXT,"
+                " production_year INTEGER,"
+                " genres TEXT NOT NULL DEFAULT '[]',"
+                " tags TEXT NOT NULL DEFAULT '[]',"
+                " studios TEXT NOT NULL DEFAULT '[]',"
+                " community_rating REAL,"
+                " people TEXT NOT NULL DEFAULT '[]',"
+                " content_hash TEXT NOT NULL,"
+                " synced_at INTEGER NOT NULL,"
+                " deleted_at INTEGER,"
+                " runtime_minutes INTEGER,"
+                " directors TEXT NOT NULL DEFAULT '[]',"
+                " writers TEXT NOT NULL DEFAULT '[]',"
+                " composers TEXT NOT NULL DEFAULT '[]',"
+                " official_rating TEXT"
+                ")"
+            )
+            await conn.commit()
+
+        s = LibraryStore(str(db_path))
+        await s.init()
+        try:
+            cursor = await s._conn.execute("PRAGMA table_info(library_items)")
+            rows = await cursor.fetchall()
+            columns = {row[1] for row in rows}
+            assert "production_countries" in columns
+            assert "country_synced_at" in columns
+        finally:
+            await s.close()
+
+        # Re-open the same DB; PRAGMA-guarded ALTER must not error on re-run.
+        s2 = LibraryStore(str(db_path))
+        await s2.init()
+        try:
+            cursor = await s2._conn.execute("PRAGMA table_info(library_items)")
+            rows = await cursor.fetchall()
+            columns = {row[1] for row in rows}
+            assert "production_countries" in columns
+            assert "country_synced_at" in columns
+        finally:
+            await s2.close()
+
 
 class TestUpsertMany:
     """upsert_many() created/updated/unchanged tracking."""
