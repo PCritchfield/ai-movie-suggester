@@ -85,6 +85,14 @@ class LibraryItem(BaseModel):
     run_time_ticks: int | None = Field(default=None, alias="RunTimeTicks")
     people: list[dict[str, Any]] = Field(default_factory=list, alias="People")
     official_rating: str | None = Field(default=None, alias="OfficialRating")
+    # Spec 25 — Jellyfin's ``ProductionLocations`` is an array of full English
+    # country names (e.g. ``["Germany", "United States of America"]`` for
+    # co-productions). The sync engine maps each entry to ISO 3166-1 alpha-2
+    # via ``app.library.country_codes`` before storing in
+    # ``library_items.production_countries``.
+    production_locations: list[str] = Field(
+        default_factory=list, alias="ProductionLocations"
+    )
 
     @property
     def runtime_minutes(self) -> int | None:

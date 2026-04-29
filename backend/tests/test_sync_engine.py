@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import tempfile
+import time
 import unittest.mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -114,6 +115,7 @@ def _make_library_item(
     people: list[dict[str, str]] | None = None,
     run_time_ticks: int | None = None,
     official_rating: str | None = None,
+    production_locations: list[str] | None = None,
 ) -> LibraryItem:
     """Create a LibraryItem for testing."""
     if genres is None:
@@ -139,6 +141,8 @@ def _make_library_item(
         data["RunTimeTicks"] = run_time_ticks
     if official_rating is not None:
         data["OfficialRating"] = official_rating
+    if production_locations is not None:
+        data["ProductionLocations"] = production_locations
     return LibraryItem.model_validate(data)
 
 
@@ -314,6 +318,109 @@ class TestToLibraryRowCrewExtraction:
         item = _make_library_item()
         row = to_library_row(item)
         assert row.content_hash == compute_content_hash(row)
+
+
+# ---------------------------------------------------------------------------
+# Spec 25 — to_library_row country handling
+# ---------------------------------------------------------------------------
+
+
+class TestToLibraryRowCountryHandling:
+    """Spec 25 — Jellyfin ProductionLocations → ISO codes via country_codes."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_unmappable_dedup_set(self) -> None:
+        """The skip-and-log dedup set is module-scoped; reset per test."""
+        from app.sync import engine as sync_engine_module
+
+        sync_engine_module._unmappable_country_names_logged.clear()
+
+    def test_persists_single_country_as_iso(self) -> None:
+        item = _make_library_item(item_id="jf-spirited", production_locations=["Japan"])
+        row = to_library_row(item)
+        assert row.production_countries == ["JP"]
+
+    def test_persists_co_production_sorted_deterministic(self) -> None:
+        """Multiple ProductionLocations preserve all + sort for determinism."""
+        item = _make_library_item(
+            item_id="jf-2fast",
+            production_locations=["United States of America", "Germany"],
+        )
+        row = to_library_row(item)
+        # Sorted alphabetically by ISO code so the JSON encoding is stable
+        assert row.production_countries == ["DE", "US"]
+
+    def test_country_synced_at_is_current_epoch(self) -> None:
+        before = int(time.time())
+        item = _make_library_item(production_locations=["Japan"])
+        row = to_library_row(item)
+        after = int(time.time())
+        assert row.country_synced_at is not None
+        assert before <= row.country_synced_at <= after
+
+    def test_empty_production_locations_gives_empty_array_with_synced_at(
+        self,
+    ) -> None:
+        """No country data still sets country_synced_at — distinguishes from
+        the not-yet-backfilled case (None)."""
+        item = _make_library_item(production_locations=[])
+        row = to_library_row(item)
+        assert row.production_countries == []
+        assert row.country_synced_at is not None
+
+    def test_unmappable_country_skipped_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        item = _make_library_item(production_locations=["Atlantis"])
+        with caplog.at_level(logging.WARNING):
+            row = to_library_row(item)
+        assert row.production_countries == []
+        assert row.country_synced_at is not None
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "Atlantis" in warnings[0].getMessage()
+
+    def test_partial_co_production_unmappable_dropped(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """If a co-production has both mappable and unmappable countries,
+        the mappable one is preserved and the unmappable one is logged."""
+        import logging
+
+        item = _make_library_item(production_locations=["Japan", "Atlantis"])
+        with caplog.at_level(logging.WARNING):
+            row = to_library_row(item)
+        assert row.production_countries == ["JP"]
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+
+
+class TestContentHashUnchangedByCountryData:
+    """Spec 25 — production_countries must NOT participate in content_hash.
+
+    Per the architecture review: country is a structured filter only and
+    must not invalidate stored embeddings when added to existing items.
+    """
+
+    def test_hash_identical_with_and_without_country_data(self) -> None:
+        item_no_country = _make_library_item(production_locations=[])
+        item_with_country = _make_library_item(production_locations=["Japan"])
+        row_no_country = to_library_row(item_no_country)
+        row_with_country = to_library_row(item_with_country)
+        assert row_no_country.content_hash == row_with_country.content_hash
+
+    def test_hash_identical_for_different_country_sets(self) -> None:
+        """Changing country_set on otherwise-identical items must not change
+        the content hash — embeddings remain valid through country backfill."""
+        item_jp = _make_library_item(production_locations=["Japan"])
+        item_us_de = _make_library_item(
+            production_locations=["United States of America", "Germany"]
+        )
+        row_jp = to_library_row(item_jp)
+        row_us_de = to_library_row(item_us_de)
+        assert row_jp.content_hash == row_us_de.content_hash
 
 
 # ---------------------------------------------------------------------------
