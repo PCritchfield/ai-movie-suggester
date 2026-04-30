@@ -121,5 +121,34 @@
     "expected_genres": ["Action"],
     "must_include_titles": ["Die Hard"],
     "notes": "Person + year + genre — the rare three-signal intent. AND-intersect should keep Die Hard as the survivor."
+  },
+  {
+    "query": "movies from Japan",
+    "expected_path": "country",
+    "expected_genres": [],
+    "must_include_titles": ["Spirited Away"],
+    "must_exclude_titles": ["Alien", "Die Hard"],
+    "notes": "Spec 25 — pure country signal, no genre. Filter SQL must keep only rows whose production_countries contains JP; substring leak via tags must not occur."
+  },
+  {
+    "query": "Japanese animation",
+    "expected_path": "country",
+    "expected_genres": ["Animation"],
+    "must_include_titles": ["Spirited Away"],
+    "notes": "Spec 25 — country + genre intersection. Country path wins precedence over keyword; the genre rerank still surfaces Animation."
+  },
+  {
+    "query": "British horror comedy",
+    "expected_path": "country",
+    "expected_genres": ["Horror", "Comedy"],
+    "must_include_titles": ["Shaun of the Dead"],
+    "notes": "Spec 25 — demonym + multi-genre. GB country filter narrows to UK films; horror+comedy genre rerank surfaces Shaun of the Dead."
+  },
+  {
+    "query": "movies set in Japan during WWII",
+    "expected_path": "rewrite",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Spec 25 — plot-setting boundary. ``set in Japan`` must NOT trigger the country filter; with no other structured signals the query falls through to the rewriter (paraphrastic, 6 words)."
   }
 ]

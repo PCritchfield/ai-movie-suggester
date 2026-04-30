@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.library.country_codes import name_to_iso
 from app.search.genre_keywords import detect_query_genres
 
 if TYPE_CHECKING:
@@ -58,8 +59,92 @@ _RATING_NOUN_SUFFIX_RES: dict[str, re.Pattern[str]] = {
 _PARAPHRASTIC_MIN_WORDS = 4
 
 
+# Spec 25 — country/demonym → ISO 3166-1 alpha-2 lookup. The full English
+# names are mapped via ``country_codes.name_to_iso``; demonyms (adjectival
+# forms) need a hand-curated mapping because pycountry's
+# ``official_name``/``common_name`` fields don't carry the adjective form
+# universally. Start with the 20 most common; expandable. Keys are
+# lowercase tokens — matching is case-insensitive on the query side.
+_DEMONYM_TO_ISO: dict[str, str] = {
+    "japanese": "JP",
+    "korean": "KR",
+    "french": "FR",
+    "british": "GB",
+    "english": "GB",
+    "scottish": "GB",
+    "german": "DE",
+    "italian": "IT",
+    "spanish": "ES",
+    "mexican": "MX",
+    "brazilian": "BR",
+    "russian": "RU",
+    "chinese": "CN",
+    "indian": "IN",
+    "australian": "AU",
+    "canadian": "CA",
+    "american": "US",
+    "swedish": "SE",
+    "danish": "DK",
+    "norwegian": "NO",
+    "polish": "PL",
+    "iranian": "IR",
+    "thai": "TH",
+}
+
+# Country names that pycountry handles directly, but we want to recognise
+# in queries even when typed as a single token (no demonym needed).
+_COUNTRY_NAME_TOKENS: tuple[str, ...] = (
+    "japan",
+    "korea",
+    "france",
+    "britain",
+    "germany",
+    "italy",
+    "spain",
+    "mexico",
+    "brazil",
+    "russia",
+    "china",
+    "india",
+    "australia",
+    "canada",
+    "sweden",
+    "denmark",
+    "norway",
+    "poland",
+    "iran",
+    "thailand",
+)
+
+# Plot-setting markers — when one appears within ~5 tokens before a
+# country mention, the country is a setting (``set in Japan``,
+# ``during the Cold War``, ``about France``), not a production-country
+# signal. Tokenisation is whitespace + punctuation strip; window size of 5
+# tokens covers ``set in / during / about <country>`` plus 1–2
+# determiners or prepositions.
+_PLOT_SETTING_MARKERS: frozenset[str] = frozenset(
+    {"set", "in", "during", "about", "takes", "place"}
+)
+_PLOT_SETTING_WINDOW = 5
+
+_FOREIGN_FILM_RE = re.compile(
+    r"\bforeign\s+(film|films|movie|movies|cinema)\b", re.IGNORECASE
+)
+
+
 class QueryIntent(BaseModel):
-    """Structured signals extracted from a free-text search query."""
+    """Structured signals extracted from a free-text search query.
+
+    Spec 25 adds two country-related fields:
+
+    - ``countries``: the list of ISO 3166-1 alpha-2 codes the user named
+      (positive matches OR the home set when ``countries_negate`` fires).
+      Always a concrete list — never ``None`` — so callers can pass it
+      straight through to ``LibraryStore.search_filtered_ids``.
+    - ``countries_negate``: ``True`` only for ``foreign film`` /
+      ``foreign cinema`` queries, signalling the SQL layer to use the
+      ``NOT EXISTS`` predicate against the home set.
+    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -67,11 +152,19 @@ class QueryIntent(BaseModel):
     people: list[str] = Field(default_factory=list)
     year_range: tuple[int, int] | None = None
     ratings: list[str] = Field(default_factory=list)
+    countries: list[str] = Field(default_factory=list)
+    countries_negate: bool = False
     is_paraphrastic: bool = False
 
     def has_signals(self) -> bool:
         """True when at least one structured filter signal fired."""
-        return bool(self.genres or self.people or self.year_range or self.ratings)
+        return bool(
+            self.genres
+            or self.people
+            or self.year_range
+            or self.ratings
+            or self.countries
+        )
 
 
 def _detect_year_range(query: str) -> tuple[int, int] | None:
@@ -157,13 +250,70 @@ def _detect_ratings(query: str) -> list[str]:
     return [r for r in canonical_order if r in found]
 
 
-def detect_intent(query: str, library_index: PersonIndex) -> QueryIntent:
+def _tokenise(query: str) -> list[str]:
+    """Lowercase whitespace-split tokens with punctuation stripped."""
+    return [re.sub(r"[^\w-]", "", t).lower() for t in query.split() if t]
+
+
+def _has_plot_setting_marker(tokens: list[str], match_index: int) -> bool:
+    """Return True iff a plot-setting marker sits within ``_PLOT_SETTING_WINDOW``
+    tokens *before* ``match_index``.
+
+    Window scans backwards because plot markers always precede the country
+    they govern in English (``set in Japan``, never ``Japan set in``).
+    """
+    start = max(0, match_index - _PLOT_SETTING_WINDOW)
+    return any(tok in _PLOT_SETTING_MARKERS for tok in tokens[start:match_index])
+
+
+def _detect_countries(query: str) -> list[str]:
+    """Return ISO codes for country names + demonyms in ``query``.
+
+    Suppresses extraction when a plot-setting marker (``set in``,
+    ``during``, ``about``, ``takes place in``) sits within five tokens
+    before the match. Output preserves first-occurrence order and dedupes.
+    """
+    tokens = _tokenise(query)
+    found: list[str] = []
+    seen: set[str] = set()
+
+    for i, tok in enumerate(tokens):
+        iso: str | None = None
+        if tok in _DEMONYM_TO_ISO:
+            iso = _DEMONYM_TO_ISO[tok]
+        elif tok in _COUNTRY_NAME_TOKENS:
+            iso = name_to_iso(tok)
+        else:
+            continue
+
+        if iso is None or iso in seen:
+            continue
+        if _has_plot_setting_marker(tokens, i):
+            continue
+        seen.add(iso)
+        found.append(iso)
+
+    return found
+
+
+def detect_intent(
+    query: str,
+    library_index: PersonIndex,
+    *,
+    home_countries: list[str] | None = None,
+) -> QueryIntent:
     """Extract structured search signals from a free-text query.
 
     Args:
         query: The raw user query.
         library_index: Precomputed ``PersonIndex`` (built at startup,
             rebuilt on sync). Pass an empty index to skip person matching.
+        home_countries: Operator-configured ISO codes for the
+            foreign-film negation route. When ``foreign film`` (or a
+            recognised variant) appears in the query, the returned
+            ``countries`` list is set to this set and ``countries_negate``
+            is ``True``. Pass ``None`` or an empty list to disable the
+            foreign-film route — the query then falls through unchanged.
 
     Returns:
         A ``QueryIntent`` with whichever signals fired. ``is_paraphrastic``
@@ -175,7 +325,15 @@ def detect_intent(query: str, library_index: PersonIndex) -> QueryIntent:
     ratings = _detect_ratings(query)
     people = library_index.match(query)
 
-    has_signals = bool(genres or people or year_range or ratings)
+    countries: list[str] = []
+    countries_negate = False
+    if home_countries and _FOREIGN_FILM_RE.search(query):
+        countries = list(home_countries)
+        countries_negate = True
+    else:
+        countries = _detect_countries(query)
+
+    has_signals = bool(genres or people or year_range or ratings or countries)
     word_count = len(query.split())
     is_paraphrastic = (not has_signals) and word_count >= _PARAPHRASTIC_MIN_WORDS
 
@@ -184,5 +342,7 @@ def detect_intent(query: str, library_index: PersonIndex) -> QueryIntent:
         people=people,
         year_range=year_range,
         ratings=ratings,
+        countries=countries,
+        countries_negate=countries_negate,
         is_paraphrastic=is_paraphrastic,
     )

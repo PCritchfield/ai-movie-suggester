@@ -52,6 +52,7 @@ class SearchService:
         intent_filter_year_enabled: bool = True,
         intent_filter_rating_enabled: bool = True,
         rewriter: QueryRewriter | None = None,
+        foreign_film_home_countries: list[str] | None = None,
     ) -> None:
         self._ollama = ollama_client
         self._vec_repo = vec_repo
@@ -66,6 +67,7 @@ class SearchService:
         self._filter_year = intent_filter_year_enabled
         self._filter_rating = intent_filter_rating_enabled
         self._rewriter = rewriter
+        self._home_countries: list[str] = list(foreign_film_home_countries or [])
         self._status_cache: SearchStatus | None = None
         self._status_cache_time: float = 0.0
         self._status_cache_ttl: float = 30.0  # seconds
@@ -78,6 +80,15 @@ class SearchService:
         configuration without reaching into private state.
         """
         return self._person_index
+
+    @property
+    def foreign_film_home_countries(self) -> list[str]:
+        """Read-only copy of the home-country set for the foreign-film route.
+
+        The eval harness reads this so curated cases route through the
+        same negation set the live deploy does.
+        """
+        return list(self._home_countries)
 
     async def search(
         self,
@@ -281,7 +292,9 @@ class SearchService:
         if self._person_index is None:
             return query, None, None
 
-        intent = detect_intent(query, self._person_index)
+        intent = detect_intent(
+            query, self._person_index, home_countries=self._home_countries
+        )
         if intent.has_signals():
             return query, await self._apply_filter(intent), intent
 
@@ -289,7 +302,11 @@ class SearchService:
         if intent.is_paraphrastic and self._rewriter is not None:
             rewritten = await self._rewriter.rewrite(query)
             if rewritten != query:
-                rewritten_intent = detect_intent(rewritten, self._person_index)
+                rewritten_intent = detect_intent(
+                    rewritten,
+                    self._person_index,
+                    home_countries=self._home_countries,
+                )
                 self._log_chain(intent, rewritten_intent)
                 if rewritten_intent.has_signals():
                     return (
@@ -311,12 +328,17 @@ class SearchService:
             else None
         )
         ratings = intent.ratings if (self._filter_rating and intent.ratings) else None
+        countries = intent.countries if intent.countries else None
 
-        if not people and year_range is None and not ratings:
+        if not people and year_range is None and not ratings and not countries:
             return None
 
         filter_ids = await self._library.search_filtered_ids(
-            people=people, year_range=year_range, ratings=ratings
+            people=people,
+            year_range=year_range,
+            ratings=ratings,
+            countries=countries,
+            countries_negate=intent.countries_negate,
         )
         signals = [
             label
@@ -324,6 +346,10 @@ class SearchService:
                 ("person", bool(people)),
                 ("year", year_range is not None),
                 ("rating", bool(ratings)),
+                (
+                    "country_negate" if intent.countries_negate else "country",
+                    bool(countries),
+                ),
             )
             if present
         ]

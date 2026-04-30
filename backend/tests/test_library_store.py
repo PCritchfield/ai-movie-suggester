@@ -38,6 +38,8 @@ def _make_item(
     writers: list[str] | None = None,
     composers: list[str] | None = None,
     official_rating: str | None = None,
+    production_countries: list[str] | None = None,
+    country_synced_at: int | None = None,
 ) -> LibraryItemRow:
     """Helper to build LibraryItemRow with sensible defaults."""
     return LibraryItemRow(
@@ -57,6 +59,10 @@ def _make_item(
         writers=writers if writers is not None else ["Dan O'Bannon"],
         composers=composers if composers is not None else ["Jerry Goldsmith"],
         official_rating=official_rating,
+        production_countries=(
+            production_countries if production_countries is not None else []
+        ),
+        country_synced_at=country_synced_at,
     )
 
 
@@ -691,6 +697,172 @@ class TestSearchFilteredIds:
         )
         # AND-empty: empty set, not None and not exception (Q3-D)
         assert ids == set()
+
+
+class TestSearchFilteredIdsCountries:
+    """Spec 25 — country/origin dimension on ``search_filtered_ids``.
+
+    ``json_each(production_countries) WHERE value IN (...)`` predicate (not
+    ``LIKE``) so a row whose ``tags`` happen to contain a country-shaped
+    substring (e.g. ``"Japanese garden"``) does not leak into the filter
+    when ``countries=["JP"]``.
+    """
+
+    async def test_country_filter_matches_iso_codes(self, store: LibraryStore) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-jp",
+                    title="Spirited Away",
+                    production_countries=["JP"],
+                    content_hash="h-jp",
+                ),
+                _make_item(
+                    jellyfin_id="jf-us",
+                    title="Die Hard",
+                    production_countries=["US"],
+                    content_hash="h-us",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=None, year_range=None, ratings=None, countries=["JP"]
+        )
+        assert ids == {"jf-jp"}
+
+    async def test_country_filter_handles_co_production(
+        self, store: LibraryStore
+    ) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-deus",
+                    title="Cloud Atlas",
+                    production_countries=["DE", "US"],
+                    content_hash="h-deus",
+                ),
+                _make_item(
+                    jellyfin_id="jf-fr",
+                    title="Amélie",
+                    production_countries=["FR"],
+                    content_hash="h-fr",
+                ),
+            ]
+        )
+        # Either DE or US should hit the co-production row.
+        ids_de = await store.search_filtered_ids(
+            people=None, year_range=None, ratings=None, countries=["DE"]
+        )
+        assert ids_de == {"jf-deus"}
+        ids_us = await store.search_filtered_ids(
+            people=None, year_range=None, ratings=None, countries=["US"]
+        )
+        assert ids_us == {"jf-deus"}
+
+    async def test_country_filter_no_substring_leak_via_tags(
+        self, store: LibraryStore
+    ) -> None:
+        """The new filter must use json_each on production_countries — not LIKE.
+
+        A row whose ``tags`` JSON contains the string ``"Japanese garden"``
+        must NOT match ``countries=["JP"]`` when its actual
+        ``production_countries`` is empty.
+        """
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-leak",
+                    title="The Garden",
+                    tags=["Japanese garden", "calm"],
+                    production_countries=[],
+                    content_hash="h-leak",
+                ),
+                _make_item(
+                    jellyfin_id="jf-real-jp",
+                    title="Tokyo Story",
+                    production_countries=["JP"],
+                    content_hash="h-real-jp",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=None, year_range=None, ratings=None, countries=["JP"]
+        )
+        assert ids == {"jf-real-jp"}
+
+    async def test_country_filter_intersects_with_year(
+        self, store: LibraryStore
+    ) -> None:
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-jp-old",
+                    production_year=1985,
+                    production_countries=["JP"],
+                    content_hash="h-jp-old",
+                ),
+                _make_item(
+                    jellyfin_id="jf-jp-new",
+                    production_year=2015,
+                    production_countries=["JP"],
+                    content_hash="h-jp-new",
+                ),
+                _make_item(
+                    jellyfin_id="jf-us-old",
+                    production_year=1985,
+                    production_countries=["US"],
+                    content_hash="h-us-old",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=None,
+            year_range=(1980, 1989),
+            ratings=None,
+            countries=["JP"],
+        )
+        assert ids == {"jf-jp-old"}
+
+    async def test_country_filter_negate_excludes_home_country(
+        self, store: LibraryStore
+    ) -> None:
+        """``countries_negate=True`` ⇒ NOT-EXISTS predicate.
+
+        Used by the foreign-film route — every row whose
+        ``production_countries`` does NOT include any ISO from the negate
+        set should match. Rows with no country data (``[]``) survive too;
+        ``json_each`` over an empty array produces no rows so the
+        ``NOT EXISTS`` is trivially true. The query router treats this
+        permissively — better to surface a maybe-foreign film than to
+        silently exclude it.
+        """
+        await store.upsert_many(
+            [
+                _make_item(
+                    jellyfin_id="jf-us",
+                    production_countries=["US"],
+                    content_hash="h-us",
+                ),
+                _make_item(
+                    jellyfin_id="jf-jp",
+                    production_countries=["JP"],
+                    content_hash="h-jp",
+                ),
+                _make_item(
+                    jellyfin_id="jf-empty",
+                    production_countries=[],
+                    content_hash="h-empty",
+                ),
+            ]
+        )
+        ids = await store.search_filtered_ids(
+            people=None,
+            year_range=None,
+            ratings=None,
+            countries=["US"],
+            countries_negate=True,
+        )
+        assert ids == {"jf-jp", "jf-empty"}
 
 
 class TestOfficialRating:

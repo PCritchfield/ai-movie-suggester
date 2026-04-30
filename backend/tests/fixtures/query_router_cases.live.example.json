@@ -161,5 +161,54 @@
     "expected_genres": ["Action"],
     "must_include_titles": ["Die Hard"],
     "notes": "Three-signal AND-intersect (person+year+genre). Library has McTiernan directing Die Hard, Die Hard 3, Medicine Man — only Die Hard fits 80s + action."
+  },
+  {
+    "query": "Something weird and adult from Japan",
+    "expected_path": "country",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Spec 25 motivating query #1. Country (JP) filter narrows the candidate set; cosine within picks weird/adult Japanese cinema (RoboGeisha, Tokyo Gore Police, etc.)."
+  },
+  {
+    "query": "Korean horror",
+    "expected_path": "country",
+    "expected_genres": ["Horror"],
+    "must_include_titles": [],
+    "notes": "Spec 25 motivating query #2. Demonym (KR) + horror genre — both signals fire; country wins path precedence, genre still informs rerank."
+  },
+  {
+    "query": "French comedy",
+    "expected_path": "country",
+    "expected_genres": ["Comedy"],
+    "must_include_titles": [],
+    "notes": "Spec 25 motivating query #3. Demonym (FR) + comedy genre."
+  },
+  {
+    "query": "foreign film",
+    "expected_path": "country",
+    "expected_genres": [],
+    "must_include_titles": [],
+    "notes": "Spec 25 motivating query #4. Resolves to NOT-IN against FOREIGN_FILM_HOME_COUNTRIES (default US). countries_negate=True; SQL flips to NOT EXISTS."
+  },
+  {
+    "query": "Japanese animation",
+    "expected_path": "country",
+    "expected_genres": ["Animation"],
+    "must_include_titles": [],
+    "notes": "Spec 25 motivating query #5. Mirrors the curated case — exercises country+genre intersection on the live 1.8k-item library."
+  },
+  {
+    "query": "British thriller",
+    "expected_path": "country",
+    "expected_genres": ["Thriller"],
+    "must_include_titles": [],
+    "notes": "Spec 25 motivating query #6. Demonym (GB) + thriller genre."
+  },
+  {
+    "query": "non-American sci-fi",
+    "expected_path": "keyword",
+    "expected_genres": ["Science Fiction"],
+    "must_include_titles": [],
+    "notes": "Spec 25 motivating query #7. ``non-American`` is not yet a recognised negation phrasing — Spec 25 scoped extraction to ``foreign``; the genre signal still fires and the query routes to keyword (sci-fi rerank), but the country signal falls through. Documented limitation; widening the negation phrasing is tracked for a follow-up."
   }
 ]
