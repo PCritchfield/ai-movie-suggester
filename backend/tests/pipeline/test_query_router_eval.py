@@ -84,15 +84,26 @@ async def query_router_service(
         yield service
 
 
-def _detect_path(query: str, person_index: PersonIndex) -> str:
-    """Map a query to one of the six expected_path values."""
-    intent = detect_intent(query, person_index)
+def _detect_path(
+    query: str,
+    person_index: PersonIndex,
+    home_countries: list[str] | None = None,
+) -> str:
+    """Map a query to one of the seven expected_path values.
+
+    Spec 25 adds the ``country`` path, sequenced after rating and before
+    keyword so a query like ``Japanese animation`` (country + genre) resolves
+    to country, while a pure-genre query still resolves to keyword.
+    """
+    intent = detect_intent(query, person_index, home_countries=home_countries)
     if intent.people:
         return "person"
     if intent.year_range is not None:
         return "year"
     if intent.ratings:
         return "rating"
+    if intent.countries:
+        return "country"
     if intent.genres:
         return "keyword"
     if intent.is_paraphrastic:
@@ -113,7 +124,11 @@ async def test_query_router_case(
 ) -> None:
     person_index = query_router_service.person_index
     assert person_index is not None
-    detected = _detect_path(case.query, person_index)
+    detected = _detect_path(
+        case.query,
+        person_index,
+        home_countries=list(query_router_service._home_countries),
+    )
     if case.expected_path != "rating":
         # Rating cases will detect as 'rating' even when the column is
         # NULL; we still record it but the title checks may not pass

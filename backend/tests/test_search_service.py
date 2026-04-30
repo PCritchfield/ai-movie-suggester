@@ -21,6 +21,7 @@ def _make_service(
     intent_filter_year_enabled: bool = True,
     intent_filter_rating_enabled: bool = True,
     rewriter: AsyncMock | None = None,
+    foreign_film_home_countries: list[str] | None = None,
 ) -> SearchService:
     """Build a SearchService with mocked dependencies.
 
@@ -58,6 +59,7 @@ def _make_service(
         intent_filter_year_enabled=intent_filter_year_enabled,
         intent_filter_rating_enabled=intent_filter_rating_enabled,
         rewriter=rewriter,
+        foreign_film_home_countries=foreign_film_home_countries,
     )
 
 
@@ -847,6 +849,178 @@ class TestSearchPipelineWithIntent:
             assert kwargs.get("people") in (None, [])
         # Cosine still ran (we're falling through to raw cosine)
         vec_repo.search.assert_awaited_once()
+
+
+class TestSearchPipelineCountryFilter:
+    """Spec 25 — country dimension wiring through the search pipeline.
+
+    Pins three invariants:
+    1. ``intent.countries`` reaches ``search_filtered_ids`` with the right
+       shape (4.11).
+    2. Country filter active → fetch window expands to the full library
+       size, mirroring the Spec 24 person-filter recall fix (4.15).
+    3. Rewriter-derived country signals survive end-to-end so a
+       paraphrastic query that the LLM rewrote to a country phrase still
+       routes through the structured country filter (4.16).
+    """
+
+    async def test_country_intent_passes_country_to_filter(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = [make_search_result("m-jp", 0.9)]
+        permissions = AsyncMock()
+        permissions.filter_permitted.side_effect = lambda *a, **k: a[2]
+        library = AsyncMock()
+        library.get_many.return_value = [make_library_item("m-jp", "Spirited Away")]
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value={"m-jp"})
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=PersonIndex(names=frozenset()),
+        )
+        await service.search("movies from Japan", limit=10, user_id="u1", token="tok")
+
+        library.search_filtered_ids.assert_awaited_once()
+        kwargs = library.search_filtered_ids.call_args.kwargs
+        assert kwargs.get("countries") == ["JP"]
+        assert kwargs.get("countries_negate") is False
+
+    async def test_foreign_film_passes_negation_to_filter(self) -> None:
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 100
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value=set())
+
+        service = _make_service(
+            library=library,
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            person_index=PersonIndex(names=frozenset()),
+            foreign_film_home_countries=["US", "GB"],
+        )
+        await service.search("foreign film", limit=10, user_id="u1", token="tok")
+
+        library.search_filtered_ids.assert_awaited_once()
+        kwargs = library.search_filtered_ids.call_args.kwargs
+        assert kwargs.get("countries") == ["US", "GB"]
+        assert kwargs.get("countries_negate") is True
+
+    async def test_country_filter_expands_fetch_limit_to_library_size(self) -> None:
+        """Spec 25 — country dimension inherits the Spec 24 filter-aware-fetch
+        recall fix.
+
+        With a country filter narrowing to a small subset of a 1805-item
+        library, the cosine fetch window must widen to the full library
+        size so all country-matched items have a chance to surface in the
+        top-N. Without this, country-narrowed queries would silently lose
+        recall when the filter set sat below the default cosine top-N.
+        """
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 1805  # full live library size
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value={"jf-jp-1"})
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=PersonIndex(names=frozenset()),
+            overfetch=5,
+        )
+        await service.search("movies from Japan", limit=10, user_id="u1", token="tok")
+
+        vec_repo.search.assert_awaited_once()
+        # Country filter active ⇒ fetch_limit reaches full library size,
+        # NOT the default limit×overfetch=50.
+        assert vec_repo.search.call_args.kwargs["limit"] == 1805
+
+    async def test_rewriter_country_signal_survives_to_filter(self) -> None:
+        """Spec 25 — rewriter pass-through.
+
+        Original query is paraphrastic with no signals; the rewriter
+        produces a country-bearing rewrite (e.g. ``"a Japanese
+        animation"``); the SearchService re-detects intent on the
+        rewrite, surfaces a country signal, and passes it into
+        ``search_filtered_ids``. Pins that the structurally-extracted
+        country signal isn't dropped on the rewrite branch — the country
+        dimension must work end-to-end whether the signal arrived in the
+        raw query or via the LLM rewrite.
+        """
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 1805
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value={"jf-jp-1"})
+
+        rewriter = AsyncMock()
+        rewriter.rewrite = AsyncMock(return_value="Japanese animation")
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=PersonIndex(names=frozenset()),
+            rewriter=rewriter,
+        )
+        # 4-word paraphrastic query with no structural signals
+        await service.search(
+            "an evocative dreamlike film",
+            limit=10,
+            user_id="u1",
+            token="tok",
+        )
+
+        rewriter.rewrite.assert_awaited_once()
+        # The rewritten "Japanese animation" must trigger the country
+        # filter — not get dropped because the signal arrived after rewrite.
+        library.search_filtered_ids.assert_awaited_once()
+        kwargs = library.search_filtered_ids.call_args.kwargs
+        assert kwargs.get("countries") == ["JP"]
 
 
 class TestSearchPipelineRewriterGating:

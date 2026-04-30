@@ -436,6 +436,8 @@ class LibraryStore:
         people: list[str] | None,
         year_range: tuple[int, int] | None,
         ratings: list[str] | None,
+        countries: list[str] | None = None,
+        countries_negate: bool = False,
     ) -> set[str] | None:
         """Return the AND-intersected set of jellyfin_ids matching every filter.
 
@@ -444,10 +446,16 @@ class LibraryStore:
         set on AND-empty so the caller can honour the Q3-D "empty results,
         no exception" contract for over-constrained intents.
 
-        Person matching uses LIKE because the JSON columns store names as
-        a JSON array; year matching uses BETWEEN; rating matching uses IN.
+        Country matching uses ``json_each`` over the JSON-array
+        ``production_countries`` column so substrings inside sibling JSON
+        columns (e.g. ``tags='["Japanese garden"]'``) cannot leak in.
+        When ``countries_negate`` is True the predicate flips to
+        ``NOT EXISTS`` — used by the foreign-film route. Rows with empty
+        ``production_countries`` survive the negation case (json_each
+        over an empty array yields no rows, so ``NOT EXISTS`` is
+        trivially true) — the router treats unknown-as-not-excluded.
         """
-        if not people and year_range is None and not ratings:
+        if not people and year_range is None and not ratings and not countries:
             return None
 
         clauses: list[str] = ["deleted_at IS NULL"]
@@ -473,6 +481,15 @@ class LibraryStore:
             placeholders = ",".join("?" * len(ratings))
             clauses.append(f"official_rating IN ({placeholders})")
             params.extend(ratings)
+
+        if countries:
+            placeholders = ",".join("?" * len(countries))
+            keyword = "NOT EXISTS" if countries_negate else "EXISTS"
+            clauses.append(
+                f"{keyword} (SELECT 1 FROM json_each(production_countries) "
+                f"WHERE value IN ({placeholders}))"
+            )
+            params.extend(countries)
 
         sql = "SELECT jellyfin_id FROM library_items WHERE " + " AND ".join(clauses)
         cursor = await self._conn.execute(sql, params)

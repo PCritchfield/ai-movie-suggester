@@ -435,6 +435,50 @@ def test_intent_filter_settings_validate_boolean() -> None:
         Settings()  # type: ignore[call-arg]
 
 
+# --- Spec 25 — country filter settings ---
+
+
+def test_foreign_film_home_countries_default_us() -> None:
+    """``FOREIGN_FILM_HOME_COUNTRIES`` defaults to ``["US"]``.
+
+    Used by the query router to resolve "foreign film" → NOT-IN
+    predicate against the operator's configured home country/countries.
+    """
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == ["US"]
+
+
+def test_foreign_film_home_countries_comma_separated() -> None:
+    """Comma-separated env var produces a list (e.g., ``US,GB``).
+
+    Operators expect the documented commented-default form in
+    ``.env.example`` to round-trip — JSON-only parsing would silently
+    treat ``US,GB`` as a single string and break the foreign-film route.
+    """
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": "US,GB"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == ["US", "GB"]
+
+
+def test_foreign_film_home_countries_strips_whitespace() -> None:
+    """Whitespace around items in ``US, GB ,FR`` is trimmed."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": " US , GB ,FR "}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == ["US", "GB", "FR"]
+
+
+def test_foreign_film_home_countries_uppercases_iso() -> None:
+    """ISO codes are normalised to upper-case for safe comparison."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": "us,gb"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == ["US", "GB"]
+
+
 # --- Spec 24 — rewriter / rewrite cache settings ---
 
 

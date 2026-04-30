@@ -16,9 +16,9 @@ _FIXTURE_PATH = (
 )
 
 # Recognised values for ``expected_path``. Keep aligned with the spec's
-# six router strategies.
+# router strategies — Spec 24 introduced six, Spec 25 added ``country``.
 ALLOWED_PATHS = frozenset(
-    {"keyword", "person", "year", "rating", "rewrite", "semantic"}
+    {"keyword", "person", "year", "rating", "country", "rewrite", "semantic"}
 )
 
 

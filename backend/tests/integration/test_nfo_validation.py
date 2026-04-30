@@ -115,6 +115,35 @@ def test_movie_nfo_has_required_fields(nfo_path: Path) -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("movie_dir", "expected_country"),
+    [
+        ("Spirited Away (2001)", "Japan"),
+        ("Shaun of the Dead (2004)", "United Kingdom"),
+    ],
+)
+def test_country_fixture_has_country_element(
+    movie_dir: str, expected_country: str
+) -> None:
+    """Spec 25 — the two curated country fixtures carry full English country names.
+
+    Jellyfin's NFO parser expects the full English name; our backend then
+    converts to ISO via ``country_codes.name_to_iso`` at sync time. Pinning
+    the fixture content in this test guards against accidental edits that
+    would silently break ``query_router_cases.json`` country assertions.
+    """
+    nfo_path = _MEDIA_ROOT / "movies" / movie_dir / "movie.nfo"
+    tree = ET.parse(nfo_path)  # noqa: S314
+    countries = [
+        elem.text.strip() for elem in tree.getroot().findall("country") if elem.text
+    ]
+    assert expected_country in countries, (
+        f"{movie_dir} should declare <country>{expected_country}</country>; "
+        f"found {countries}"
+    )
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("nfo_path", _SHOW_NFOS, ids=_nfo_id)
 def test_show_nfo_has_required_fields(nfo_path: Path) -> None:
     """Each tvshow.nfo parses as valid XML with all required fields."""

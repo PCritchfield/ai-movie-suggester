@@ -52,6 +52,7 @@ class SearchService:
         intent_filter_year_enabled: bool = True,
         intent_filter_rating_enabled: bool = True,
         rewriter: QueryRewriter | None = None,
+        foreign_film_home_countries: list[str] | None = None,
     ) -> None:
         self._ollama = ollama_client
         self._vec_repo = vec_repo
@@ -66,6 +67,7 @@ class SearchService:
         self._filter_year = intent_filter_year_enabled
         self._filter_rating = intent_filter_rating_enabled
         self._rewriter = rewriter
+        self._home_countries: list[str] = list(foreign_film_home_countries or [])
         self._status_cache: SearchStatus | None = None
         self._status_cache_time: float = 0.0
         self._status_cache_ttl: float = 30.0  # seconds
@@ -281,7 +283,9 @@ class SearchService:
         if self._person_index is None:
             return query, None, None
 
-        intent = detect_intent(query, self._person_index)
+        intent = detect_intent(
+            query, self._person_index, home_countries=self._home_countries
+        )
         if intent.has_signals():
             return query, await self._apply_filter(intent), intent
 
@@ -289,7 +293,11 @@ class SearchService:
         if intent.is_paraphrastic and self._rewriter is not None:
             rewritten = await self._rewriter.rewrite(query)
             if rewritten != query:
-                rewritten_intent = detect_intent(rewritten, self._person_index)
+                rewritten_intent = detect_intent(
+                    rewritten,
+                    self._person_index,
+                    home_countries=self._home_countries,
+                )
                 self._log_chain(intent, rewritten_intent)
                 if rewritten_intent.has_signals():
                     return (
@@ -311,19 +319,29 @@ class SearchService:
             else None
         )
         ratings = intent.ratings if (self._filter_rating and intent.ratings) else None
+        # No `intent_filter_country_enabled` switch by design — Spec 25
+        # ships the country dimension as always-on alongside genre. If a
+        # noisy filter ever needs muting, add the flag at that point.
+        countries = intent.countries if intent.countries else None
 
-        if not people and year_range is None and not ratings:
+        if not people and year_range is None and not ratings and not countries:
             return None
 
         filter_ids = await self._library.search_filtered_ids(
-            people=people, year_range=year_range, ratings=ratings
+            people=people,
+            year_range=year_range,
+            ratings=ratings,
+            countries=countries,
+            countries_negate=intent.countries_negate,
         )
+        country_label = "country_negate" if intent.countries_negate else "country"
         signals = [
             label
             for label, present in (
                 ("person", bool(people)),
                 ("year", year_range is not None),
                 ("rating", bool(ratings)),
+                (country_label, bool(countries)),
             )
             if present
         ]
