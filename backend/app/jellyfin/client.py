@@ -15,7 +15,13 @@ from app.jellyfin.errors import (
     JellyfinAuthError,
     JellyfinError,
 )
-from app.jellyfin.models import AuthResult, PaginatedItems, UserInfo, WatchHistoryEntry
+from app.jellyfin.models import (
+    AuthResult,
+    LibraryItem,
+    PaginatedItems,
+    UserInfo,
+    WatchHistoryEntry,
+)
 from app.jellyfin.transport import _DEFAULT_DEVICE_ID, _JellyfinTransport
 
 if TYPE_CHECKING:
@@ -30,7 +36,7 @@ _T = TypeVar("_T")
 # Fields to request from Jellyfin — matches our LibraryItem model
 _ITEM_FIELDS = (
     "Overview,Genres,ProductionYear,Tags,Studios,CommunityRating,"
-    "RunTimeTicks,People,OfficialRating"
+    "RunTimeTicks,People,OfficialRating,ProductionLocations"
 )
 
 # Pass to get_items() / get_all_items() when only item IDs are needed
@@ -200,6 +206,48 @@ class JellyfinClient:
             params=params,
         )
         return self._parse_response(resp, PaginatedItems.model_validate)
+
+    async def get_items_by_ids(
+        self,
+        *,
+        token: str,
+        user_id: str,
+        ids: list[str],
+        fields: str | None = None,
+    ) -> list[LibraryItem]:
+        """Fetch a batch of library items by their Jellyfin IDs (Spec 25).
+
+        Used by the country-data backfill script (``scripts/backfill_country.py``)
+        to re-fetch metadata for rows already in ``library_items``. The script
+        passes batches of ~50 IDs per call.
+
+        Returns whatever Jellyfin returns — items deleted upstream simply do
+        not appear in the response. The caller is responsible for noting the
+        gap; this method does not error on missing IDs.
+
+        **No type filter applied.** IDs already scope the result to specific
+        items; adding ``IncludeItemTypes=Movie`` would silently drop any non-
+        Movie IDs (e.g., Series) from the response, making them indistinguish-
+        able from items deleted upstream. Per the sync engine's
+        ``item_types=["Movie", "Series"]`` invocation, ``library_items`` may
+        contain Series rows; this method must surface them so the caller can
+        backfill country data for whatever the schema admits.
+        """
+        if not ids:
+            return []
+        params: dict[str, str | int | bool] = {
+            "Ids": ",".join(ids),
+            "Recursive": True,
+            "Fields": _ITEM_FIELDS if fields is None else fields,
+        }
+        resp = await self._request(
+            "GET",
+            f"/Users/{user_id}/Items",
+            token=token,
+            params=params,
+        )
+        page = self._parse_response(resp, PaginatedItems.model_validate)
+        return list(page.items)
 
     async def get_all_items(
         self,

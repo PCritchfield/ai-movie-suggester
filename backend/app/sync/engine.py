@@ -13,6 +13,7 @@ import time
 from typing import TYPE_CHECKING
 
 from app.jellyfin.errors import JellyfinConnectionError, JellyfinError
+from app.library.country_codes import name_to_iso
 from app.library.hashing import compute_content_hash
 from app.library.models import LibraryItemRow
 from app.sync.models import (
@@ -46,6 +47,30 @@ _CREW_ROLE_MAP = {
     "Composer": "composers",
 }
 
+# Spec 25 — track unmappable country names per process so a library with
+# 50 items from "Atlantis" logs once per name per sync run, not 50 times.
+# Cleared at the start of each SyncEngine.sync() call.
+_unmappable_country_names_logged: set[str] = set()
+
+
+def _map_production_locations_to_iso(names: list[str]) -> list[str]:
+    """Map Jellyfin ``ProductionLocations`` strings to ISO 3166-1 alpha-2.
+
+    Drops unmappable names with a deduped warning (skip-and-log strategy
+    per Spec 25 architecture ruling). Returns the result sorted for
+    deterministic JSON encoding.
+    """
+    iso_codes: list[str] = []
+    for name in names:
+        iso = name_to_iso(name)
+        if iso is None:
+            if name not in _unmappable_country_names_logged:
+                _logger.warning("Unmappable country name from Jellyfin: %s", name)
+                _unmappable_country_names_logged.add(name)
+            continue
+        iso_codes.append(iso)
+    return sorted(iso_codes)
+
 
 def to_library_row(item: LibraryItem) -> LibraryItemRow:
     """Convert a Jellyfin LibraryItem to a LibraryItemRow for storage.
@@ -70,6 +95,7 @@ def to_library_row(item: LibraryItem) -> LibraryItemRow:
         if bucket is not None:
             buckets[bucket].append(name)
 
+    now = int(time.time())
     row = LibraryItemRow(
         jellyfin_id=item.id,
         title=item.name,
@@ -81,12 +107,22 @@ def to_library_row(item: LibraryItem) -> LibraryItemRow:
         community_rating=item.community_rating,
         people=buckets["people"],
         content_hash="",
-        synced_at=int(time.time()),
+        synced_at=now,
         runtime_minutes=item.runtime_minutes,
         directors=buckets["directors"],
         writers=buckets["writers"],
         composers=buckets["composers"],
         official_rating=item.official_rating,
+        # Spec 25 — country data is a structured filter dimension only;
+        # not in the content_hash recipe (see compute_content_hash). The
+        # ``country_synced_at`` sentinel is set unconditionally so a row
+        # with empty ProductionLocations is distinguishable from a row never
+        # backfilled (the latter has NULL). Distinct from ``synced_at``,
+        # which tracks the row's last full sync regardless of country state.
+        production_countries=_map_production_locations_to_iso(
+            item.production_locations
+        ),
+        country_synced_at=now,
     )
     return dataclasses.replace(row, content_hash=compute_content_hash(row))
 
@@ -169,6 +205,12 @@ class SyncEngine:
             await asyncio.wait_for(self._lock.acquire(), timeout=1.0)
         except TimeoutError:
             raise SyncAlreadyRunningError("A sync is already in progress") from None
+
+        # Spec 25 — reset the per-sync-run unmappable-country-name dedup set
+        # so each run starts fresh; a country name that was warned about in a
+        # prior run gets warned again (operator may have refreshed Jellyfin
+        # metadata in the interim).
+        _unmappable_country_names_logged.clear()
 
         try:
             self.validate_config()

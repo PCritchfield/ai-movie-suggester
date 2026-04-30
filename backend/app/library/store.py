@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS library_items (
     directors         TEXT NOT NULL DEFAULT '[]',
     writers           TEXT NOT NULL DEFAULT '[]',
     composers         TEXT NOT NULL DEFAULT '[]',
-    official_rating   TEXT
+    official_rating   TEXT,
+    production_countries TEXT NOT NULL DEFAULT '[]',
+    country_synced_at INTEGER
 )
 """
 
@@ -171,6 +173,22 @@ class LibraryStore:
             )
             await self._db.commit()
 
+        # Migration: add country columns if table predates Spec 25.
+        # PRAGMA-introspection guard (not `ADD COLUMN IF NOT EXISTS`) so we
+        # work on every SQLite version, not just 3.35+. Per Spec 25 architecture
+        # ruling.
+        if "production_countries" not in existing_columns:
+            await self._db.execute(
+                "ALTER TABLE library_items ADD COLUMN "
+                "production_countries TEXT NOT NULL DEFAULT '[]'"
+            )
+            await self._db.commit()
+        if "country_synced_at" not in existing_columns:
+            await self._db.execute(
+                "ALTER TABLE library_items ADD COLUMN country_synced_at INTEGER"
+            )
+            await self._db.commit()
+
         # Spec 24 — production_year index supports the year-range filter
         # in search_filtered_ids. CREATE INDEX IF NOT EXISTS is a no-op
         # on subsequent boots.
@@ -214,6 +232,8 @@ class LibraryStore:
          13: writers        TEXT (JSON array)
          14: composers      TEXT (JSON array)
          15: official_rating TEXT (nullable)
+         16: production_countries TEXT (JSON array)
+         17: country_synced_at INTEGER (nullable)
         """
         return LibraryItemRow(
             jellyfin_id=row[0],
@@ -232,6 +252,8 @@ class LibraryStore:
             writers=json.loads(row[13]),
             composers=json.loads(row[14]),
             official_rating=row[15],
+            production_countries=json.loads(row[16]),
+            country_synced_at=row[17],
         )
 
     async def _get_hashes_for_ids(self, ids: list[str]) -> dict[str, str]:
@@ -302,6 +324,8 @@ class LibraryStore:
                     json.dumps(item.writers),
                     json.dumps(item.composers),
                     item.official_rating,
+                    json.dumps(item.production_countries),
+                    item.country_synced_at,
                 )
             )
 
@@ -313,8 +337,10 @@ class LibraryStore:
                        (jellyfin_id, title, overview, production_year,
                         genres, tags, studios, community_rating,
                         people, content_hash, synced_at, runtime_minutes,
-                        directors, writers, composers, official_rating)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        directors, writers, composers, official_rating,
+                        production_countries, country_synced_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                               ?, ?)
                        ON CONFLICT(jellyfin_id) DO UPDATE SET
                         title = excluded.title,
                         overview = excluded.overview,
@@ -330,7 +356,9 @@ class LibraryStore:
                         directors = excluded.directors,
                         writers = excluded.writers,
                         composers = excluded.composers,
-                        official_rating = excluded.official_rating""",
+                        official_rating = excluded.official_rating,
+                        production_countries = excluded.production_countries,
+                        country_synced_at = excluded.country_synced_at""",
                     params_list,
                 )
             except Exception:
@@ -346,7 +374,8 @@ class LibraryStore:
             """SELECT jellyfin_id, title, overview, production_year,
                       genres, tags, studios, community_rating,
                       people, content_hash, synced_at, runtime_minutes,
-                      directors, writers, composers, official_rating
+                      directors, writers, composers, official_rating,
+                      production_countries, country_synced_at
                FROM library_items WHERE jellyfin_id = ?""",
             (jellyfin_id,),
         )
@@ -374,7 +403,8 @@ class LibraryStore:
                 f"""SELECT jellyfin_id, title, overview, production_year,
                           genres, tags, studios, community_rating,
                           people, content_hash, synced_at, runtime_minutes,
-                          directors, writers, composers, official_rating
+                          directors, writers, composers, official_rating,
+                          production_countries, country_synced_at
                    FROM library_items WHERE jellyfin_id IN ({placeholders})""",
                 batch,
             )

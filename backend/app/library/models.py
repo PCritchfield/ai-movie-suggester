@@ -37,6 +37,13 @@ class LibraryItemRow:
     # Spec 24 Unit 3 — Jellyfin OfficialRating (e.g. "G", "PG", "PG-13",
     # "R", "NC-17"). Used as a structured filter only; not embedded.
     official_rating: str | None = None
+    # Spec 25 — Country/origin as a structured filter dimension. ISO 3166-1
+    # alpha-2 codes (e.g. ``["JP"]`` for Spirited Away, ``["DE", "US"]`` for
+    # co-productions). Empty list when Jellyfin returned no ProductionLocations.
+    # Distinct from country_synced_at being None which means "not yet
+    # backfilled" — see Spec 25 design and scripts/backfill_country.py.
+    production_countries: list[str] = field(default_factory=list)
+    country_synced_at: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

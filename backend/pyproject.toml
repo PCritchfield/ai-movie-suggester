@@ -17,6 +17,7 @@ dependencies = [
     # Tracked in #227 — once the upsert is rewritten as UPDATE-or-INSERT,
     # this pin can be removed.
     "sqlite-vec==0.1.6",
+    "pycountry>=24.0.0",
 ]
 
 [project.optional-dependencies]

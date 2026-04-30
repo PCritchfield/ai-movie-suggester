@@ -552,6 +552,127 @@ class TestGetItems:
             await jf_client.get_items("tok-123", "uid-1")
 
 
+class TestGetItemsByIds:
+    """Spec 25 — batch fetch by jellyfin_id list.
+
+    The backfill script (T3.0) walks the existing library in batches of ~50
+    IDs and re-fetches metadata to populate ``ProductionLocations`` for rows
+    where ``country_synced_at IS NULL``. This method covers that path.
+    """
+
+    async def test_returns_items_for_requested_ids(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={
+                "Items": [
+                    {
+                        "Id": "jf-1",
+                        "Name": "Spirited Away",
+                        "Type": "Movie",
+                        "ProductionLocations": ["Japan"],
+                    },
+                    {
+                        "Id": "jf-2",
+                        "Name": "Alien",
+                        "Type": "Movie",
+                        "ProductionLocations": ["United States of America"],
+                    },
+                ],
+                "TotalRecordCount": 2,
+                "StartIndex": 0,
+            },
+            request=_FAKE_REQUEST,
+        )
+        result = await jf_client.get_items_by_ids(
+            token="tok-123", user_id="uid-1", ids=["jf-1", "jf-2"]
+        )
+        assert len(result) == 2
+        assert isinstance(result[0], LibraryItem)
+        assert result[0].id == "jf-1"
+        assert result[0].production_locations == ["Japan"]
+        assert result[1].id == "jf-2"
+
+    async def test_passes_ids_as_comma_separated_param(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items_by_ids(
+            token="tok-123", user_id="uid-1", ids=["a", "b", "c"]
+        )
+        params = mock_http.request.call_args.kwargs["params"]
+        assert params["Ids"] == "a,b,c"
+
+    async def test_includes_production_locations_in_default_fields(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items_by_ids(token="tok-123", user_id="uid-1", ids=["x"])
+        params = mock_http.request.call_args.kwargs["params"]
+        # Backfill needs ProductionLocations on every batch fetch
+        assert "ProductionLocations" in params["Fields"]
+
+    async def test_recursive_and_no_type_filter(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """IDs already scope the result; `IncludeItemTypes` would silently
+        drop any non-Movie IDs in the request (e.g. Series), making them
+        indistinguishable from items deleted upstream. ``library_items`` can
+        contain non-Movie rows (sync engine fetches both types) so the
+        backfill must not filter them out."""
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
+            request=_FAKE_REQUEST,
+        )
+        await jf_client.get_items_by_ids(token="tok-123", user_id="uid-1", ids=["x"])
+        params = mock_http.request.call_args.kwargs["params"]
+        assert params["Recursive"] is True
+        # Critically: no IncludeItemTypes filter — IDs scope the result.
+        assert "IncludeItemTypes" not in params
+
+    async def test_fewer_items_returned_than_requested(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        """Items deleted upstream don't appear in the response — caller
+        must handle the gap. The client itself returns exactly what
+        Jellyfin returned without padding or erroring."""
+        mock_http.request.return_value = httpx.Response(
+            200,
+            json={
+                "Items": [
+                    {"Id": "jf-1", "Name": "Alien", "Type": "Movie"},
+                ],
+                "TotalRecordCount": 1,
+                "StartIndex": 0,
+            },
+            request=_FAKE_REQUEST,
+        )
+        result = await jf_client.get_items_by_ids(
+            token="tok-123", user_id="uid-1", ids=["jf-1", "jf-2", "jf-3"]
+        )
+        assert len(result) == 1
+        assert result[0].id == "jf-1"
+
+    async def test_empty_ids_list_returns_empty_without_request(
+        self, jf_client: JellyfinClient, mock_http: AsyncMock
+    ) -> None:
+        result = await jf_client.get_items_by_ids(
+            token="tok-123", user_id="uid-1", ids=[]
+        )
+        assert result == []
+        mock_http.request.assert_not_called()
+
+
 class TestGetAllItems:
     """Tests for get_all_items() auto-paginating async iterator."""
 
