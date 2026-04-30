@@ -161,9 +161,7 @@ class TestInit:
         finally:
             await s.close()
 
-    async def test_country_columns_exist_on_fresh_db(
-        self, store: LibraryStore
-    ) -> None:
+    async def test_country_columns_exist_on_fresh_db(self, store: LibraryStore) -> None:
         """Spec 25 — production_countries and country_synced_at on fresh init."""
         cursor = await store._conn.execute("PRAGMA table_info(library_items)")
         rows = await cursor.fetchall()
