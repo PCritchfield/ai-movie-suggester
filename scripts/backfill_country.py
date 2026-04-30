@@ -31,9 +31,11 @@ Verification (run after script completes)
     -- Sentinel coverage (expected: equals total active items, i.e. 100%):
     SELECT COUNT(*) FROM library_items WHERE country_synced_at IS NOT NULL;
 
-    -- Country coverage (expected: ~97%; the residual ~3% is items where
-    -- Jellyfin returned no ProductionLocations, which is a metadata-quality
-    -- problem at the Jellyfin layer, not a backfill bug):
+    -- Country coverage (varies by library metadata quality; ≥95% target for
+    -- well-tagged libraries. Live observation on a 1806-item library: 85.2%.
+    -- Residual rows are items where Jellyfin returned no ProductionLocations
+    -- — a metadata-quality gap at the Jellyfin layer, not a backfill bug.
+    -- Fix path: refresh Jellyfin metadata for affected items, then re-run):
     SELECT COUNT(*) FROM library_items WHERE production_countries != '[]';
 
     -- ISO sanity (expected: rows like ["US"], ["JP"], ["DE","US"]; if you
