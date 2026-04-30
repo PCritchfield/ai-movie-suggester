@@ -27,7 +27,7 @@ _SCRIPTS_DIR = pathlib.Path(__file__).resolve().parents[2] / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-import backfill_country  # noqa: E402 — sys.path mutation above
+import backfill_country  # type: ignore[import-not-found]  # noqa: E402 — sys.path mutation above; scripts/ resolved at runtime, not in pyright's analysis paths
 
 
 @pytest.fixture
