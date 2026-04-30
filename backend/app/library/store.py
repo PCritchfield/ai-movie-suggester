@@ -446,16 +446,14 @@ class LibraryStore:
         set on AND-empty so the caller can honour the Q3-D "empty results,
         no exception" contract for over-constrained intents.
 
-        Person matching uses LIKE because the JSON columns store names as
-        a JSON array; year matching uses BETWEEN; rating matching uses IN;
-        country matching uses ``json_each`` over the JSON-array
-        ``production_countries`` column so substrings inside other JSON
-        columns (e.g. ``tags='["Japanese garden"]'``) cannot leak in. When
-        ``countries_negate`` is True the predicate flips to ``NOT EXISTS``
-        — used by the foreign-film route. Rows with empty
-        ``production_countries`` survive the negation case (json_each over
-        an empty array yields no rows, so ``NOT EXISTS`` is trivially
-        true) — the router treats unknown-as-not-excluded.
+        Country matching uses ``json_each`` over the JSON-array
+        ``production_countries`` column so substrings inside sibling JSON
+        columns (e.g. ``tags='["Japanese garden"]'``) cannot leak in.
+        When ``countries_negate`` is True the predicate flips to
+        ``NOT EXISTS`` — used by the foreign-film route. Rows with empty
+        ``production_countries`` survive the negation case (json_each
+        over an empty array yields no rows, so ``NOT EXISTS`` is
+        trivially true) — the router treats unknown-as-not-excluded.
         """
         if not people and year_range is None and not ratings and not countries:
             return None

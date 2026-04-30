@@ -65,6 +65,10 @@ _PARAPHRASTIC_MIN_WORDS = 4
 # ``official_name``/``common_name`` fields don't carry the adjective form
 # universally. Start with the 20 most common; expandable. Keys are
 # lowercase tokens — matching is case-insensitive on the query side.
+#
+# British/English/Scottish all collapse to GB: ISO 3166-1 has no codes
+# for the constituent UK nations, so the demonym layer pre-resolves them
+# to the country code the SQL filter actually stores.
 _DEMONYM_TO_ISO: dict[str, str] = {
     "japanese": "JP",
     "korean": "KR",
@@ -91,8 +95,12 @@ _DEMONYM_TO_ISO: dict[str, str] = {
     "thai": "TH",
 }
 
-# Country names that pycountry handles directly, but we want to recognise
-# in queries even when typed as a single token (no demonym needed).
+# Gating allow-list of country-name tokens. We could call ``name_to_iso``
+# on every token in the query, but that would route arbitrary words
+# (``the``, ``movie``, …) into pycountry's ``search_fuzzy`` path, which
+# the ``country_codes`` module documents as the heavy branch. Limiting
+# the ``name_to_iso`` invocation to known canonical names keeps the
+# query-router hot path effectively a pair of dict lookups per token.
 _COUNTRY_NAME_TOKENS: tuple[str, ...] = (
     "japan",
     "korea",
@@ -130,6 +138,11 @@ _PLOT_SETTING_WINDOW = 5
 _FOREIGN_FILM_RE = re.compile(
     r"\bforeign\s+(film|films|movie|movies|cinema)\b", re.IGNORECASE
 )
+
+# Token-punctuation strip used by ``_tokenise``. Hoisted to module scope
+# so the regex isn't even hashed against the per-call cache for every
+# token in every query.
+_TOKEN_PUNCT_RE = re.compile(r"[^\w-]")
 
 
 class QueryIntent(BaseModel):
@@ -252,7 +265,7 @@ def _detect_ratings(query: str) -> list[str]:
 
 def _tokenise(query: str) -> list[str]:
     """Lowercase whitespace-split tokens with punctuation stripped."""
-    return [re.sub(r"[^\w-]", "", t).lower() for t in query.split() if t]
+    return [_TOKEN_PUNCT_RE.sub("", t).lower() for t in query.split() if t]
 
 
 def _has_plot_setting_marker(tokens: list[str], match_index: int) -> bool:
@@ -328,6 +341,10 @@ def detect_intent(
     countries: list[str] = []
     countries_negate = False
     if home_countries and _FOREIGN_FILM_RE.search(query):
+        # Foreign-film route is exclusive: explicit country mentions in
+        # the same query are ignored. Spec 25 scoped negation to the
+        # ``foreign`` keyword family; widening to ``non-American`` etc.
+        # is tracked as a documented follow-up in the live router cases.
         countries = list(home_countries)
         countries_negate = True
     else:

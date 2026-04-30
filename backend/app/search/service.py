@@ -81,15 +81,6 @@ class SearchService:
         """
         return self._person_index
 
-    @property
-    def foreign_film_home_countries(self) -> list[str]:
-        """Read-only copy of the home-country set for the foreign-film route.
-
-        The eval harness reads this so curated cases route through the
-        same negation set the live deploy does.
-        """
-        return list(self._home_countries)
-
     async def search(
         self,
         query: str,
@@ -328,6 +319,9 @@ class SearchService:
             else None
         )
         ratings = intent.ratings if (self._filter_rating and intent.ratings) else None
+        # No `intent_filter_country_enabled` switch by design — Spec 25
+        # ships the country dimension as always-on alongside genre. If a
+        # noisy filter ever needs muting, add the flag at that point.
         countries = intent.countries if intent.countries else None
 
         if not people and year_range is None and not ratings and not countries:
@@ -340,16 +334,14 @@ class SearchService:
             countries=countries,
             countries_negate=intent.countries_negate,
         )
+        country_label = "country_negate" if intent.countries_negate else "country"
         signals = [
             label
             for label, present in (
                 ("person", bool(people)),
                 ("year", year_range is not None),
                 ("rating", bool(ratings)),
-                (
-                    "country_negate" if intent.countries_negate else "country",
-                    bool(countries),
-                ),
+                (country_label, bool(countries)),
             )
             if present
         ]
