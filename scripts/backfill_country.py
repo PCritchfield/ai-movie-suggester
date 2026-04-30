@@ -115,7 +115,7 @@ async def _fetch_pending_ids(store: LibraryStore) -> list[str]:
     return [row[0] for row in rows]
 
 
-async def _update_batch(
+async def _update_row_country_fields(
     store: LibraryStore,
     *,
     jellyfin_id: str,
@@ -194,7 +194,7 @@ async def run_backfill(
                     if item is not None
                     else []
                 )
-                await _update_batch(
+                await _update_row_country_fields(
                     store,
                     jellyfin_id=jellyfin_id,
                     iso_codes=iso_codes,

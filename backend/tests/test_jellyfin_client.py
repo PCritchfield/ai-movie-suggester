@@ -621,9 +621,14 @@ class TestGetItemsByIds:
         # Backfill needs ProductionLocations on every batch fetch
         assert "ProductionLocations" in params["Fields"]
 
-    async def test_recursive_and_movie_only(
+    async def test_recursive_and_no_type_filter(
         self, jf_client: JellyfinClient, mock_http: AsyncMock
     ) -> None:
+        """IDs already scope the result; `IncludeItemTypes` would silently
+        drop any non-Movie IDs in the request (e.g. Series), making them
+        indistinguishable from items deleted upstream. ``library_items`` can
+        contain non-Movie rows (sync engine fetches both types) so the
+        backfill must not filter them out."""
         mock_http.request.return_value = httpx.Response(
             200,
             json={"Items": [], "TotalRecordCount": 0, "StartIndex": 0},
@@ -632,7 +637,8 @@ class TestGetItemsByIds:
         await jf_client.get_items_by_ids(token="tok-123", user_id="uid-1", ids=["x"])
         params = mock_http.request.call_args.kwargs["params"]
         assert params["Recursive"] is True
-        assert params["IncludeItemTypes"] == "Movie"
+        # Critically: no IncludeItemTypes filter — IDs scope the result.
+        assert "IncludeItemTypes" not in params
 
     async def test_fewer_items_returned_than_requested(
         self, jf_client: JellyfinClient, mock_http: AsyncMock

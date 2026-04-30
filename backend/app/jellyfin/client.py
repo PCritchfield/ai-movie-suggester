@@ -225,14 +225,19 @@ class JellyfinClient:
         not appear in the response. The caller is responsible for noting the
         gap; this method does not error on missing IDs.
 
-        Movie-only by design (the recommender's scope is films, not series).
+        **No type filter applied.** IDs already scope the result to specific
+        items; adding ``IncludeItemTypes=Movie`` would silently drop any non-
+        Movie IDs (e.g., Series) from the response, making them indistinguish-
+        able from items deleted upstream. Per the sync engine's
+        ``item_types=["Movie", "Series"]`` invocation, ``library_items`` may
+        contain Series rows; this method must surface them so the caller can
+        backfill country data for whatever the schema admits.
         """
         if not ids:
             return []
         params: dict[str, str | int | bool] = {
             "Ids": ",".join(ids),
             "Recursive": True,
-            "IncludeItemTypes": "Movie",
             "Fields": _ITEM_FIELDS if fields is None else fields,
         }
         resp = await self._request(

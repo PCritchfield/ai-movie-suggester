@@ -318,7 +318,7 @@ class TestUpdateBatchTransaction:
 
     async def test_update_persists_both_columns(self, store: LibraryStore) -> None:
         await store.upsert_many([_make_row("jf-1", country_synced_at=None)])
-        await backfill_country._update_batch(
+        await backfill_country._update_row_country_fields(
             store, jellyfin_id="jf-1", iso_codes=["JP"], now=12345
         )
         await store._conn.commit()

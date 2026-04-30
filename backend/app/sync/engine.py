@@ -115,8 +115,10 @@ def to_library_row(item: LibraryItem) -> LibraryItemRow:
         official_rating=item.official_rating,
         # Spec 25 — country data is a structured filter dimension only;
         # not in the content_hash recipe (see compute_content_hash). The
-        # synced_at sentinel is set unconditionally so a row with empty
-        # ProductionLocations is distinguishable from a row never backfilled.
+        # ``country_synced_at`` sentinel is set unconditionally so a row
+        # with empty ProductionLocations is distinguishable from a row never
+        # backfilled (the latter has NULL). Distinct from ``synced_at``,
+        # which tracks the row's last full sync regardless of country state.
         production_countries=_map_production_locations_to_iso(
             item.production_locations
         ),
