@@ -1,4 +1,4 @@
-.PHONY: help dev dev-full dev-ui dev-down build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down eval-router
+.PHONY: help dev dev-full dev-ui dev-down build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down eval-router backfill-country backfill-country-dry-run
 
 .DEFAULT_GOAL := help
 
@@ -112,6 +112,19 @@ eval-router: ## Run query-router eval cases against live stack (Spec 24)
 
 test-injection: ## Run prompt injection adversarial payloads
 	cd backend && uv run python ../scripts/test_injection.py
+
+# ---------------------------------------------------------------------------
+# Spec 25 — country/origin backfill for existing library rows
+# ---------------------------------------------------------------------------
+# Prerequisite: SYNC_INTERVAL_HOURS=0 must be set in the env (the script will
+# refuse to run otherwise, to avoid racing the periodic sync engine on shared
+# rows). After completion, restore the prior value and restart the backend.
+
+backfill-country-dry-run: ## Preview Spec 25 country backfill (no writes)
+	cd backend && uv run python ../scripts/backfill_country.py --dry-run
+
+backfill-country: ## Spec 25 backfill — populate production_countries (set SYNC_INTERVAL_HOURS=0)
+	cd backend && uv run python ../scripts/backfill_country.py
 
 # ---------------------------------------------------------------------------
 
