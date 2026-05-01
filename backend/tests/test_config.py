@@ -435,6 +435,76 @@ def test_intent_filter_settings_validate_boolean() -> None:
         Settings()  # type: ignore[call-arg]
 
 
+# --- Spec 25 — country filter settings ---
+
+
+def test_foreign_film_home_countries_default_us() -> None:
+    """``FOREIGN_FILM_HOME_COUNTRIES`` defaults to ``["US"]``.
+
+    Used by the query router to resolve "foreign film" → NOT-IN
+    predicate against the operator's configured home country/countries.
+    """
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == ["US"]
+
+
+def test_foreign_film_home_countries_comma_separated() -> None:
+    """Comma-separated env var produces a list (e.g., ``US,GB``).
+
+    Operators expect the documented commented-default form in
+    ``.env.example`` to round-trip — JSON-only parsing would silently
+    treat ``US,GB`` as a single string and break the foreign-film route.
+    """
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": "US,GB"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == ["US", "GB"]
+
+
+def test_foreign_film_home_countries_strips_whitespace() -> None:
+    """Whitespace around items in ``US, GB ,FR`` is trimmed."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": " US , GB ,FR "}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == ["US", "GB", "FR"]
+
+
+def test_foreign_film_home_countries_uppercases_iso() -> None:
+    """ISO codes are normalised to upper-case for safe comparison."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": "us,gb"}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == ["US", "GB"]
+
+
+def test_foreign_film_home_countries_rejects_full_name() -> None:
+    """Council review (PR #244) — ``USA`` / ``United States`` are typos
+    that previously passed silently; the foreign-film route then
+    NOT-EXISTS-against-nothing and returns the entire library with no
+    error. Operator gets a debugging nightmare. Validator now rejects
+    anything that isn't a 2-letter ISO 3166-1 alpha-2 code."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": "USA"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_foreign_film_home_countries_rejects_unknown_code() -> None:
+    """Even a 2-letter input that isn't a real ISO code is rejected."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": "XX"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_foreign_film_home_countries_accepts_empty_string() -> None:
+    """Setting the env var to empty string disables the foreign-film route."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": ""}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == []
+
+
 # --- Spec 24 — rewriter / rewrite cache settings ---
 
 

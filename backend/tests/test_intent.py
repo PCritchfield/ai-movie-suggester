@@ -36,6 +36,7 @@ class TestQueryIntentModel:
         assert QueryIntent(people=["eddie murphy"]).has_signals() is True
         assert QueryIntent(year_range=(1980, 1989)).has_signals() is True
         assert QueryIntent(ratings=["R"]).has_signals() is True
+        assert QueryIntent(countries=["JP"]).has_signals() is True
 
     def test_has_signals_false_when_paraphrastic_only(self) -> None:
         assert QueryIntent(is_paraphrastic=True).has_signals() is False
@@ -161,6 +162,151 @@ class TestDetectIntentCombinations:
         intent = detect_intent("R-rated action duos", _EMPTY_INDEX)
         assert "R" in intent.ratings
         assert frozenset({"Action"}) in intent.genres
+
+
+class TestDetectIntentCountries:
+    """Spec 25 — country/origin signal extraction.
+
+    Country phrases (full names + demonyms) map to ISO 3166-1 alpha-2 codes
+    and land on ``QueryIntent.countries``. Plot-setting phrasings
+    (``"set in"``, ``"during"``, ``"about"``, ``"takes place in"``)
+    suppress extraction so the router doesn't filter on what is
+    semantically a setting.
+    """
+
+    def test_country_name_maps_to_iso(self) -> None:
+        intent = detect_intent("movies from Japan", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+
+    def test_demonym_maps_to_iso(self) -> None:
+        intent = detect_intent("Korean horror", _EMPTY_INDEX)
+        assert intent.countries == ["KR"]
+
+    def test_french_demonym(self) -> None:
+        intent = detect_intent("a French comedy", _EMPTY_INDEX)
+        assert intent.countries == ["FR"]
+
+    def test_british_demonym(self) -> None:
+        intent = detect_intent("British thriller", _EMPTY_INDEX)
+        assert intent.countries == ["GB"]
+
+    def test_country_intersects_with_genre(self) -> None:
+        intent = detect_intent("Japanese animation", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+        assert frozenset({"Animation"}) in intent.genres
+
+    def test_plot_setting_phrase_does_not_trigger(self) -> None:
+        """``set in Japan`` is a plot setting, not a production-country signal."""
+        intent = detect_intent("movies set in Japan during WWII", _EMPTY_INDEX)
+        assert intent.countries == []
+
+    def test_takes_place_in_does_not_trigger(self) -> None:
+        intent = detect_intent("a film that takes place in France", _EMPTY_INDEX)
+        assert intent.countries == []
+
+    def test_about_japan_does_not_trigger(self) -> None:
+        intent = detect_intent("a documentary about Japan", _EMPTY_INDEX)
+        assert intent.countries == []
+
+    def test_filmed_in_country_does_trigger(self) -> None:
+        """Council review (PR #244) — ``'in'`` was previously a plot-setting
+        marker, but ``filmed in France`` is a production-location query, not
+        a plot-setting. Removing ``'in'`` from ``_PLOT_SETTING_MARKERS`` is
+        safe because every documented plot-setting case has a stronger
+        marker (`set` / `during` / `about` / `takes` / `place`)."""
+        intent = detect_intent("filmed in France", _EMPTY_INDEX)
+        assert intent.countries == ["FR"]
+
+    def test_made_in_country_does_trigger(self) -> None:
+        intent = detect_intent("movies made in Japan", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+
+    def test_korea_disambiguates_to_south_korea(self) -> None:
+        """``'korea'`` is a name pycountry's ``search_fuzzy`` could resolve
+        ambiguously between KP (DPRK) and KR (ROK) depending on version
+        ordering. The router must always resolve bare ``korea`` to the
+        contemporary South Korea (KR) — that's overwhelmingly what users
+        mean for movie/TV cinema queries. Council review pinned this."""
+        intent = detect_intent("movies from Korea", _EMPTY_INDEX)
+        assert intent.countries == ["KR"]
+
+    def test_set_as_noun_does_not_suppress(self) -> None:
+        """Copilot review (PR #244) — ``'set'`` was a single-token marker,
+        but ``a set of Japanese films`` (set as a noun) tokenises with
+        ``set`` inside the suppression window before ``japanese`` and
+        suppressed extraction. The disambiguator is the phrase ``set in``
+        (verb + preposition), not the bare token. Multi-token check now
+        prevents the false negative while keeping ``set in Japan``
+        suppression intact."""
+        intent = detect_intent("a set of Japanese films", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+
+    def test_set_in_phrase_still_suppresses(self) -> None:
+        """Regression guard for the multi-token plot-setting check —
+        ``set in`` (consecutive tokens) must still suppress."""
+        intent = detect_intent("movies set in Japan", _EMPTY_INDEX)
+        assert intent.countries == []
+
+    def test_movies_in_country_does_trigger(self) -> None:
+        """``'movies in Japan'`` is a production-location query, not a
+        plot-setting. With ``in`` and ``set`` correctly out of the
+        single-token marker set, this routes to country."""
+        intent = detect_intent("movies in Japan", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+
+    def test_signal_present_disables_paraphrastic(self) -> None:
+        """A country signal counts as a structured signal.
+
+        ``is_paraphrastic`` must therefore be False even when the query
+        is wordy enough to satisfy the paraphrastic threshold.
+        """
+        intent = detect_intent("movies from Japan with a quiet mood", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+        assert intent.is_paraphrastic is False
+        assert intent.has_signals() is True
+
+
+class TestDetectIntentForeignFilm:
+    """Spec 25 — ``foreign film`` resolves to a NOT-IN intent.
+
+    The router carries ``countries`` + ``countries_negate=True`` so
+    ``LibraryStore.search_filtered_ids`` flips to ``NOT EXISTS`` against
+    the home set. The home set comes from
+    ``settings.foreign_film_home_countries`` and is injected by the
+    caller; the intent layer reads a ``home_countries`` keyword for tests.
+    """
+
+    def test_foreign_film_resolves_to_negate(self) -> None:
+        intent = detect_intent("foreign film", _EMPTY_INDEX, home_countries=["US"])
+        assert intent.countries == ["US"]
+        assert intent.countries_negate is True
+
+    def test_foreign_movie_variant(self) -> None:
+        intent = detect_intent(
+            "looking for a foreign movie", _EMPTY_INDEX, home_countries=["US"]
+        )
+        assert intent.countries_negate is True
+
+    def test_foreign_cinema_variant(self) -> None:
+        intent = detect_intent(
+            "good foreign cinema", _EMPTY_INDEX, home_countries=["US"]
+        )
+        assert intent.countries_negate is True
+
+    def test_foreign_film_uses_multi_home_set(self) -> None:
+        """Multiple home countries (e.g. ``[US, GB]``) all flow through."""
+        intent = detect_intent(
+            "foreign film", _EMPTY_INDEX, home_countries=["US", "GB"]
+        )
+        assert intent.countries == ["US", "GB"]
+        assert intent.countries_negate is True
+
+    def test_foreign_film_no_home_set_skips(self) -> None:
+        """When ``home_countries`` is empty the router can't honour the negation
+        — ``countries`` stays empty and the query falls through unchanged."""
+        intent = detect_intent("foreign film", _EMPTY_INDEX, home_countries=[])
+        assert intent.countries == []
+        assert intent.countries_negate is False
 
 
 class TestDetectIntentWordBoundary:

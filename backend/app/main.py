@@ -308,6 +308,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             intent_filter_year_enabled=settings.intent_filter_year_enabled,
             intent_filter_rating_enabled=settings.intent_filter_rating_enabled,
             rewriter=query_rewriter,
+            foreign_film_home_countries=settings.foreign_film_home_countries,
         )
         app.state.search_service = search_service
         search_router = create_search_router(

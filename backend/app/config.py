@@ -8,8 +8,8 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Literal
 
-from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _logger = logging.getLogger(__name__)
 _RATE_LIMIT_RE = r"^\d+/(second|minute|hour|day)$"
@@ -104,6 +104,55 @@ class Settings(BaseSettings):
     intent_filter_person_enabled: bool = True
     intent_filter_year_enabled: bool = True
     intent_filter_rating_enabled: bool = True
+
+    # Spec 25 — country/origin filter dimension. Operator's home country
+    # or countries (ISO 3166-1 alpha-2 codes), used to resolve "foreign
+    # film" queries to a NOT-IN predicate. Comma-separated env var
+    # (``US,GB``) is parsed into a list and uppercased for safe matching
+    # against normalised ISO codes stored in ``library_items``.
+    foreign_film_home_countries: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["US"]
+    )
+
+    @field_validator("foreign_film_home_countries", mode="before")
+    @classmethod
+    def _parse_foreign_film_home_countries(cls, v: object) -> list[str]:
+        """Parse + validate the operator-configured home set.
+
+        Accepts a comma-separated env-var string or an explicit list,
+        normalises to uppercase, and rejects anything that isn't a real
+        ISO 3166-1 alpha-2 code. Without the validation step ``USA``,
+        ``UK``, ``Narnia`` would all pass silently and the foreign-film
+        route would NOT-EXISTS-against-nothing — operator sees their
+        whole library returned, no error, no log. Council review
+        (PR #244) closed this hole at the boundary.
+        """
+        import pycountry  # noqa: PLC0415
+
+        if isinstance(v, str):
+            items = [s.strip() for s in v.split(",") if s.strip()]
+        elif isinstance(v, list):
+            items = [str(s).strip() for s in v if str(s).strip()]
+        else:
+            msg = (
+                "FOREIGN_FILM_HOME_COUNTRIES must be a comma-separated string "
+                f"or list of ISO 3166-1 alpha-2 codes, got {type(v).__name__}"
+            )
+            raise ValueError(msg)
+        normalised = [s.upper() for s in items]
+        invalid = [
+            code
+            for code in normalised
+            if len(code) != 2 or pycountry.countries.get(alpha_2=code) is None
+        ]
+        if invalid:
+            msg = (
+                "FOREIGN_FILM_HOME_COUNTRIES contains values that are not "
+                f"ISO 3166-1 alpha-2 codes: {invalid}. Use 2-letter codes "
+                "like 'US', 'GB', 'JP' (not 'USA', 'United States', etc.)."
+            )
+            raise ValueError(msg)
+        return normalised
 
     # Spec 24 — paraphrastic LLM rewriter + cache.
     rewrite_timeout_seconds: Annotated[float, Field(ge=0.1, le=10.0)] = 2.0
