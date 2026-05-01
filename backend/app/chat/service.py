@@ -195,6 +195,25 @@ class ChatService:
             "turn_count": turn_count,
         }
 
+        # Spec 25 Task 5.0 — empty candidate set short-circuits the LLM.
+        # Without an early return, the model was being asked to recommend
+        # from an empty list and predictably hallucinated. Emit a stable
+        # graceful text event + done, and store the assistant turn so the
+        # session transcript stays coherent.
+        if not response.results:
+            graceful_text = (
+                "I couldn't find anything in your library that matches that "
+                "request. Try rephrasing, or ask for something a bit broader."
+            )
+            yield {"type": SSEEventType.TEXT, "content": graceful_text}
+            yield {"type": SSEEventType.DONE}
+            window2_lock = self._conversation_store.get_lock(session_id)
+            async with window2_lock:
+                self._conversation_store.add_turn(
+                    session_id, "assistant", graceful_text
+                )
+            return
+
         # Resolve watch history titles for prompt context
         watch_history_context: str | None = None
         if watch_data is not None and self._library_store is not None:

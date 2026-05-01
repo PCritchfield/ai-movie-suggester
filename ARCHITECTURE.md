@@ -159,7 +159,7 @@ Rationale: Different access patterns (sessions are small/frequent; library is la
 - **Network**: Docker Compose maps backend port to `127.0.0.1:8000`. External access via existing reverse proxy (Caddy).
 - **Privacy**: All AI inference is local. Conversation history is in-memory only — never persisted to disk (PII constraint). No outbound calls to third-party metadata services — movie metadata comes from Jellyfin only.
 - **API hardening**: CORS restricted to frontend origin. `/docs` disabled in production. Rate limiting on login (5/min), chat (10/min), and search (10/min) endpoints. Security headers via middleware. Request validation errors return HTTP 422 (FastAPI/Pydantic convention), not 400.
-- **Prompt injection**: Soft mitigation via system prompt instructions. No hard sandboxing — documented as a known limitation (#114 tracks deeper hardening).
+- **Prompt injection**: Soft mitigation via system prompt instructions plus structural separation — every candidate line carries a `[ID:<jellyfin_id>]` prefix and the framing constrains the model to "ONLY recommend movies from the following list of candidates." No hard sandboxing — Spec 25 (#238) shipped the soft-mitigation hardening (IDs in candidate context + strengthened system prompt + empty-result graceful path); Spec 26 (#239) tracks the structural fix via tool-calling / structured output.
 - **Service worker**: Cache-first for static shell only. No API response or image caching — cross-user data leakage risk on shared household devices.
 - **Credential distinction**: Two types of Jellyfin credentials are used, with different handling:
   - **User tokens** (per-session): Encrypted at rest in `sessions.db` using Fernet with HKDF-derived keys. Never persisted to objects, never logged. Request-scoped — passed as parameters, not stored on instances.
@@ -179,7 +179,7 @@ All configuration via environment variables (`.env` file). See `.env.example` fo
 | Permissions | `PERMISSION_CACHE_TTL_SECONDS` | Default: 300 |
 | Sync | `JELLYFIN_API_KEY`, `JELLYFIN_ADMIN_USER_ID`, `LIBRARY_SYNC_PAGE_SIZE`, `SYNC_INTERVAL_HOURS`, `TOMBSTONE_TTL_DAYS`, `WAL_CHECKPOINT_THRESHOLD_MB` | `JELLYFIN_API_KEY` for background sync |
 | Embedding | `EMBEDDING_BATCH_SIZE`, `EMBEDDING_WORKER_INTERVAL_SECONDS`, `EMBEDDING_MAX_RETRIES`, `EMBEDDING_COOLDOWN_SECONDS` | Defaults provided |
-| Search | `SEARCH_RATE_LIMIT`, `SEARCH_OVERFETCH_MULTIPLIER` | Defaults provided |
+| Search | `SEARCH_RATE_LIMIT`, `SEARCH_OVERFETCH_MULTIPLIER`, `FOREIGN_FILM_HOME_COUNTRIES` | Defaults provided (`FOREIGN_FILM_HOME_COUNTRIES=US`; ISO 3166-1 alpha-2 codes; set empty to disable the foreign-film route) |
 | Chat | `CHAT_RATE_LIMIT`, `CHAT_SYSTEM_PROMPT` | Defaults provided |
 | Conversation | `CONVERSATION_MAX_TURNS`, `CONVERSATION_TTL_MINUTES`, `CONVERSATION_MAX_SESSIONS`, `CONVERSATION_CONTEXT_BUDGET` | Defaults provided |
 | Tuning | `LOG_LEVEL`, `ENABLE_DOCS` | Defaults provided |
