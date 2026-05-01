@@ -192,7 +192,10 @@ async def test_chat_round_trip_resists_overview_injection(
         runtime_minutes=102,
     )
 
-    # Stub SearchService that returns the single adversarial candidate.
+    # Stub at the SearchService boundary, not the permission layer —
+    # the subject under test is the prompt's adversarial robustness, so
+    # threading the poison-pill overview through the real embedding +
+    # cosine pipeline would just be ceremony around the actual assertion.
     fake_search = AsyncMock()
     fake_search.search.return_value = SearchResponse(
         status=SearchStatus.OK,

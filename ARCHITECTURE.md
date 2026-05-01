@@ -59,7 +59,8 @@ sequenceDiagram
     Note over B: Filter candidates against permissions
     B->>L: get_many() for top permitted matches
     L-->>B: Full metadata from local SQLite
-    B->>O: Chat completion (llama3.1:8b) via SSE<br/>System prompt + conversation history +<br/>matched movie context + user query
+    Note over B: If candidates are empty, emit graceful<br/>text + done and skip Ollama (Spec 25)
+    B->>O: Chat completion (llama3.1:8b) via SSE<br/>System prompt + conversation history +<br/>matched movie context (with [ID:&lt;jellyfin_id&gt;]<br/>prefixes) + user query
     Note over B: Cooperative GPU pause: embedding worker<br/>yields GPU while chat is active
     O-->>B: Streaming token chunks
     B-->>F: SSE stream: metadata event → text chunks → done
