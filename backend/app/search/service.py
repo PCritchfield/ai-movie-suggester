@@ -364,6 +364,8 @@ class SearchService:
             gained.append("year_filter")
         if rewritten.ratings and not original.ratings:
             gained.append("rating_filter")
+        if rewritten.countries and not original.countries:
+            gained.append("country_filter")
         if rewritten.genres and not original.genres:
             gained.append("genre_rerank")
         for kind in gained:

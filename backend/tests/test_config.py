@@ -479,6 +479,32 @@ def test_foreign_film_home_countries_uppercases_iso() -> None:
     assert s.foreign_film_home_countries == ["US", "GB"]
 
 
+def test_foreign_film_home_countries_rejects_full_name() -> None:
+    """Council review (PR #244) — ``USA`` / ``United States`` are typos
+    that previously passed silently; the foreign-film route then
+    NOT-EXISTS-against-nothing and returns the entire library with no
+    error. Operator gets a debugging nightmare. Validator now rejects
+    anything that isn't a 2-letter ISO 3166-1 alpha-2 code."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": "USA"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_foreign_film_home_countries_rejects_unknown_code() -> None:
+    """Even a 2-letter input that isn't a real ISO code is rejected."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": "XX"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_foreign_film_home_countries_accepts_empty_string() -> None:
+    """Setting the env var to empty string disables the foreign-film route."""
+    env = {**_REQUIRED_ENV, "FOREIGN_FILM_HOME_COUNTRIES": ""}
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.foreign_film_home_countries == []
+
+
 # --- Spec 24 — rewriter / rewrite cache settings ---
 
 

@@ -36,6 +36,7 @@ class TestQueryIntentModel:
         assert QueryIntent(people=["eddie murphy"]).has_signals() is True
         assert QueryIntent(year_range=(1980, 1989)).has_signals() is True
         assert QueryIntent(ratings=["R"]).has_signals() is True
+        assert QueryIntent(countries=["JP"]).has_signals() is True
 
     def test_has_signals_false_when_paraphrastic_only(self) -> None:
         assert QueryIntent(is_paraphrastic=True).has_signals() is False
@@ -206,6 +207,28 @@ class TestDetectIntentCountries:
     def test_about_japan_does_not_trigger(self) -> None:
         intent = detect_intent("a documentary about Japan", _EMPTY_INDEX)
         assert intent.countries == []
+
+    def test_filmed_in_country_does_trigger(self) -> None:
+        """Council review (PR #244) — ``'in'`` was previously a plot-setting
+        marker, but ``filmed in France`` is a production-location query, not
+        a plot-setting. Removing ``'in'`` from ``_PLOT_SETTING_MARKERS`` is
+        safe because every documented plot-setting case has a stronger
+        marker (`set` / `during` / `about` / `takes` / `place`)."""
+        intent = detect_intent("filmed in France", _EMPTY_INDEX)
+        assert intent.countries == ["FR"]
+
+    def test_made_in_country_does_trigger(self) -> None:
+        intent = detect_intent("movies made in Japan", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+
+    def test_korea_disambiguates_to_south_korea(self) -> None:
+        """``'korea'`` is a name pycountry's ``search_fuzzy`` could resolve
+        ambiguously between KP (DPRK) and KR (ROK) depending on version
+        ordering. The router must always resolve bare ``korea`` to the
+        contemporary South Korea (KR) — that's overwhelmingly what users
+        mean for movie/TV cinema queries. Council review pinned this."""
+        intent = detect_intent("movies from Korea", _EMPTY_INDEX)
+        assert intent.countries == ["KR"]
 
     def test_signal_present_disables_paraphrastic(self) -> None:
         """A country signal counts as a structured signal.

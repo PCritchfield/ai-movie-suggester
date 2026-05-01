@@ -117,14 +117,42 @@ class Settings(BaseSettings):
     @field_validator("foreign_film_home_countries", mode="before")
     @classmethod
     def _parse_foreign_film_home_countries(cls, v: object) -> list[str]:
-        """Accept comma-separated env var string or list; normalise to uppercase ISO."""
+        """Parse + validate the operator-configured home set.
+
+        Accepts a comma-separated env-var string or an explicit list,
+        normalises to uppercase, and rejects anything that isn't a real
+        ISO 3166-1 alpha-2 code. Without the validation step ``USA``,
+        ``UK``, ``Narnia`` would all pass silently and the foreign-film
+        route would NOT-EXISTS-against-nothing — operator sees their
+        whole library returned, no error, no log. Council review
+        (PR #244) closed this hole at the boundary.
+        """
+        import pycountry  # noqa: PLC0415
+
         if isinstance(v, str):
             items = [s.strip() for s in v.split(",") if s.strip()]
         elif isinstance(v, list):
             items = [str(s).strip() for s in v if str(s).strip()]
         else:
-            return v  # type: ignore[return-value]
-        return [s.upper() for s in items]
+            msg = (
+                "FOREIGN_FILM_HOME_COUNTRIES must be a comma-separated string "
+                f"or list of ISO 3166-1 alpha-2 codes, got {type(v).__name__}"
+            )
+            raise ValueError(msg)
+        normalised = [s.upper() for s in items]
+        invalid = [
+            code
+            for code in normalised
+            if len(code) != 2 or pycountry.countries.get(alpha_2=code) is None
+        ]
+        if invalid:
+            msg = (
+                "FOREIGN_FILM_HOME_COUNTRIES contains values that are not "
+                f"ISO 3166-1 alpha-2 codes: {invalid}. Use 2-letter codes "
+                "like 'US', 'GB', 'JP' (not 'USA', 'United States', etc.)."
+            )
+            raise ValueError(msg)
+        return normalised
 
     # Spec 24 — paraphrastic LLM rewriter + cache.
     rewrite_timeout_seconds: Annotated[float, Field(ge=0.1, le=10.0)] = 2.0

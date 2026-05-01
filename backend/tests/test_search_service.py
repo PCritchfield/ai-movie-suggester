@@ -1022,6 +1022,57 @@ class TestSearchPipelineCountryFilter:
         kwargs = library.search_filtered_ids.call_args.kwargs
         assert kwargs.get("countries") == ["JP"]
 
+    async def test_rewriter_country_gain_emits_log_chain(self, caplog: object) -> None:
+        """Council review (PR #244) — observability gap.
+
+        ``_log_chain`` previously emitted ``rewrite_chained_to_*`` log
+        lines for person/year/rating/genre but not country. Without this
+        line, an operator monitoring rewrite efficacy cannot tell when
+        the LLM is surfacing country signals from paraphrastic queries.
+        Log line shape mirrors the four existing dimensions.
+        """
+        import logging  # noqa: PLC0415
+
+        ollama = AsyncMock()
+        ollama.embed.return_value = make_embedding_result()
+        vec_repo = AsyncMock()
+        vec_repo.count.return_value = 1805
+        vec_repo.search.return_value = []
+        permissions = AsyncMock()
+        permissions.filter_permitted.return_value = []
+        library = AsyncMock()
+        library.get_many.return_value = []
+        library.get_queue_counts.return_value = {
+            "pending": 0,
+            "processing": 0,
+            "failed": 0,
+        }
+        library.search_filtered_ids = AsyncMock(return_value=set())
+
+        rewriter = AsyncMock()
+        rewriter.rewrite = AsyncMock(return_value="Japanese animation")
+
+        service = _make_service(
+            ollama=ollama,
+            vec_repo=vec_repo,
+            permissions=permissions,
+            library=library,
+            person_index=PersonIndex(names=frozenset()),
+            rewriter=rewriter,
+        )
+        with caplog.at_level(logging.INFO, logger="app.search.service"):  # type: ignore[attr-defined]
+            await service.search(
+                "an evocative dreamlike film",
+                limit=10,
+                user_id="u1",
+                token="tok",
+            )
+
+        messages = [r.getMessage() for r in caplog.records]  # type: ignore[attr-defined]
+        assert any("rewrite_chained_to_country_filter" in m for m in messages), (
+            f"expected country log_chain line, got: {messages}"
+        )
+
 
 class TestSearchPipelineRewriterGating:
     """Spec 24 Unit 5 — paraphrastic rewriter is invoked ONLY when intent

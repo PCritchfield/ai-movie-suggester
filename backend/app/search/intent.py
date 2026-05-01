@@ -71,6 +71,11 @@ _PARAPHRASTIC_MIN_WORDS = 4
 # to the country code the SQL filter actually stores.
 _DEMONYM_TO_ISO: dict[str, str] = {
     "japanese": "JP",
+    # ``korea`` (the bare name) is also routed here rather than via
+    # ``name_to_iso`` because pycountry's ``search_fuzzy`` could surface
+    # KP (DPRK) before KR (ROK) depending on version ordering. Pinning
+    # the contemporary South Korea is what users mean for film queries.
+    "korea": "KR",
     "korean": "KR",
     "french": "FR",
     "british": "GB",
@@ -103,7 +108,8 @@ _DEMONYM_TO_ISO: dict[str, str] = {
 # query-router hot path effectively a pair of dict lookups per token.
 _COUNTRY_NAME_TOKENS: tuple[str, ...] = (
     "japan",
-    "korea",
+    # ``korea`` deliberately omitted — handled via _DEMONYM_TO_ISO above
+    # to avoid pycountry's ambiguous fuzzy match between KP and KR.
     "france",
     "britain",
     "germany",
@@ -129,9 +135,14 @@ _COUNTRY_NAME_TOKENS: tuple[str, ...] = (
 # ``during the Cold War``, ``about France``), not a production-country
 # signal. Tokenisation is whitespace + punctuation strip; window size of 5
 # tokens covers ``set in / during / about <country>`` plus 1–2
-# determiners or prepositions.
+# determiners or prepositions. ``'in'`` is deliberately excluded — it's
+# the most common English preposition and over-suppresses production-
+# location queries (``filmed in France``, ``movies made in Japan``,
+# ``interested in Japanese cinema``). Every documented plot-setting
+# phrasing carries a stronger marker (``set`` / ``during`` / ``about``
+# / ``takes`` / ``place``); council review (PR #244) confirmed.
 _PLOT_SETTING_MARKERS: frozenset[str] = frozenset(
-    {"set", "in", "during", "about", "takes", "place"}
+    {"set", "during", "about", "takes", "place"}
 )
 _PLOT_SETTING_WINDOW = 5
 
