@@ -19,7 +19,7 @@ from app.ollama.errors import (
     OllamaStreamError,
     OllamaTimeoutError,
 )
-from app.search.models import SearchUnavailableError
+from app.search.models import SearchStatus, SearchUnavailableError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -200,11 +200,12 @@ class ChatService:
         # from an empty list and predictably hallucinated. Emit a stable
         # graceful text event + done, and store the assistant turn so the
         # session transcript stays coherent.
+        #
+        # Copilot review (PR #248) — message branches on response.status
+        # so an unindexed library tells the operator to wait, not to
+        # rephrase a query the system simply hasn't ingested yet.
         if not response.results:
-            graceful_text = (
-                "I couldn't find anything in your library that matches that "
-                "request. Try rephrasing, or ask for something a bit broader."
-            )
+            graceful_text = self._empty_results_message(response.status)
             yield {"type": SSEEventType.TEXT, "content": graceful_text}
             yield {"type": SSEEventType.DONE}
             window2_lock = self._conversation_store.get_lock(session_id)
@@ -282,6 +283,26 @@ class ChatService:
             }
         finally:
             await self._pause_counter.release()
+
+    @staticmethod
+    def _empty_results_message(status: SearchStatus) -> str:
+        """Pick the operator-facing message when the candidate set is empty.
+
+        ``NO_EMBEDDINGS`` and ``PARTIAL_EMBEDDINGS`` describe a library
+        that hasn't finished indexing — telling the user to "rephrase"
+        is misleading because the issue is the system, not the query.
+        ``OK`` with empty results is the genuine zero-match case.
+        """
+        if status in (SearchStatus.NO_EMBEDDINGS, SearchStatus.PARTIAL_EMBEDDINGS):
+            return (
+                "Your library is still being indexed in the background. "
+                "Recommendations will improve as more items become indexed — "
+                "try again in a few minutes."
+            )
+        return (
+            "I couldn't find anything in your library that matches that "
+            "request. Try rephrasing, or ask for something a bit broader."
+        )
 
     async def _resolve_watch_history_context(self, watch_data: WatchData) -> str | None:
         """Resolve watch history IDs to titles and format for prompt context.

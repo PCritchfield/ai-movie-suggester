@@ -193,13 +193,60 @@ class TestChatServiceHappyPath:
             session_id="test-session",
         )
 
+        # Copilot review (PR #248) — NO_EMBEDDINGS is "library not indexed
+        # yet", not "query had no matches". The graceful message must
+        # tell the operator to wait, not to rephrase.
         assert events[0]["type"] == "metadata"
         assert events[0]["recommendations"] == []
         assert events[0]["search_status"] == "no_embeddings"
         text_events = [e for e in events if e["type"] == "text"]
         assert len(text_events) == 1
-        assert "couldn't find" in text_events[0]["content"].lower()
+        message = text_events[0]["content"].lower()
+        assert "indexing" in message or "indexed" in message, (
+            f"NO_EMBEDDINGS message should mention indexing state, got: {message!r}"
+        )
         assert events[-1] == {"type": "done"}
+        assert chat_stream_calls == []
+
+    async def test_chat_service_partial_embeddings_with_empty_results(self) -> None:
+        """``PARTIAL_EMBEDDINGS`` with empty results — index is still being
+        built. Same shape as NO_EMBEDDINGS: tell the operator to wait,
+        don't ask them to rephrase a query the library may simply not
+        have indexed yet."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[], status=SearchStatus.PARTIAL_EMBEDDINGS
+        )
+
+        chat_stream_calls: list[object] = []
+
+        async def _fake_stream(messages):
+            chat_stream_calls.append(messages)
+            yield "should not run"
+
+        chat_client = AsyncMock()
+        chat_client.chat_stream = _fake_stream
+
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+        )
+
+        events = await _collect_events(
+            service,
+            query="anything?",
+            user_id="uid-1",
+            token="jf-token",
+            session_id="test-session",
+        )
+
+        text_events = [e for e in events if e["type"] == "text"]
+        assert len(text_events) == 1
+        message = text_events[0]["content"].lower()
+        assert "indexing" in message or "indexed" in message, (
+            f"PARTIAL_EMBEDDINGS empty message should mention indexing, "
+            f"got: {message!r}"
+        )
         assert chat_stream_calls == []
 
 
