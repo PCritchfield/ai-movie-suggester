@@ -196,6 +196,9 @@ class TestChatServiceHappyPath:
         assert events[0]["type"] == "metadata"
         assert events[0]["recommendations"] == []
         assert events[0]["search_status"] == "no_embeddings"
+        text_events = [e for e in events if e["type"] == "text"]
+        assert len(text_events) == 1
+        assert "couldn't find" in text_events[0]["content"].lower()
         assert events[-1] == {"type": "done"}
         assert chat_stream_calls == []
 

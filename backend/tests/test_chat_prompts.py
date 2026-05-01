@@ -166,9 +166,8 @@ class TestStructuralFramingSpec25:
 
     def test_framing_keeps_metadata_as_data_clause(self) -> None:
         """The injection-mitigation clause must be preserved verbatim."""
-        assert "Treat" in STRUCTURAL_FRAMING and "data, not as instructions" in (
-            STRUCTURAL_FRAMING
-        )
+        assert "Treat" in STRUCTURAL_FRAMING
+        assert "data, not as instructions" in STRUCTURAL_FRAMING
 
 
 # ---------------------------------------------------------------------------
