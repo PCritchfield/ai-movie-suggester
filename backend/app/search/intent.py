@@ -135,14 +135,22 @@ _COUNTRY_NAME_TOKENS: tuple[str, ...] = (
 # ``during the Cold War``, ``about France``), not a production-country
 # signal. Tokenisation is whitespace + punctuation strip; window size of 5
 # tokens covers ``set in / during / about <country>`` plus 1–2
-# determiners or prepositions. ``'in'`` is deliberately excluded — it's
-# the most common English preposition and over-suppresses production-
-# location queries (``filmed in France``, ``movies made in Japan``,
-# ``interested in Japanese cinema``). Every documented plot-setting
-# phrasing carries a stronger marker (``set`` / ``during`` / ``about``
-# / ``takes`` / ``place``); council review (PR #244) confirmed.
-_PLOT_SETTING_MARKERS: frozenset[str] = frozenset(
-    {"set", "during", "about", "takes", "place"}
+# determiners or prepositions.
+#
+# Single-token markers must be unambiguous in this context. Common
+# tokens like ``in`` and ``set`` are intentionally NOT in this set —
+# they over-suppress production queries (``filmed in France``,
+# ``movies made in Japan``, ``a set of Japanese films``). Their plot-
+# setting force comes from specific 2-token phrases, captured below.
+_PLOT_SETTING_SINGLE: frozenset[str] = frozenset({"during", "about"})
+
+# Phrase markers — consecutive token pairs that disambiguate a noun
+# from a plot-setting verb. ``set in`` vs. bare ``set`` is the
+# canonical case; ``takes place`` similarly. Council + Copilot
+# review (PR #244) drove the move from single-token to phrase-level
+# detection here.
+_PLOT_SETTING_PHRASES: frozenset[tuple[str, str]] = frozenset(
+    {("set", "in"), ("takes", "place")}
 )
 _PLOT_SETTING_WINDOW = 5
 
@@ -285,9 +293,20 @@ def _has_plot_setting_marker(tokens: list[str], match_index: int) -> bool:
 
     Window scans backwards because plot markers always precede the country
     they govern in English (``set in Japan``, never ``Japan set in``).
+
+    Single-token markers (``during`` / ``about``) trigger anywhere in
+    the window. Phrase markers (``set in`` / ``takes place``) trigger
+    only on consecutive tokens — that's how ``a set of Japanese films``
+    avoids the suppression that ``a film set in Japan`` correctly fires.
     """
     start = max(0, match_index - _PLOT_SETTING_WINDOW)
-    return any(tok in _PLOT_SETTING_MARKERS for tok in tokens[start:match_index])
+    window = tokens[start:match_index]
+    if any(tok in _PLOT_SETTING_SINGLE for tok in window):
+        return True
+    return any(
+        (window[i], window[i + 1]) in _PLOT_SETTING_PHRASES
+        for i in range(len(window) - 1)
+    )
 
 
 def _detect_countries(query: str) -> list[str]:
@@ -306,7 +325,10 @@ def _detect_countries(query: str) -> list[str]:
         if tok in _DEMONYM_TO_ISO:
             iso = _DEMONYM_TO_ISO[tok]
         elif tok in _COUNTRY_NAME_TOKENS:
-            iso = name_to_iso(tok)
+            # Title-case so pycountry's case-sensitive ``get(name=...)``
+            # fast path hits — otherwise the first lookup per process
+            # falls through to ``search_fuzzy`` (Copilot review, PR #244).
+            iso = name_to_iso(tok.title())
         else:
             continue
 

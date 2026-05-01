@@ -230,6 +230,30 @@ class TestDetectIntentCountries:
         intent = detect_intent("movies from Korea", _EMPTY_INDEX)
         assert intent.countries == ["KR"]
 
+    def test_set_as_noun_does_not_suppress(self) -> None:
+        """Copilot review (PR #244) — ``'set'`` was a single-token marker,
+        but ``a set of Japanese films`` (set as a noun) tokenises with
+        ``set`` inside the suppression window before ``japanese`` and
+        suppressed extraction. The disambiguator is the phrase ``set in``
+        (verb + preposition), not the bare token. Multi-token check now
+        prevents the false negative while keeping ``set in Japan``
+        suppression intact."""
+        intent = detect_intent("a set of Japanese films", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+
+    def test_set_in_phrase_still_suppresses(self) -> None:
+        """Regression guard for the multi-token plot-setting check —
+        ``set in`` (consecutive tokens) must still suppress."""
+        intent = detect_intent("movies set in Japan", _EMPTY_INDEX)
+        assert intent.countries == []
+
+    def test_movies_in_country_does_trigger(self) -> None:
+        """``'movies in Japan'`` is a production-location query, not a
+        plot-setting. With ``in`` and ``set`` correctly out of the
+        single-token marker set, this routes to country."""
+        intent = detect_intent("movies in Japan", _EMPTY_INDEX)
+        assert intent.countries == ["JP"]
+
     def test_signal_present_disables_paraphrastic(self) -> None:
         """A country signal counts as a structured signal.
 
