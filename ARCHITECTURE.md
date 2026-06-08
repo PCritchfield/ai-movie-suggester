@@ -119,10 +119,10 @@ sequenceDiagram
 
 ### Frontend (Next.js)
 - **Auth UI**: Login page, route protection (middleware + RSC layout guard), auth context, logout
-- **Chat interface** (Epic 3, planned): Conversational UI for recommendations — backend endpoint exists, frontend not yet built
-- **Movie cards** (Epic 3, planned): Display recommendations with metadata and poster art
-- **Session manager** (Epic 4, planned): Device picker for "Play on TV"
-- **PWA shell**: Installable, mobile-first, manual service worker with cache-first static shell. `minimal-ui` display mode. Install banner built but not yet mounted (waiting for chat UI).
+- **Chat interface** (Epic 3): Conversational UI for recommendations — SSE-streamed chat with multi-turn conversation memory
+- **Movie cards** (Epic 3): Display recommendations with metadata and poster art, with an expandable detail view
+- **Session manager** (Epic 4): Device picker and "Play on TV" dispatch
+- **PWA shell**: Installable, mobile-first, manual service worker with cache-first static shell. `minimal-ui` display mode. Install banner mounted in the protected layout.
 
 ### SQLite-vec / SQLite Databases
 The application uses a two-file database strategy:
@@ -221,29 +221,33 @@ The test suite uses `docker-compose.test.yml` to provision a disposable Jellyfin
 | 0. AI-Native Foundation | Scaffolding, CI, editor config, pre-commit hooks | — | **Complete** |
 | 1. Scaffolding & Auth | Docker Compose, Jellyfin auth, multi-user sessions, frontend auth UI | Specs 01–04 | **Complete** |
 | 2. Semantic Brain | Library sync, embedding pipeline, semantic search API | Specs 05–11 | **Complete** |
-| 3. Conversational Discovery | Chat endpoint, conversation memory, chat UI, movie cards, watch history ranking | Specs 12–15 (done), plus #114, #116–#119 | **In Progress (~60%)** |
-| 4. Remote Control | Session/device detection, "Play on TV" trigger | #12, #13 (not started) | Planned |
+| 3. Conversational Discovery | Chat endpoint, conversation memory, chat UI, movie cards, watch history ranking | Specs 12–15; #114, #116–#119 | **Complete** |
+| 3.5. Validation — But Does It Work? | Pipeline validation, test media fixtures, real-inference checks | Specs 22–23; #190 (open) | **In Progress** |
+| 4. Remote Control | Session/device detection, "Play on TV" trigger | #202, #203, #208, #212; test-infra tail #195 (open) | **Complete** |
+| 5. Recommendation Quality & Evaluation | Eval harness, LLM tool-calling/structured output, reranking + hybrid retrieval spikes, embedding experiments | #252, #239, #253, #254, #255 | **Planned — Next** |
 
-Build order: Epic 0 → 1 → 2 → 3 → 4 (sequential, not parallel).
+Build order: Epic 0 → 1 → 2 → 3 → 3.5 → 4 → 5 (sequential, not parallel).
 
-### Epic 3 Remaining Work
+### Epic 3 Delivery
+
+> Historical delivery map — all items shipped. Retained for dependency context.
 
 ```mermaid
 flowchart LR
-    subgraph Done
+    subgraph "Specs (Foundation)"
         S12["Spec 12<br/>Chat Endpoint ✓"]
         S13["Spec 13<br/>Playwright E2E ✓"]
         S14["Spec 14<br/>PWA Setup ✓"]
         S15["Spec 15<br/>Conv Memory ✓"]
     end
-    subgraph "Remaining — Backend"
-        I114["#114<br/>Prompt Injection<br/>2 pts"]
-        I118["#118<br/>Watch History<br/>2 pts"]
-        I119["#119<br/>History Ranking<br/>3 pts"]
+    subgraph "Backend"
+        I114["#114<br/>Prompt Injection ✓"]
+        I118["#118<br/>Watch History ✓"]
+        I119["#119<br/>History Ranking ✓"]
     end
-    subgraph "Remaining — Frontend"
-        I116["#116<br/>Chat UI<br/>3 pts"]
-        I117["#117<br/>Movie Cards<br/>3 pts"]
+    subgraph "Frontend"
+        I116["#116<br/>Chat UI ✓"]
+        I117["#117<br/>Movie Cards ✓"]
     end
 
     S12 --> I114
@@ -251,4 +255,20 @@ flowchart LR
     S15 --> I119
     I118 --> I119
     I116 --> I117
+```
+
+### Epic 5 Dependency Order
+
+```mermaid
+flowchart LR
+    I252["#252<br/>Eval Harness<br/>(foundation — measure first)"]
+    I239["#239<br/>Spec 26: Tool-Calling<br/>/ Structured Output"]
+    I253["#253<br/>Spike: Cross-Encoder<br/>Reranking"]
+    I254["#254<br/>Spike: Hybrid Retrieval<br/>BM25 + Dense"]
+    I255["#255<br/>Spike: Embedding Model<br/>/ Template Experiments"]
+
+    I252 --> I239
+    I252 --> I253
+    I252 --> I254
+    I252 --> I255
 ```
