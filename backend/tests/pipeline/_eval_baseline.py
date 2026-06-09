@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
 
 DEFAULT_THRESHOLD = 0.05
-PARAPHRASTIC = "paraphrastic"
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,18 +140,16 @@ def find_regressions(
     return regressions
 
 
-def aggregate_gated(
-    rows: Iterable[tuple[str, Mapping[str, float]]],
-    *,
-    exclude_intents: tuple[str, ...] = (PARAPHRASTIC,),
-) -> dict[str, float]:
-    """Mean score per metric across rows, EXCLUDING the given intents.
+def mean_scores(rows: Iterable[Mapping[str, float]]) -> dict[str, float]:
+    """Mean score per metric across the given rows (empty dict if no rows).
 
-    ``rows`` is an iterable of ``(intent, {metric: score})``. Paraphrastic
-    cases are excluded from the gated aggregate (their LLM-rewrite wobble would
-    flake the gate); they remain in the full report.
+    The caller decides *which* rows to include. For the regression gate it
+    passes only the deterministic cases — those that do NOT hit the LLM rewrite
+    path (``detect_intent`` is pure, so the harness computes that per case);
+    for the full report it passes every case. Keeping the filter in the caller
+    leaves this module free of any ``app`` dependency.
     """
-    kept = [dict(scores) for intent, scores in rows if intent not in exclude_intents]
+    kept = [dict(r) for r in rows]
     if not kept:
         return {}
     metrics = list(kept[0].keys())

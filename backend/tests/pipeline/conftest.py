@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -19,7 +20,12 @@ from app.config import Settings
 from app.embedding.worker import EmbeddingWorker
 from app.jellyfin.client import JellyfinClient
 from app.library.store import LibraryStore
+from app.ollama.chat_client import OllamaChatClient
 from app.ollama.client import OllamaEmbeddingClient
+from app.search.person_index import PersonIndex
+from app.search.rewrite_cache import RewriteCache
+from app.search.rewriter import QueryRewriter
+from app.search.service import SearchService
 from app.sync.engine import SyncEngine
 from app.vectors.repository import SqliteVecRepository
 
@@ -241,3 +247,45 @@ async def embedded_library(
     _logger.info("Pipeline database: %d vectors stored", vec_count)
 
     return pipeline_vec_repo
+
+
+@pytest_asyncio.fixture
+async def eval_search_service(
+    embedded_library: SqliteVecRepository,
+    pipeline_library_store: LibraryStore,
+) -> AsyncGenerator[SearchService, None]:
+    """Shared SearchService wired against live Ollama + the seeded library.
+
+    Used by both the query-router eval (Spec 24) and the retrieval eval
+    (Spec 26) so the wiring isn't duplicated. Permissions are stubbed to pass
+    every candidate through — the eval scores retrieval relevance, not auth.
+    """
+    timeout = httpx.Timeout(connect=5.0, read=300.0, write=10.0, pool=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as http:
+        embed_client = OllamaEmbeddingClient(
+            base_url=OLLAMA_HOST, http_client=http, embed_model=EMBED_MODEL
+        )
+        chat_client = OllamaChatClient(
+            base_url=OLLAMA_HOST, http_client=http, chat_model=CHAT_MODEL
+        )
+        person_index = PersonIndex(
+            names=await pipeline_library_store.get_all_people_names()
+        )
+        cache = RewriteCache(max_entries=128, ttl_seconds=3600)
+        rewriter = QueryRewriter(
+            chat_client=chat_client,
+            cache=cache,
+            timeout_seconds=10.0,
+            max_output_chars=200,
+        )
+        permissions = AsyncMock()
+        permissions.filter_permitted.side_effect = lambda *args, **_kw: args[2]
+        service = SearchService(
+            ollama_client=embed_client,
+            vec_repo=embedded_library,
+            permission_service=permissions,
+            library_store=pipeline_library_store,
+            person_index=person_index,
+            rewriter=rewriter,
+        )
+        yield service

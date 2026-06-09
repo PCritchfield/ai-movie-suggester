@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING
 from tests.pipeline._eval_baseline import (
     BaselineRecord,
     VecMeta,
-    aggregate_gated,
     append_record,
     find_regressions,
     load_baseline,
+    mean_scores,
     save_baseline,
     select_baseline,
 )
@@ -99,15 +99,13 @@ class TestRegressions:
         assert regs == []
 
 
-class TestAggregateGated:
-    def test_excludes_paraphrastic(self) -> None:
-        rows = [
-            ("genre", {"ndcg@10": 0.6}),
-            ("person", {"ndcg@10": 0.8}),
-            ("paraphrastic", {"ndcg@10": 0.0}),  # must NOT drag the gated mean
-        ]
-        agg = aggregate_gated(rows)
-        assert abs(agg["ndcg@10"] - 0.7) < 1e-9  # mean of 0.6 and 0.8, not 0.0
+class TestMeanScores:
+    def test_means_per_metric(self) -> None:
+        # The harness passes only the gated (deterministic) rows here; the
+        # non-deterministic rewrite-path case (0.0) is filtered out upstream.
+        rows = [{"ndcg@10": 0.6}, {"ndcg@10": 0.8}]
+        agg = mean_scores(rows)
+        assert abs(agg["ndcg@10"] - 0.7) < 1e-9
 
-    def test_empty_when_all_excluded(self) -> None:
-        assert aggregate_gated([("paraphrastic", {"ndcg@10": 0.5})]) == {}
+    def test_empty_rows(self) -> None:
+        assert mean_scores([]) == {}
