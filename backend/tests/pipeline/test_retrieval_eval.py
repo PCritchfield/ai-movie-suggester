@@ -14,12 +14,19 @@ but excluded from the gate.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.pipeline._eval_baseline import VecMeta
+from tests.pipeline._eval_baseline import (
+    BaselineRecord,
+    VecMeta,
+    append_record,
+    load_baseline,
+    save_baseline,
+)
 from tests.pipeline._eval_loader import load_golden_set
 from tests.pipeline._eval_report import evaluate, format_report, gate
 from tests.pipeline.conftest import EMBED_MODEL
@@ -70,6 +77,22 @@ async def test_retrieval_eval(
 
     with capsys.disabled():
         print("\n" + report)
+
+    # Seed/re-bless the committed baseline from THIS run's fixture-corpus scores
+    # (the baseline must reflect the corpus the harness actually scores, so
+    # seeding happens here, not via the script's separate library.db).
+    if os.environ.get("EVAL_UPDATE_BASELINE") == "1":
+        records = load_baseline(_BASELINE_PATH)
+        today = datetime.now(UTC).date().isoformat()
+        save_baseline(
+            _BASELINE_PATH,
+            append_record(
+                records,
+                BaselineRecord(vec_meta=current, scores=outcome.gated_mean, date=today),
+            ),
+        )
+        with capsys.disabled():
+            print(f"\nAppended baseline record ({today}) to {_BASELINE_PATH}")
 
     # Warn by default (the report shows regressions); fail only under EVAL_STRICT.
     if gate_result.regressions and os.environ.get("EVAL_STRICT") == "1":

@@ -139,7 +139,15 @@ uv run --directory backend python ../scripts/eval_retrieval.py --help
 
 The report shows, per query, its intent, the metrics, whether it is **gated** or **UNGATED**, and any missed relevant titles, followed by aggregate scores and the gate verdict.
 
-**Regression gating** is a *warning* by default. Set `EVAL_STRICT=1` (pytest) or pass `--strict` (script) to fail on a metric dropping more than the threshold (default 0.05) below the matching-version baseline. After a *deliberate* improvement, re-bless the baseline with `python scripts/eval_retrieval.py --update-baseline` (it **appends** a new versioned record, keyed by embedding model + template version, so prior numbers are never destroyed).
+**Regression gating** is a *warning* by default. Set `EVAL_STRICT=1` to fail on a metric dropping more than the threshold (default 0.05) below the matching-version baseline.
+
+The committed baseline (`backend/tests/fixtures/eval_baseline.json`) reflects the **fixture corpus** that `make eval-retrieval` scores, so seed/re-bless it *through the harness*:
+
+```bash
+EVAL_UPDATE_BASELINE=1 make eval-retrieval   # appends a versioned record from this run
+```
+
+It **appends** a record keyed by embedding model + template version, so prior numbers are never destroyed. (`scripts/eval_retrieval.py --strict --update-baseline` is for ad-hoc runs against a real `library.db` — a *different* corpus; don't point it at the committed baseline.)
 
 **Cadence:** run `make eval-retrieval` before merging any change that touches embeddings, routing, reranking, or prompt templates.
 
