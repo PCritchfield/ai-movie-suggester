@@ -517,6 +517,23 @@ class LibraryStore:
                         names.add(name.strip().lower())
         return frozenset(names)
 
+    async def get_title_index(self) -> dict[str, list[str]]:
+        """Return ``{title: [jellyfin_id, ...]}`` for active (non-deleted) items.
+
+        Titles are not unique (remakes, same-name films across decades), so each
+        title maps to a *list* of ids. Callers needing a 1:1 resolution (e.g. the
+        Spec 26 eval golden-set loader) must treat any title resolving to zero or
+        more than one id as an error rather than guessing.
+        """
+        cursor = await self._conn.execute(
+            "SELECT title, jellyfin_id FROM library_items WHERE deleted_at IS NULL"
+        )
+        rows = await cursor.fetchall()
+        index: dict[str, list[str]] = {}
+        for title, jellyfin_id in rows:
+            index.setdefault(title, []).append(jellyfin_id)
+        return index
+
     # --- Sync engine methods (Spec 08, Task 2.0) ---
 
     async def get_all_ids(self) -> set[str]:
