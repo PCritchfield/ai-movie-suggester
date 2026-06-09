@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Broken Threshold</title>
+  <year>1989</year>
+  <plot>In this sci-fi feature, a speculative science-fiction tale of a touring musician chasing one last shot at redemption. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Mystery</genre>
+  <director>Rafael Santos</director>
+  <actor>
+    <name>Freya Nilsson</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Lucia Romano</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Priya Nair</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Lumiere Productions</studio>
+  <rating>7.7</rating>
+  <runtime>133</runtime>
+  <country>France</country>
+</movie>

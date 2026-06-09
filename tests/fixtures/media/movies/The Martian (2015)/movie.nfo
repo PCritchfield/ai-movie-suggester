@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Martian</title>
+  <year>2015</year>
+  <plot>Stranded alone on Mars after his crew presumes him dead, an astronaut must use ingenuity and botany to survive while NASA races to bring him home against impossible odds.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Adventure</genre>
+  <genre>Drama</genre>
+  <director>Ridley Scott</director>
+  <actor>
+    <name>Matt Damon</name>
+    <role>Mark Watney</role>
+  </actor>
+  <actor>
+    <name>Jessica Chastain</name>
+    <role>Melissa Lewis</role>
+  </actor>
+  <actor>
+    <name>Chiwetel Ejiofor</name>
+    <role>Vincent Kapoor</role>
+  </actor>
+  <studio>20th Century Fox</studio>
+  <rating>8.0</rating>
+  <runtime>144</runtime>
+  <country>United States of America</country>
+</movie>

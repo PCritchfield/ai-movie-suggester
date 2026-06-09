@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Broken Lantern</title>
+  <year>2005</year>
+  <plot>In this sci-fi feature, a speculative science-fiction tale of a touring musician chasing one last shot at redemption. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Mystery</genre>
+  <director>Nadia Petrova</director>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Aria Lindqvist</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Lumiere Productions</studio>
+  <rating>5.1</rating>
+  <runtime>141</runtime>
+  <country>France</country>
+</movie>

@@ -2,8 +2,10 @@
 <movie>
   <title>The Shining</title>
   <year>1980</year>
-  <plot>A struggling writer takes a winter caretaker position at an isolated mountain hotel, bringing his psychic young son and increasingly terrified wife. As snowbound months pass, the hotel's malevolent supernatural presence amplifies his madness until he turns violently on his own family in the hedge-maze corridors of the Overlook.</plot>
+  <plot>A struggling writer takes a winter caretaker job at an isolated mountain hotel where supernatural forces and crushing isolation drive him toward madness and violence against his family.</plot>
   <genre>Horror</genre>
+  <genre>Drama</genre>
+  <genre>Thriller</genre>
   <director>Stanley Kubrick</director>
   <actor>
     <name>Jack Nicholson</name>
@@ -20,4 +22,5 @@
   <studio>Warner Bros.</studio>
   <rating>8.4</rating>
   <runtime>146</runtime>
+  <country>United States of America</country>
 </movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Quiet Echo</title>
+  <year>1994</year>
+  <plot>In this adventure feature, a sweeping adventure across a generation ship whose crew has forgotten where they came from. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Adventure</genre>
+  <genre>Action</genre>
+  <director>Olivia Chen</director>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Kenji Sato</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Rheinland Films</studio>
+  <rating>7.4</rating>
+  <runtime>122</runtime>
+  <country>Germany</country>
+</movie>

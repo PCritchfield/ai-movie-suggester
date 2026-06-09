@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Wandering Tideline</title>
+  <year>1974</year>
+  <plot>In this action feature, a high-octane action story pitting a town of misfits banding together against a faceless authority. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Action</genre>
+  <genre>Thriller</genre>
+  <director>Elena Vasquez</director>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Kenji Sato</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Norrsken Film</studio>
+  <rating>6.6</rating>
+  <runtime>106</runtime>
+  <country>Sweden</country>
+</movie>

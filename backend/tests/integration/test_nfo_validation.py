@@ -35,6 +35,7 @@ _MOVIE_REQUIRED = [
     "studio",
     "rating",
     "runtime",
+    "country",
 ]
 _SHOW_REQUIRED = [
     "title",

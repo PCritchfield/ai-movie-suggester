@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Knives Out</title>
+  <year>2019</year>
+  <plot>When a wealthy crime novelist is found dead after his birthday party, a flamboyant private detective sifts through a household of self-serving relatives to untangle a web of lies and inheritance.</plot>
+  <genre>Mystery</genre>
+  <genre>Crime</genre>
+  <genre>Comedy</genre>
+  <director>Rian Johnson</director>
+  <actor>
+    <name>Daniel Craig</name>
+    <role>Benoit Blanc</role>
+  </actor>
+  <actor>
+    <name>Ana de Armas</name>
+    <role>Marta Cabrera</role>
+  </actor>
+  <actor>
+    <name>Chris Evans</name>
+    <role>Ransom Drysdale</role>
+  </actor>
+  <studio>Lionsgate</studio>
+  <rating>7.9</rating>
+  <runtime>130</runtime>
+  <country>United States of America</country>
+</movie>

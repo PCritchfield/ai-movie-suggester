@@ -2,8 +2,9 @@
 <movie>
   <title>Mad Max Fury Road</title>
   <year>2015</year>
-  <plot>In a post-apocalyptic wasteland ruled by a tyrannical warlord who controls the water supply, a lone drifter and a rebellious war captain join forces to lead a convoy of escaped women across the desert in a non-stop vehicular chase. A relentless two-hour pursuit filmed with practical stunts and real explosions, it is both an action masterpiece and a feminist war cry.</plot>
+  <plot>On a post-apocalyptic desert highway, a haunted drifter and a rebel warrior flee a tyrannical warlord in a relentless, vehicular chase to deliver his captive brides to freedom.</plot>
   <genre>Action</genre>
+  <genre>Adventure</genre>
   <genre>Sci-Fi</genre>
   <director>George Miller</director>
   <actor>
@@ -21,4 +22,5 @@
   <studio>Warner Bros.</studio>
   <rating>8.1</rating>
   <runtime>120</runtime>
+  <country>Australia</country>
 </movie>

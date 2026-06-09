@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Forgotten Vesper</title>
+  <year>2013</year>
+  <plot>In this documentary feature, an intimate documentary portrait of a lighthouse keeper haunted by a voice in the fog. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Documentary</genre>
+  <genre>Sci-Fi</genre>
+  <director>Liam O'Sullivan</director>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Lucia Romano</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cine Azteca</studio>
+  <rating>6.0</rating>
+  <runtime>89</runtime>
+  <country>Mexico</country>
+</movie>

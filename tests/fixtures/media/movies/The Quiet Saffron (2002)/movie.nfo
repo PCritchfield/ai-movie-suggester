@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Quiet Saffron</title>
+  <year>2002</year>
+  <plot>In this adventure feature, a sweeping adventure across a generation ship whose crew has forgotten where they came from. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Adventure</genre>
+  <genre>Action</genre>
+  <director>Olivia Chen</director>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Freya Nilsson</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Rheinland Films</studio>
+  <rating>5.9</rating>
+  <runtime>162</runtime>
+  <country>Germany</country>
+</movie>

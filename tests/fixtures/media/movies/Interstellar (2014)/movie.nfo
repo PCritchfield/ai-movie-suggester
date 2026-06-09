@@ -2,8 +2,9 @@
 <movie>
   <title>Interstellar</title>
   <year>2014</year>
-  <plot>With Earth's crops failing and humanity facing extinction, a former pilot leads a desperate mission through a wormhole near Saturn to find a habitable planet in another galaxy. The journey bends time and space, forcing him to choose between saving the world and ever seeing his children again.</plot>
+  <plot>As a dying Earth runs out of food, a former pilot leads a desperate mission through a wormhole in search of a new home for humanity, wrestling with relativity, sacrifice, and love across the stars.</plot>
   <genre>Sci-Fi</genre>
+  <genre>Adventure</genre>
   <genre>Drama</genre>
   <director>Christopher Nolan</director>
   <actor>
@@ -19,6 +20,7 @@
     <role>Murph</role>
   </actor>
   <studio>Paramount Pictures</studio>
-  <rating>8.7</rating>
+  <rating>8.6</rating>
   <runtime>169</runtime>
+  <country>United States of America</country>
 </movie>

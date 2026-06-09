@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>My Neighbor Totoro</title>
+  <year>1988</year>
+  <plot>Two young sisters who move to the countryside to be near their hospitalised mother befriend gentle forest spirits, including a giant, furry guardian of the woods named Totoro.</plot>
+  <genre>Animation</genre>
+  <genre>Fantasy</genre>
+  <genre>Family</genre>
+  <director>Hayao Miyazaki</director>
+  <actor>
+    <name>Noriko Hidaka</name>
+    <role>Satsuki (voice)</role>
+  </actor>
+  <actor>
+    <name>Chika Sakamoto</name>
+    <role>Mei (voice)</role>
+  </actor>
+  <actor>
+    <name>Shigesato Itoi</name>
+    <role>Tatsuo (voice)</role>
+  </actor>
+  <studio>Studio Ghibli</studio>
+  <rating>8.1</rating>
+  <runtime>86</runtime>
+  <country>Japan</country>
+</movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Pale Lantern</title>
+  <year>1995</year>
+  <plot>In this fantasy feature, a richly imagined fantasy where a stranded traveller relying on the kindness of unlikely allies. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Fantasy</genre>
+  <genre>Comedy</genre>
+  <director>Hiroshi Tanaka</director>
+  <actor>
+    <name>Caleb Mercer</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Estudios Mediterraneo</studio>
+  <rating>5.9</rating>
+  <runtime>127</runtime>
+  <country>Spain</country>
+</movie>

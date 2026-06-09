@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Jaws</title>
+  <year>1975</year>
+  <plot>When a giant great white shark terrorises a beach resort town, the local police chief, a marine biologist, and a grizzled fisherman set out to sea to hunt and destroy it.</plot>
+  <genre>Thriller</genre>
+  <genre>Horror</genre>
+  <genre>Adventure</genre>
+  <director>Steven Spielberg</director>
+  <actor>
+    <name>Roy Scheider</name>
+    <role>Chief Martin Brody</role>
+  </actor>
+  <actor>
+    <name>Robert Shaw</name>
+    <role>Quint</role>
+  </actor>
+  <actor>
+    <name>Richard Dreyfuss</name>
+    <role>Matt Hooper</role>
+  </actor>
+  <studio>Universal Pictures</studio>
+  <rating>8.1</rating>
+  <runtime>124</runtime>
+  <country>United States of America</country>
+</movie>

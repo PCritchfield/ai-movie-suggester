@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Hidden Echo</title>
+  <year>2001</year>
+  <plot>In this mystery feature, a twisting mystery surrounding a translator caught between two worlds and two loyalties. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Mystery</genre>
+  <genre>Documentary</genre>
+  <director>Rafael Santos</director>
+  <actor>
+    <name>Freya Nilsson</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Lucia Romano</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Priya Nair</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Maple Frame Pictures</studio>
+  <rating>5.2</rating>
+  <runtime>133</runtime>
+  <country>Canada</country>
+</movie>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Crimson Meridian Chronicles</title>
+  <year>2000</year>
+  <plot>An episodic thriller series, a tightly wound thriller following a young apprentice who discovers their mentor's hidden past. Each season deepens the mystery while the ensemble cast evolves.</plot>
+  <genre>Thriller</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Co-Lead</role>
+  </actor>
+  <studio>Lumiere Productions</studio>
+  <rating>5.9</rating>
+  <status>Ended</status>
+  <country>France</country>
+</tvshow>

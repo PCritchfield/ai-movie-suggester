@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Hidden Tideline Chronicles</title>
+  <year>2010</year>
+  <plot>An episodic horror series, a slow-burning horror story about a town of misfits banding together against a faceless authority. Each season deepens the mystery while the ensemble cast evolves.</plot>
+  <genre>Horror</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Co-Lead</role>
+  </actor>
+  <studio>Hangang Studios</studio>
+  <rating>6.3</rating>
+  <status>Ended</status>
+  <country>Korea, Republic of</country>
+</tvshow>

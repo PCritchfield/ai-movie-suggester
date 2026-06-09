@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Crimson Lantern</title>
+  <year>2019</year>
+  <plot>In this romance feature, a bittersweet romance between a retired detective drawn back for one final, personal case. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Romance</genre>
+  <genre>Fantasy</genre>
+  <director>Rafael Santos</director>
+  <actor>
+    <name>Sofia Castellano</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Hangang Studios</studio>
+  <rating>7.7</rating>
+  <runtime>163</runtime>
+  <country>Korea, Republic of</country>
+</movie>

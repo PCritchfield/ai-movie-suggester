@@ -111,7 +111,7 @@ make test-integration-full   # start Jellyfin, run tests, teardown
 
 ### Pipeline Validation
 
-Validates the full RAG pipeline (embed → search → chat) with real Ollama inference against 35 fixture items. Requires Ollama running locally — models are auto-pulled on first run (~4 GB).
+Validates the full RAG pipeline (embed → search → chat) with real Ollama inference against ~200 fixture items (generated from the eval golden set by `scripts/generate_corpus.py`). Requires Ollama running locally — models are auto-pulled on first run (~4 GB).
 
 ```bash
 # One-shot: checks Ollama, starts Jellyfin, runs tests, tears down

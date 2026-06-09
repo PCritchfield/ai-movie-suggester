@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Sixth Sense</title>
+  <year>1999</year>
+  <plot>A child psychologist tries to help a withdrawn young boy who claims he can see and speak with the dead, leading both toward a shattering revelation about themselves.</plot>
+  <genre>Thriller</genre>
+  <genre>Drama</genre>
+  <genre>Horror</genre>
+  <director>M. Night Shyamalan</director>
+  <actor>
+    <name>Bruce Willis</name>
+    <role>Dr. Malcolm Crowe</role>
+  </actor>
+  <actor>
+    <name>Haley Joel Osment</name>
+    <role>Cole Sear</role>
+  </actor>
+  <actor>
+    <name>Toni Collette</name>
+    <role>Lynn Sear</role>
+  </actor>
+  <studio>Buena Vista Pictures</studio>
+  <rating>8.2</rating>
+  <runtime>107</runtime>
+  <country>United States of America</country>
+</movie>

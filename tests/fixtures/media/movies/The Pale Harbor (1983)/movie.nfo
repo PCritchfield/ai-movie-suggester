@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Pale Harbor</title>
+  <year>1983</year>
+  <plot>In this fantasy feature, a richly imagined fantasy where a stranded traveller relying on the kindness of unlikely allies. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Fantasy</genre>
+  <genre>Comedy</genre>
+  <director>Rafael Santos</director>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Estudios Mediterraneo</studio>
+  <rating>6.2</rating>
+  <runtime>103</runtime>
+  <country>Spain</country>
+</movie>
