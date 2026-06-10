@@ -63,6 +63,21 @@ def _make_service(
     )
 
 
+class TestHomeCountriesProperty:
+    def test_exposes_configured_codes(self) -> None:
+        service = _make_service(foreign_film_home_countries=["US", "GB"])
+        assert service.home_countries == ["US", "GB"]
+
+    def test_defaults_to_empty_list(self) -> None:
+        service = _make_service()
+        assert service.home_countries == []
+
+    def test_returns_a_copy(self) -> None:
+        service = _make_service(foreign_film_home_countries=["US"])
+        service.home_countries.append("FR")
+        assert service.home_countries == ["US"]
+
+
 class TestSearchPrependsQueryPrefix:
     async def test_embed_called_with_search_query_prefix(self) -> None:
         ollama = AsyncMock()

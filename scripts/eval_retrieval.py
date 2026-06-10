@@ -111,7 +111,7 @@ async def _amain(args: argparse.Namespace) -> int:
                 ranked,
                 title_index,
                 person_index,
-                list(service._home_countries),
+                service.home_countries,
                 ks=tuple(args.ks),
             )
             current = VecMeta(
