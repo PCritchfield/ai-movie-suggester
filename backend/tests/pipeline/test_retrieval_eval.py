@@ -63,7 +63,7 @@ async def test_retrieval_eval(
 
     person_index = eval_search_service.person_index
     assert person_index is not None
-    home_countries = list(eval_search_service._home_countries)
+    home_countries = eval_search_service.home_countries
 
     outcome = evaluate(cases, ranked, title_index, person_index, home_countries, ks=_KS)
 

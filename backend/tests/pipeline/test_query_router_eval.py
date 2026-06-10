@@ -72,7 +72,7 @@ async def test_query_router_case(
     detected = _detect_path(
         case.query,
         person_index,
-        home_countries=list(eval_search_service._home_countries),
+        home_countries=eval_search_service.home_countries,
     )
     if case.expected_path != "rating":
         # Rating cases will detect as 'rating' even when the column is
