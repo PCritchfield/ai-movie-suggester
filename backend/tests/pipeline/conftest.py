@@ -61,8 +61,10 @@ EMBED_MODEL = "nomic-embed-text"
 CHAT_MODEL = "llama3.1:8b"
 REQUIRED_MODELS = [EMBED_MODEL, CHAT_MODEL]
 
-# Safety cap for embedding loop — prevent infinite loops
-_MAX_EMBED_CYCLES = 20
+# Safety cap for embedding loop — prevent infinite loops. Sized for the
+# Spec 26 ~200-item corpus (≈40 cycles at batch size 5) with headroom; raise
+# if the corpus grows further.
+_MAX_EMBED_CYCLES = 100
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +229,12 @@ async def embedded_library(
             settings=settings,
             sync_event=sync_event,
         )
+
+        # Stamp the template version into _vec_meta (production does this in the
+        # worker's run loop; process_cycle alone skips it). Without it the
+        # Spec 26 eval baseline records a null template version and can never
+        # be selected for gating.
+        await worker.check_template_version()
 
         for cycle in range(_MAX_EMBED_CYCLES):
             pending = await pipeline_library_store.count_pending_embeddings()

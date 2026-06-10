@@ -281,6 +281,28 @@ async def populated_library(
     base = jellyfin.url
     headers = _auth_headers(admin_auth_token)
 
+    # Force NFO-only metadata so library scans are DETERMINISTIC. Without this,
+    # Jellyfin's online metadata providers race the local NFO read and the same
+    # folder can resolve to a different title across scans — the confirmed root
+    # cause of intermittent pipeline-test failures (e.g. 'Zodiac' resolved 4/5
+    # fresh scans, vanished 1/5, while sync mirrored Jellyfin exactly each time).
+    nfo_type_options = [
+        {
+            "Type": item_type,
+            "MetadataFetchers": ["Nfo"],
+            "MetadataFetcherOrder": ["Nfo"],
+            "ImageFetchers": [],
+            "ImageFetcherOrder": [],
+        }
+        for item_type in ("Movie", "Series")
+    ]
+    library_options = {
+        "EnableInternetProviders": False,
+        "MetadataCountryCode": "US",
+        "PreferredMetadataLanguage": "en",
+        "TypeOptions": nfo_type_options,
+    }
+
     async with httpx.AsyncClient(timeout=_SCAN_POLL_TIMEOUT + 30) as client:
         # Check existing libraries
         resp = await client.get(f"{base}/Library/VirtualFolders", headers=headers)
@@ -299,6 +321,7 @@ async def populated_library(
                     "refreshLibrary": "false",
                     "paths": "/media/movies",
                 },
+                json={"LibraryOptions": library_options},
                 headers=headers,
             )
             if resp.status_code == 400:
@@ -325,6 +348,7 @@ async def populated_library(
                     "refreshLibrary": "false",
                     "paths": "/media/shows",
                 },
+                json={"LibraryOptions": library_options},
                 headers=headers,
             )
             if resp.status_code not in (200, 204):

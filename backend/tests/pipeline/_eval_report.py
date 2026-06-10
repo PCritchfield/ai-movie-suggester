@@ -88,8 +88,16 @@ def evaluate(
     """
     inputs: list[QueryEvalInput] = []
     relevant_by_query: dict[str, set[str]] = {}
+    unresolved: list[str] = []
     for case in cases:
-        relevant = set(case.resolve_relevant_ids(title_index))
+        try:
+            relevant = set(case.resolve_relevant_ids(title_index))
+        except ValueError as exc:
+            # Collect every unresolved title so one run reports the full picture
+            # (not just the first) — distinguishes a single typo from a corpus/
+            # sync membership problem.
+            unresolved.append(str(exc))
+            relevant = set()
         relevant_by_query[case.query] = relevant
         inputs.append(
             QueryEvalInput(
@@ -98,6 +106,13 @@ def evaluate(
                 ranked_ids=list(ranked_ids_by_query.get(case.query, [])),
             )
         )
+    if unresolved:
+        joined = "\n  - ".join(unresolved)
+        msg = (
+            f"{len(unresolved)} golden title(s) did not resolve against the "
+            f"corpus ({len(title_index)} distinct titles):\n  - {joined}"
+        )
+        raise ValueError(msg)
 
     result = compute_metrics(inputs, ks=tuple(ks))
     top_k = max(ks)
