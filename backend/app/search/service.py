@@ -81,6 +81,15 @@ class SearchService:
         """
         return self._person_index
 
+    @property
+    def home_countries(self) -> list[str]:
+        """Read-only copy of configured foreign-film home-country ISO codes.
+
+        Mirrors ``person_index``: exposed for tests and eval harnesses
+        without reaching into private state.
+        """
+        return list(self._home_countries)
+
     async def search(
         self,
         query: str,
