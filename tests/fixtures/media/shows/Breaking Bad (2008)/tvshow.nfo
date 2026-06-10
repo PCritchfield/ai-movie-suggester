@@ -2,9 +2,9 @@
 <tvshow>
   <title>Breaking Bad</title>
   <year>2008</year>
-  <plot>A high school chemistry teacher diagnosed with terminal lung cancer turns to manufacturing methamphetamine with a former student to secure his family's financial future. As his drug empire grows, he transforms from a mild-mannered educator into a ruthless criminal mastermind, leaving a trail of destruction in his wake.</plot>
-  <genre>Drama</genre>
+  <plot>A mild-mannered high school chemistry teacher diagnosed with cancer turns to manufacturing methamphetamine to secure his family's future, descending step by step into a ruthless criminal empire.</plot>
   <genre>Crime</genre>
+  <genre>Drama</genre>
   <genre>Thriller</genre>
   <actor>
     <name>Bryan Cranston</name>
@@ -14,15 +14,8 @@
     <name>Aaron Paul</name>
     <role>Jesse Pinkman</role>
   </actor>
-  <actor>
-    <name>Anna Gunn</name>
-    <role>Skyler White</role>
-  </actor>
-  <actor>
-    <name>Dean Norris</name>
-    <role>Hank Schrader</role>
-  </actor>
   <studio>AMC</studio>
   <rating>9.5</rating>
   <status>Ended</status>
+  <country>United States of America</country>
 </tvshow>

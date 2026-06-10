@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Distant Hollow</title>
+  <year>1990</year>
+  <plot>In this thriller feature, a tightly wound thriller following a night-shift worker who stumbles onto something they cannot unsee. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Thriller</genre>
+  <genre>Adventure</genre>
+  <director>Elena Vasquez</director>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Freya Nilsson</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Kenji Sato</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Albion Film Company</studio>
+  <rating>5.1</rating>
+  <runtime>126</runtime>
+  <country>United Kingdom</country>
+</movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Forgotten Meridian</title>
+  <year>2021</year>
+  <plot>In this documentary feature, an intimate documentary portrait of a lighthouse keeper haunted by a voice in the fog. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Documentary</genre>
+  <genre>Sci-Fi</genre>
+  <director>Rafael Santos</director>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Aria Lindqvist</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cine Azteca</studio>
+  <rating>8.2</rating>
+  <runtime>93</runtime>
+  <country>Mexico</country>
+</movie>

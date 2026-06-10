@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>E.T. the Extra-Terrestrial</title>
+  <year>1982</year>
+  <plot>A lonely suburban boy befriends a gentle alien stranded on Earth and helps it evade the authorities while building a contraption to phone home and reunite with its own kind.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Adventure</genre>
+  <genre>Family</genre>
+  <director>Steven Spielberg</director>
+  <actor>
+    <name>Henry Thomas</name>
+    <role>Elliott</role>
+  </actor>
+  <actor>
+    <name>Drew Barrymore</name>
+    <role>Gertie</role>
+  </actor>
+  <actor>
+    <name>Dee Wallace</name>
+    <role>Mary</role>
+  </actor>
+  <studio>Universal Pictures</studio>
+  <rating>7.9</rating>
+  <runtime>115</runtime>
+  <country>United States of America</country>
+</movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Pale Meridian</title>
+  <year>2007</year>
+  <plot>In this fantasy feature, a richly imagined fantasy where a stranded traveller relying on the kindness of unlikely allies. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Fantasy</genre>
+  <genre>Comedy</genre>
+  <director>Nadia Petrova</director>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Estudios Mediterraneo</studio>
+  <rating>5.6</rating>
+  <runtime>151</runtime>
+  <country>Spain</country>
+</movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Last Saffron</title>
+  <year>2012</year>
+  <plot>In this drama feature, a quiet, character-driven story of a small mountain town and the secret it has kept for generations. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Drama</genre>
+  <genre>Horror</genre>
+  <director>Elena Vasquez</director>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Sofia Castellano</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Beacon Hill Pictures</studio>
+  <rating>5.1</rating>
+  <runtime>96</runtime>
+  <country>United States of America</country>
+</movie>

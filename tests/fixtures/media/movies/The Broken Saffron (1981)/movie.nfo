@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Broken Saffron</title>
+  <year>1981</year>
+  <plot>In this sci-fi feature, a speculative science-fiction tale of a touring musician chasing one last shot at redemption. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Mystery</genre>
+  <director>Liam O'Sullivan</director>
+  <actor>
+    <name>Kenji Sato</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Priya Nair</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Aria Lindqvist</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Lumiere Productions</studio>
+  <rating>5.5</rating>
+  <runtime>129</runtime>
+  <country>France</country>
+</movie>

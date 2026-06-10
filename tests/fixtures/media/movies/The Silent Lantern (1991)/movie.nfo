@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Silent Lantern</title>
+  <year>1991</year>
+  <plot>In this comedy feature, a warm, offbeat comedy about two estranged siblings forced to share a crumbling family estate. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Comedy</genre>
+  <genre>Romance</genre>
+  <director>Liam O'Sullivan</director>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cascade Studios</studio>
+  <rating>6.0</rating>
+  <runtime>119</runtime>
+  <country>United States of America</country>
+</movie>

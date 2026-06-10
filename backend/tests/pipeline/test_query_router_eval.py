@@ -17,71 +17,16 @@ and is skipped automatically when Ollama or Jellyfin aren't reachable.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
 
-import httpx
 import pytest
-import pytest_asyncio
 
-from app.ollama.chat_client import OllamaChatClient
-from app.ollama.client import OllamaEmbeddingClient
 from app.search.intent import detect_intent
-from app.search.person_index import PersonIndex
-from app.search.rewrite_cache import RewriteCache
-from app.search.rewriter import QueryRewriter
-from app.search.service import SearchService
 from tests.pipeline._router_eval_loader import QueryRouterCase, load_cases
-from tests.pipeline.conftest import CHAT_MODEL, EMBED_MODEL, OLLAMA_HOST
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
-
     from app.library.store import LibraryStore
-    from app.vectors.repository import SqliteVecRepository
-
-
-@pytest_asyncio.fixture
-async def query_router_service(
-    embedded_library: SqliteVecRepository,
-    pipeline_library_store: LibraryStore,
-) -> AsyncGenerator[SearchService, None]:
-    """Build a SearchService wired against live Ollama + the seeded library."""
-    timeout = httpx.Timeout(connect=5.0, read=300.0, write=10.0, pool=5.0)
-    async with httpx.AsyncClient(timeout=timeout) as http:
-        embed_client = OllamaEmbeddingClient(
-            base_url=OLLAMA_HOST,
-            http_client=http,
-            embed_model=EMBED_MODEL,
-        )
-        chat_client = OllamaChatClient(
-            base_url=OLLAMA_HOST,
-            http_client=http,
-            chat_model=CHAT_MODEL,
-        )
-        person_index = PersonIndex(
-            names=await pipeline_library_store.get_all_people_names()
-        )
-        cache = RewriteCache(max_entries=128, ttl_seconds=3600)
-        rewriter = QueryRewriter(
-            chat_client=chat_client,
-            cache=cache,
-            timeout_seconds=10.0,
-            max_output_chars=200,
-        )
-        # Permission service is bypassed under live test by passing a
-        # filter-everything-through stub.
-        permissions = AsyncMock()
-        permissions.filter_permitted.side_effect = lambda *args, **_kw: args[2]
-
-        service = SearchService(
-            ollama_client=embed_client,
-            vec_repo=embedded_library,
-            permission_service=permissions,
-            library_store=pipeline_library_store,
-            person_index=person_index,
-            rewriter=rewriter,
-        )
-        yield service
+    from app.search.person_index import PersonIndex
+    from app.search.service import SearchService
 
 
 def _detect_path(
@@ -119,15 +64,15 @@ def _detect_path(
 )
 async def test_query_router_case(
     case: QueryRouterCase,
-    query_router_service: SearchService,
+    eval_search_service: SearchService,
     pipeline_library_store: LibraryStore,
 ) -> None:
-    person_index = query_router_service.person_index
+    person_index = eval_search_service.person_index
     assert person_index is not None
     detected = _detect_path(
         case.query,
         person_index,
-        home_countries=list(query_router_service.home_countries),
+        home_countries=eval_search_service.home_countries,
     )
     if case.expected_path != "rating":
         # Rating cases will detect as 'rating' even when the column is
@@ -138,7 +83,7 @@ async def test_query_router_case(
             f"expected={case.expected_path}"
         )
 
-    response = await query_router_service.search(
+    response = await eval_search_service.search(
         case.query, limit=10, user_id="eval", token="eval-token"
     )
     titles = [r.title for r in response.results]

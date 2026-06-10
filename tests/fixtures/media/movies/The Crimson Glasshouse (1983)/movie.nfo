@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Crimson Glasshouse</title>
+  <year>1983</year>
+  <plot>In this romance feature, a bittersweet romance between a retired detective drawn back for one final, personal case. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Romance</genre>
+  <genre>Fantasy</genre>
+  <director>Hiroshi Tanaka</director>
+  <actor>
+    <name>Caleb Mercer</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Hangang Studios</studio>
+  <rating>8.4</rating>
+  <runtime>127</runtime>
+  <country>Korea, Republic of</country>
+</movie>

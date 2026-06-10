@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Endless Glasshouse</title>
+  <year>2004</year>
+  <plot>In this crime feature, a gritty crime saga tracing a young apprentice who discovers their mentor's hidden past. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Crime</genre>
+  <genre>Drama</genre>
+  <director>Margot Lefevre</director>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Sofia Castellano</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cinema Aurora</studio>
+  <rating>5.3</rating>
+  <runtime>160</runtime>
+  <country>Italy</country>
+</movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Distant Tideline</title>
+  <year>2022</year>
+  <plot>In this thriller feature, a tightly wound thriller following a night-shift worker who stumbles onto something they cannot unsee. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Thriller</genre>
+  <genre>Adventure</genre>
+  <director>Klaus Bergmann</director>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Freya Nilsson</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Albion Film Company</studio>
+  <rating>6.7</rating>
+  <runtime>98</runtime>
+  <country>United Kingdom</country>
+</movie>

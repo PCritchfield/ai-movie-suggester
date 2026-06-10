@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Pale Cinder</title>
+  <year>1975</year>
+  <plot>In this fantasy feature, a richly imagined fantasy where a stranded traveller relying on the kindness of unlikely allies. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Fantasy</genre>
+  <genre>Comedy</genre>
+  <director>Liam O'Sullivan</director>
+  <actor>
+    <name>Sofia Castellano</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Estudios Mediterraneo</studio>
+  <rating>7.5</rating>
+  <runtime>99</runtime>
+  <country>Spain</country>
+</movie>

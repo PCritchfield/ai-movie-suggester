@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Broken Hollow</title>
+  <year>1997</year>
+  <plot>In this sci-fi feature, a speculative science-fiction tale of a touring musician chasing one last shot at redemption. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Mystery</genre>
+  <director>Hiroshi Tanaka</director>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Lucia Romano</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Lumiere Productions</studio>
+  <rating>6.4</rating>
+  <runtime>137</runtime>
+  <country>France</country>
+</movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Golden Tideline</title>
+  <year>1984</year>
+  <plot>In this horror feature, a slow-burning horror story about a coastal community bracing for a storm that never quite arrives. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Horror</genre>
+  <genre>Crime</genre>
+  <director>Margot Lefevre</director>
+  <actor>
+    <name>Priya Nair</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Caleb Mercer</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Henry Whitfield</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Sakura Eiga</studio>
+  <rating>5.8</rating>
+  <runtime>120</runtime>
+  <country>Japan</country>
+</movie>

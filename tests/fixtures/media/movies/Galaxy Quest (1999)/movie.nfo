@@ -2,9 +2,10 @@
 <movie>
   <title>Galaxy Quest</title>
   <year>1999</year>
-  <plot>The washed-up cast of a cheesy 1980s sci-fi TV show are abducted by real aliens who mistook their episodes for historical documents. Now they must fumble their way through an actual interstellar war, discovering that the roles they played on television might be the only thing that can save an alien civilization.</plot>
-  <genre>Comedy</genre>
+  <plot>The washed-up cast of a cancelled space-opera TV series is abducted by naive aliens who believe their broadcasts are real, forcing the actors to become the heroes they only ever played.</plot>
   <genre>Sci-Fi</genre>
+  <genre>Comedy</genre>
+  <genre>Adventure</genre>
   <director>Dean Parisot</director>
   <actor>
     <name>Tim Allen</name>
@@ -21,4 +22,5 @@
   <studio>DreamWorks Pictures</studio>
   <rating>7.4</rating>
   <runtime>102</runtime>
+  <country>United States of America</country>
 </movie>

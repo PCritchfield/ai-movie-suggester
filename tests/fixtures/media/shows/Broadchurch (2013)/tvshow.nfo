@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Broadchurch</title>
+  <year>2013</year>
+  <plot>The murder of a young boy shatters a close-knit English seaside town as two mismatched detectives investigate, exposing the secrets and fractures hidden beneath the community's grief.</plot>
+  <genre>Crime</genre>
+  <genre>Drama</genre>
+  <genre>Mystery</genre>
+  <actor>
+    <name>David Tennant</name>
+    <role>DI Alec Hardy</role>
+  </actor>
+  <actor>
+    <name>Olivia Colman</name>
+    <role>DS Ellie Miller</role>
+  </actor>
+  <studio>ITV</studio>
+  <rating>8.4</rating>
+  <status>Ended</status>
+  <country>United Kingdom</country>
+</tvshow>

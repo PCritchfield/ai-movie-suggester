@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Endless Lantern</title>
+  <year>1988</year>
+  <plot>In this crime feature, a gritty crime saga tracing a young apprentice who discovers their mentor's hidden past. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Crime</genre>
+  <genre>Drama</genre>
+  <director>Elena Vasquez</director>
+  <actor>
+    <name>Aria Lindqvist</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Henry Whitfield</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cinema Aurora</studio>
+  <rating>8.1</rating>
+  <runtime>116</runtime>
+  <country>Italy</country>
+</movie>

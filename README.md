@@ -111,7 +111,7 @@ make test-integration-full   # start Jellyfin, run tests, teardown
 
 ### Pipeline Validation
 
-Validates the full RAG pipeline (embed → search → chat) with real Ollama inference against 35 fixture items. Requires Ollama running locally — models are auto-pulled on first run (~4 GB).
+Validates the full RAG pipeline (embed → search → chat) with real Ollama inference against ~200 fixture items (generated from the eval golden set by `scripts/generate_corpus.py`). Requires Ollama running locally — models are auto-pulled on first run (~4 GB).
 
 ```bash
 # One-shot: checks Ollama, starts Jellyfin, runs tests, tears down
@@ -123,6 +123,35 @@ make pipeline-up             # start Jellyfin + check Ollama
 make validate-pipeline       # run pipeline tests
 make pipeline-down           # tear down Jellyfin
 ```
+
+### Retrieval Evaluation (Spec 26)
+
+Measures retrieval relevance with standard IR metrics (precision@k, recall@k, MRR, NDCG@k at k ∈ {5, 10, 20}) against a curated golden query set, and flags regressions against a committed baseline. This is the measurement foundation for Epic 5 quality work.
+
+```bash
+# Run the golden set through the live pipeline, print per-query + aggregate
+# scores, and gate against the versioned baseline:
+make eval-retrieval
+
+# Or the standalone script against a live library.db:
+uv run --directory backend python ../scripts/eval_retrieval.py --help
+```
+
+The report shows, per query, its intent, the metrics, whether it is **gated** or **UNGATED**, and any missed relevant titles, followed by aggregate scores and the gate verdict.
+
+**Regression gating** is a *warning* by default. Set `EVAL_STRICT=1` to fail on a metric dropping more than the threshold (default 0.05) below the matching-version baseline.
+
+The committed baseline (`backend/tests/fixtures/eval_baseline.json`) reflects the **fixture corpus** that `make eval-retrieval` scores, so seed/re-bless it *through the harness*:
+
+```bash
+EVAL_UPDATE_BASELINE=1 make eval-retrieval   # appends a versioned record from this run
+```
+
+It **appends** a record keyed by embedding model + template version, so prior numbers are never destroyed. (`scripts/eval_retrieval.py --strict --update-baseline` is for ad-hoc runs against a real `library.db` — a *different* corpus; don't point it at the committed baseline.)
+
+**Cadence:** run `make eval-retrieval` before merging any change that touches embeddings, routing, reranking, or prompt templates.
+
+**Determinism note (Spec 26 Task 5.4):** the retrieval pipeline is deterministic except the paraphrastic-query LLM rewrite. Verified in `app/search/service.py::_route_query`: the rewriter (`llama3.1:8b`) runs **only** when the detected intent is paraphrastic *and* carries no structured signal (it returns before the rewriter on any genre/person/year/country/rating signal). The harness therefore computes, per case, whether it would hit the rewrite path (using the pure `detect_intent`) and **excludes exactly those cases from the gate** — they are still reported, just not gated, so the gate cannot flake.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for system design and data flow diagrams.
 

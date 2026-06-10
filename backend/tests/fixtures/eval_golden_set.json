@@ -1,0 +1,142 @@
+[
+  {
+    "query": "a sci-fi comedy",
+    "intent": "genre",
+    "relevant_titles": ["Galaxy Quest", "Mars Attacks!", "Shaun of the Dead"],
+    "distractors": ["Alien", "Blade Runner", "The Shining"],
+    "notes": "Genre blend — comedy must win over straight sci-fi/horror neighbours."
+  },
+  {
+    "query": "a scary horror film",
+    "intent": "genre",
+    "relevant_titles": ["The Shining", "Alien", "Get Out", "A Quiet Place"],
+    "distractors": ["Galaxy Quest", "Die Hard", "The Goonies"],
+    "notes": "Pure horror genre."
+  },
+  {
+    "query": "a tense crime thriller",
+    "intent": "genre",
+    "relevant_titles": ["Se7en", "Zodiac", "Sicario"],
+    "distractors": ["The Goonies", "Galaxy Quest", "Spirited Away"],
+    "notes": "Crime/thriller genre cluster."
+  },
+  {
+    "query": "a Ridley Scott film",
+    "intent": "person",
+    "relevant_titles": ["Alien", "Blade Runner", "The Martian", "Gladiator"],
+    "distractors": ["Ghostbusters", "The Goonies", "Jurassic Park"],
+    "notes": "Director filter — the sharpest regression case; without it cosine drifts to other sci-fi."
+  },
+  {
+    "query": "movies directed by Steven Spielberg",
+    "intent": "person",
+    "relevant_titles": ["Jurassic Park", "Raiders of the Lost Ark", "Jaws", "E.T. the Extra-Terrestrial"],
+    "distractors": ["The Shining", "Alien"],
+    "notes": "Director filter, multi-token name."
+  },
+  {
+    "query": "films starring Bruce Willis",
+    "intent": "person",
+    "relevant_titles": ["Die Hard", "Pulp Fiction", "The Sixth Sense"],
+    "distractors": ["Alien", "Galaxy Quest"],
+    "notes": "Actor filter."
+  },
+  {
+    "query": "an 80s adventure",
+    "intent": "year",
+    "relevant_titles": ["The Goonies", "Raiders of the Lost Ark", "Ghostbusters"],
+    "distractors": ["Mad Max Fury Road", "Arrival", "Interstellar"],
+    "notes": "Decade + genre; recent adventure films must not drift in."
+  },
+  {
+    "query": "a film from the 1990s",
+    "intent": "year",
+    "relevant_titles": ["Se7en", "Galaxy Quest", "Jurassic Park", "The Matrix", "The Shawshank Redemption"],
+    "distractors": ["Alien", "Interstellar", "Arrival"],
+    "notes": "Single-decade year filter."
+  },
+  {
+    "query": "recent sci-fi from the 2010s",
+    "intent": "year",
+    "relevant_titles": ["Arrival", "Interstellar", "Mad Max Fury Road"],
+    "distractors": ["Blade Runner", "Alien", "The Matrix"],
+    "notes": "Recent-decade era detection; classic sci-fi excluded."
+  },
+  {
+    "query": "Japanese animation",
+    "intent": "country",
+    "relevant_titles": ["Spirited Away", "My Neighbor Totoro", "Princess Mononoke"],
+    "distractors": ["Galaxy Quest", "Shrek", "Jurassic Park"],
+    "notes": "Country + medium; Western animation are the distractors."
+  },
+  {
+    "query": "a British detective series",
+    "intent": "country",
+    "relevant_titles": ["Midsomer Murders", "Death in Paradise", "Broadchurch"],
+    "distractors": ["Stargate SG-1", "Battlestar Galactica"],
+    "notes": "Country (GB) + genre on TV shows."
+  },
+  {
+    "query": "a foreign-language drama",
+    "intent": "country",
+    "relevant_titles": ["Spirited Away", "Parasite", "Amelie"],
+    "distractors": ["Good Will Hunting", "The Shawshank Redemption"],
+    "notes": "Non-US/GB origin; English-language dramas are the distractors."
+  },
+  {
+    "query": "something cozy for a rainy night",
+    "intent": "paraphrastic",
+    "relevant_titles": ["Midsomer Murders", "Death in Paradise", "Good Will Hunting"],
+    "distractors": ["Alien", "Se7en", "Sicario"],
+    "notes": "Paraphrastic mood query — REPORTED BUT UNGATED (LLM rewrite is non-deterministic)."
+  },
+  {
+    "query": "I want something uplifting and hopeful",
+    "intent": "paraphrastic",
+    "relevant_titles": ["Good Will Hunting", "The Shawshank Redemption", "Moonlight"],
+    "distractors": ["Se7en", "The Shining", "Alien"],
+    "notes": "Paraphrastic mood query — ungated."
+  },
+  {
+    "query": "edge-of-your-seat tension",
+    "intent": "paraphrastic",
+    "relevant_titles": ["A Quiet Place", "Sicario", "Se7en"],
+    "distractors": ["Galaxy Quest", "The Goonies", "Spirited Away"],
+    "notes": "Paraphrastic mood query — ungated."
+  },
+  {
+    "query": "something like Alien but funny",
+    "intent": "semantic",
+    "relevant_titles": ["Galaxy Quest", "Mars Attacks!", "Shaun of the Dead"],
+    "distractors": ["Alien", "Blade Runner"],
+    "notes": "Folded from test_search_relevance.py::test_search_alien_but_funny."
+  },
+  {
+    "query": "space opera TV show",
+    "intent": "semantic",
+    "relevant_titles": ["Babylon 5", "Stargate SG-1", "Battlestar Galactica"],
+    "distractors": ["Death in Paradise", "Midsomer Murders"],
+    "notes": "Folded from test_search_relevance.py::test_search_space_opera."
+  },
+  {
+    "query": "cozy murder mystery",
+    "intent": "semantic",
+    "relevant_titles": ["Midsomer Murders", "Death in Paradise", "Knives Out"],
+    "distractors": ["Se7en", "Zodiac", "Sicario"],
+    "notes": "Folded from test_search_relevance.py::test_search_cozy_mystery (Knives Out added for >=3)."
+  },
+  {
+    "query": "a mind-bending puzzle film",
+    "intent": "semantic",
+    "relevant_titles": ["Interstellar", "Arrival", "The Matrix"],
+    "distractors": ["The Goonies", "Die Hard", "Ghostbusters"],
+    "notes": "Semantic concept query (no structured filter)."
+  },
+  {
+    "query": "a feel-good underdog story",
+    "intent": "semantic",
+    "relevant_titles": ["Good Will Hunting", "The Shawshank Redemption", "Moonlight"],
+    "distractors": ["Alien", "Se7en"],
+    "notes": "Semantic concept query."
+  }
+]

@@ -2,8 +2,9 @@
 <movie>
   <title>Die Hard</title>
   <year>1988</year>
-  <plot>An off-duty New York cop visits his estranged wife at her company's Los Angeles Christmas party, only for the building to be seized by sophisticated European thieves posing as terrorists. Barefoot, outgunned, and wisecracking, he wages a one-man guerrilla war through elevator shafts and ventilation ducts in the film that redefined the action genre.</plot>
+  <plot>An off-duty New York cop is caught in a Los Angeles skyscraper when heavily armed terrorists seize the building, forcing him into a one-man guerrilla war to save the hostages.</plot>
   <genre>Action</genre>
+  <genre>Thriller</genre>
   <director>John McTiernan</director>
   <actor>
     <name>Bruce Willis</name>
@@ -15,9 +16,10 @@
   </actor>
   <actor>
     <name>Bonnie Bedelia</name>
-    <role>Holly Gennaro McClane</role>
+    <role>Holly Gennaro</role>
   </actor>
   <studio>20th Century Fox</studio>
   <rating>8.2</rating>
   <runtime>132</runtime>
+  <country>United States of America</country>
 </movie>

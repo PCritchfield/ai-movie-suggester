@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Broken Glasshouse</title>
+  <year>2021</year>
+  <plot>In this sci-fi feature, a speculative science-fiction tale of a touring musician chasing one last shot at redemption. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Mystery</genre>
+  <director>Daniel Okonkwo</director>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Lucia Romano</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Lumiere Productions</studio>
+  <rating>5.8</rating>
+  <runtime>105</runtime>
+  <country>France</country>
+</movie>

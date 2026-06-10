@@ -27,6 +27,10 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.4.0",
     "pyright>=1.1.0",
+    # IR-metrics engine for the retrieval eval harness (Spec 26). Dev/test-only —
+    # NEVER import under backend/app/. Used to cross-check the hand-rolled metric
+    # implementation in tests/pipeline/_eval_scoring.py.
+    "ranx>=0.3.0",
 ]
 
 [tool.ruff]

@@ -2,9 +2,9 @@
 <movie>
   <title>Blade Runner</title>
   <year>1982</year>
-  <plot>In a dystopian 2019 Los Angeles drenched in perpetual rain and neon, a weary detective hunts down rogue bioengineered replicants who have returned to Earth seeking more life from their creator. A brooding meditation on memory, identity, and what it means to be human, set against one of cinema's most iconic cityscapes.</plot>
+  <plot>A burnt-out detective is pulled back into service to hunt down rogue bioengineered replicants in a rain-soaked future Los Angeles, questioning what it means to be human.</plot>
   <genre>Sci-Fi</genre>
-  <genre>Noir</genre>
+  <genre>Thriller</genre>
   <director>Ridley Scott</director>
   <actor>
     <name>Harrison Ford</name>
@@ -21,4 +21,5 @@
   <studio>Warner Bros.</studio>
   <rating>8.1</rating>
   <runtime>117</runtime>
+  <country>United States of America</country>
 </movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Crimson Cinder</title>
+  <year>1999</year>
+  <plot>In this romance feature, a bittersweet romance between a retired detective drawn back for one final, personal case. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Romance</genre>
+  <genre>Fantasy</genre>
+  <director>Daniel Okonkwo</director>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Hangang Studios</studio>
+  <rating>5.8</rating>
+  <runtime>135</runtime>
+  <country>Korea, Republic of</country>
+</movie>

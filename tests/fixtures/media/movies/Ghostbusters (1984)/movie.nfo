@@ -2,23 +2,25 @@
 <movie>
   <title>Ghostbusters</title>
   <year>1984</year>
-  <plot>Three eccentric parapsychologists lose their university funding and start a ghost-catching business in New York City, only to stumble onto an ancient Sumerian deity threatening to unleash apocalyptic destruction. Armed with unlicensed nuclear accelerators and unshakable wisecracks, they become the city's last line of paranormal defense.</plot>
+  <plot>Three eccentric parapsychologists start a ghost-catching business in New York City just as a surge of supernatural activity threatens to unleash an ancient destructive deity on Manhattan.</plot>
   <genre>Comedy</genre>
   <genre>Sci-Fi</genre>
+  <genre>Fantasy</genre>
   <director>Ivan Reitman</director>
   <actor>
     <name>Bill Murray</name>
-    <role>Peter Venkman</role>
+    <role>Dr. Peter Venkman</role>
   </actor>
   <actor>
     <name>Dan Aykroyd</name>
-    <role>Ray Stantz</role>
+    <role>Dr. Raymond Stantz</role>
   </actor>
   <actor>
-    <name>Harold Ramis</name>
-    <role>Egon Spengler</role>
+    <name>Sigourney Weaver</name>
+    <role>Dana Barrett</role>
   </actor>
   <studio>Columbia Pictures</studio>
   <rating>7.8</rating>
   <runtime>105</runtime>
+  <country>United States of America</country>
 </movie>

@@ -2,7 +2,8 @@
 <movie>
   <title>Sicario</title>
   <year>2015</year>
-  <plot>An idealistic FBI agent is recruited to a government task force targeting a Mexican drug cartel, only to discover the operation's true methods are far more brutal and legally murky than she was told. Tense border-crossing set pieces and a suffocating atmosphere of moral compromise reveal a drug war where the line between law and lawlessness has been deliberately erased.</plot>
+  <plot>An idealistic FBI agent is recruited into a shadowy task force operating along the US-Mexico border, where the rules of engagement dissolve into moral ambiguity and brutal cartel warfare.</plot>
+  <genre>Crime</genre>
   <genre>Thriller</genre>
   <genre>Action</genre>
   <director>Denis Villeneuve</director>
@@ -21,4 +22,5 @@
   <studio>Lionsgate</studio>
   <rating>7.6</rating>
   <runtime>121</runtime>
+  <country>United States of America</country>
 </movie>

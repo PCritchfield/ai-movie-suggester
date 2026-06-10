@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Endless Vesper</title>
+  <year>1992</year>
+  <plot>In this crime feature, a gritty crime saga tracing a young apprentice who discovers their mentor's hidden past. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Crime</genre>
+  <genre>Drama</genre>
+  <director>Elena Vasquez</director>
+  <actor>
+    <name>Priya Nair</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Caleb Mercer</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Henry Whitfield</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cinema Aurora</studio>
+  <rating>5.6</rating>
+  <runtime>136</runtime>
+  <country>Italy</country>
+</movie>

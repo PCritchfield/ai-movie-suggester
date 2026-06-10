@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Pale Threshold</title>
+  <year>1979</year>
+  <plot>In this fantasy feature, a richly imagined fantasy where a stranded traveller relying on the kindness of unlikely allies. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Fantasy</genre>
+  <genre>Comedy</genre>
+  <director>Liam O'Sullivan</director>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Estudios Mediterraneo</studio>
+  <rating>5.0</rating>
+  <runtime>119</runtime>
+  <country>Spain</country>
+</movie>

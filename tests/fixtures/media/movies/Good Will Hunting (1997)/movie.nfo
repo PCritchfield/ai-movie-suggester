@@ -2,7 +2,7 @@
 <movie>
   <title>Good Will Hunting</title>
   <year>1997</year>
-  <plot>A self-taught mathematical genius working as a janitor at MIT is discovered by a professor but resists every attempt to unlock his potential, hiding behind a tough South Boston exterior. Only a grieving therapist manages to break through his defenses, forcing him to confront the abuse and fear that keep him from the life he deserves.</plot>
+  <plot>A defiant young janitor with a genius for mathematics is drawn out of his self-destructive habits by a grieving therapist who helps him confront his past and embrace his potential.</plot>
   <genre>Drama</genre>
   <director>Gus Van Sant</director>
   <actor>
@@ -17,7 +17,8 @@
     <name>Ben Affleck</name>
     <role>Chuckie Sullivan</role>
   </actor>
-  <studio>Miramax Films</studio>
+  <studio>Miramax</studio>
   <rating>8.3</rating>
   <runtime>126</runtime>
+  <country>United States of America</country>
 </movie>
