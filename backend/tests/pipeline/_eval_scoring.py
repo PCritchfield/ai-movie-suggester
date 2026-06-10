@@ -163,6 +163,17 @@ def metric_names(ks: Iterable[int]) -> list[str]:
     return names
 
 
+def _synthesise_scores(ranked_ids: Sequence[str]) -> dict[str, float]:
+    """Map ranked ids to strictly descending scores (rank 1 → highest).
+
+    ranx ranks by score, so synthesising scores from rank order guarantees the
+    original retrieval order is honoured even if the upstream similarity scores
+    were equal or non-monotonic.
+    """
+    n = len(ranked_ids)
+    return {doc_id: float(n - index) for index, doc_id in enumerate(ranked_ids)}
+
+
 def to_qrels(golden: Mapping[str, set[str]]) -> Qrels:
     """Convert ``{query_id: relevant_id_set}`` into a binary ranx ``Qrels``.
 
@@ -191,10 +202,7 @@ def to_run(
     else:
         results = response_or_results
 
-    n = len(results)
-    scored: dict[str, float] = {
-        item.jellyfin_id: float(n - index) for index, item in enumerate(results)
-    }
+    scored = _synthesise_scores([item.jellyfin_id for item in results])
     return Run({query_id: scored})
 
 
@@ -215,12 +223,9 @@ def compute_metrics(
     }
     qrels = to_qrels(golden)
 
-    combined_run: dict[str, dict[str, float]] = {}
-    for item in per_query_inputs:
-        n = len(item.ranked_ids)
-        combined_run[item.query_id] = {
-            doc_id: float(n - index) for index, doc_id in enumerate(item.ranked_ids)
-        }
+    combined_run: dict[str, dict[str, float]] = {
+        item.query_id: _synthesise_scores(item.ranked_ids) for item in per_query_inputs
+    }
     run = Run(combined_run)
 
     # Per-query scores: evaluate once per metric with return_mean=False, which

@@ -147,7 +147,7 @@ def evaluate(
         cases=outcomes,
         full_mean=result.mean,
         gated_mean=mean_scores(gated_scores),
-        metrics=list(result.mean.keys()),
+        metrics=list(result.metrics),
     )
 
 
