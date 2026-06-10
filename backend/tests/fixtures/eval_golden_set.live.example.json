@@ -1,0 +1,23 @@
+[
+  {
+    "query": "a Ridley Scott film",
+    "intent": "person",
+    "relevant_titles": ["Alien", "Blade Runner", "The Martian"],
+    "distractors": ["Ghostbusters", "The Goonies"],
+    "notes": "SCHEMA EXAMPLE. Each object is one golden query (the answer key for one retrieval query). Fields: 'query' (the user text, required); 'intent' (required, one of: genre|person|year|country|paraphrastic|semantic); 'relevant_titles' (required, >=1 genuinely-correct titles — aim for >=3); 'distractors' (optional, plausible-but-wrong neighbours the corpus must also contain so ranking is actually tested); 'notes' (optional, free text). Titles are resolved to jellyfin_ids at load time via LibraryStore — each must match exactly one library item."
+  },
+  {
+    "query": "Japanese animation",
+    "intent": "country",
+    "relevant_titles": ["Spirited Away", "My Neighbor Totoro", "Princess Mononoke"],
+    "distractors": ["Galaxy Quest", "Shrek"],
+    "notes": "A 'country' intent example. Requires corpus NFOs to carry <country> metadata."
+  },
+  {
+    "query": "something cozy for a rainy night",
+    "intent": "paraphrastic",
+    "relevant_titles": ["Midsomer Murders", "Death in Paradise", "Good Will Hunting"],
+    "distractors": ["Alien", "Se7en"],
+    "notes": "A 'paraphrastic' example. These cases are REPORTED but EXCLUDED from the regression gate because the LLM rewrite step is non-deterministic."
+  }
+]

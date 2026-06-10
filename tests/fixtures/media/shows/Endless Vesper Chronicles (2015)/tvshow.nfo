@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Endless Vesper Chronicles</title>
+  <year>2015</year>
+  <plot>An episodic romance series, a bittersweet romance between a lighthouse keeper haunted by a voice in the fog. Each season deepens the mystery while the ensemble cast evolves.</plot>
+  <genre>Romance</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Kenji Sato</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Priya Nair</name>
+    <role>Co-Lead</role>
+  </actor>
+  <studio>Rheinland Films</studio>
+  <rating>8.0</rating>
+  <status>Ended</status>
+  <country>Germany</country>
+</tvshow>

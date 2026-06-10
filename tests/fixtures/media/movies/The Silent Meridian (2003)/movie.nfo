@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Silent Meridian</title>
+  <year>2003</year>
+  <plot>In this comedy feature, a warm, offbeat comedy about two estranged siblings forced to share a crumbling family estate. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Comedy</genre>
+  <genre>Romance</genre>
+  <director>Rafael Santos</director>
+  <actor>
+    <name>Caleb Mercer</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cascade Studios</studio>
+  <rating>5.7</rating>
+  <runtime>143</runtime>
+  <country>United States of America</country>
+</movie>

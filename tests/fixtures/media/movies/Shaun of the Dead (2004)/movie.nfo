@@ -2,9 +2,9 @@
 <movie>
   <title>Shaun of the Dead</title>
   <year>2004</year>
-  <plot>A directionless London electronics salesman is so absorbed in his failing relationship and pub routine that he barely notices the zombie apocalypse unfolding around him. Armed with a cricket bat and a plan to wait things out at his favorite pub, he stumbles through the undead hordes in a pitch-perfect blend of romantic comedy and gore.</plot>
-  <genre>Horror</genre>
+  <plot>A directionless London salesman tries to win back his girlfriend and reconcile with his mother while a zombie apocalypse erupts around them, retreating to the only safe place he knows: the pub.</plot>
   <genre>Comedy</genre>
+  <genre>Horror</genre>
   <director>Edgar Wright</director>
   <actor>
     <name>Simon Pegg</name>
@@ -19,7 +19,7 @@
     <role>Liz</role>
   </actor>
   <studio>Universal Pictures</studio>
-  <country>United Kingdom</country>
   <rating>7.9</rating>
   <runtime>99</runtime>
+  <country>United Kingdom</country>
 </movie>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Wandering Hollow</title>
+  <year>1994</year>
+  <plot>In this action feature, a high-octane action story pitting a town of misfits banding together against a faceless authority. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Action</genre>
+  <genre>Thriller</genre>
+  <director>Ava Marchetti</director>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Norrsken Film</studio>
+  <rating>5.0</rating>
+  <runtime>134</runtime>
+  <country>Sweden</country>
+</movie>

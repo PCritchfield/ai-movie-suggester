@@ -160,7 +160,7 @@ Rationale: Different access patterns (sessions are small/frequent; library is la
 - **Network**: Docker Compose maps backend port to `127.0.0.1:8000`. External access via existing reverse proxy (Caddy).
 - **Privacy**: All AI inference is local. Conversation history is in-memory only — never persisted to disk (PII constraint). No outbound calls to third-party metadata services — movie metadata comes from Jellyfin only.
 - **API hardening**: CORS restricted to frontend origin. `/docs` disabled in production. Rate limiting on login (5/min), chat (10/min), and search (10/min) endpoints. Security headers via middleware. Request validation errors return HTTP 422 (FastAPI/Pydantic convention), not 400.
-- **Prompt injection**: Soft mitigation via system prompt instructions plus structural separation — every candidate line carries a `[ID:<jellyfin_id>]` prefix and the framing constrains the model to "ONLY recommend movies from the following list of candidates." No hard sandboxing — Spec 25 (#238) shipped the soft-mitigation hardening (IDs in candidate context + strengthened system prompt + empty-result graceful path); Spec 26 (#239) tracks the structural fix via tool-calling / structured output.
+- **Prompt injection**: Soft mitigation via system prompt instructions plus structural separation — every candidate line carries a `[ID:<jellyfin_id>]` prefix and the framing constrains the model to "ONLY recommend movies from the following list of candidates." No hard sandboxing — Spec 25 (#238) shipped the soft-mitigation hardening (IDs in candidate context + strengthened system prompt + empty-result graceful path); Spec 27 (#239) tracks the structural fix via tool-calling / structured output.
 - **Service worker**: Cache-first for static shell only. No API response or image caching — cross-user data leakage risk on shared household devices.
 - **Credential distinction**: Two types of Jellyfin credentials are used, with different handling:
   - **User tokens** (per-session): Encrypted at rest in `sessions.db` using Fernet with HKDF-derived keys. Never persisted to objects, never logged. Request-scoped — passed as parameters, not stored on instances.
@@ -261,8 +261,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    I252["#252<br/>Eval Harness<br/>(foundation — measure first)"]
-    I239["#239<br/>Spec 26: Tool-Calling<br/>/ Structured Output"]
+    I252["#252<br/>Spec 26: Eval Harness<br/>(foundation — measure first)"]
+    I239["#239<br/>Spec 27: Tool-Calling<br/>/ Structured Output"]
     I253["#253<br/>Spike: Cross-Encoder<br/>Reranking"]
     I254["#254<br/>Spike: Hybrid Retrieval<br/>BM25 + Dense"]
     I255["#255<br/>Spike: Embedding Model<br/>/ Template Experiments"]

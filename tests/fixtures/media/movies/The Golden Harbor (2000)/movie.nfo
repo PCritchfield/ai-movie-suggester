@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Golden Harbor</title>
+  <year>2000</year>
+  <plot>In this horror feature, a slow-burning horror story about a coastal community bracing for a storm that never quite arrives. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Horror</genre>
+  <genre>Crime</genre>
+  <director>Klaus Bergmann</director>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Sofia Castellano</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Sakura Eiga</studio>
+  <rating>6.7</rating>
+  <runtime>128</runtime>
+  <country>Japan</country>
+</movie>

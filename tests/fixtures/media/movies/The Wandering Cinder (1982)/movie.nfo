@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Wandering Cinder</title>
+  <year>1982</year>
+  <plot>In this action feature, a high-octane action story pitting a town of misfits banding together against a faceless authority. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Action</genre>
+  <genre>Thriller</genre>
+  <director>Margot Lefevre</director>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Freya Nilsson</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Kenji Sato</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Norrsken Film</studio>
+  <rating>5.3</rating>
+  <runtime>110</runtime>
+  <country>Sweden</country>
+</movie>

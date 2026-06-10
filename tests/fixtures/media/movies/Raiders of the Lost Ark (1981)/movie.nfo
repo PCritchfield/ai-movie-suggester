@@ -2,9 +2,9 @@
 <movie>
   <title>Raiders of the Lost Ark</title>
   <year>1981</year>
-  <plot>A globe-trotting archaeologist races against Nazi agents to find the Ark of the Covenant before it can be weaponized as an instrument of unstoppable power. From the jungles of South America to the deserts of Egypt, Indiana Jones fights, quips, and improvises his way through relentless action set pieces that defined the adventure genre.</plot>
-  <genre>Adventure</genre>
+  <plot>A globe-trotting archaeologist races Nazi agents across deserts and temples to recover the fabled Ark of the Covenant before its power can be turned to evil.</plot>
   <genre>Action</genre>
+  <genre>Adventure</genre>
   <director>Steven Spielberg</director>
   <actor>
     <name>Harrison Ford</name>
@@ -16,9 +16,10 @@
   </actor>
   <actor>
     <name>Paul Freeman</name>
-    <role>Belloq</role>
+    <role>Rene Belloq</role>
   </actor>
   <studio>Paramount Pictures</studio>
   <rating>8.4</rating>
   <runtime>115</runtime>
+  <country>United States of America</country>
 </movie>

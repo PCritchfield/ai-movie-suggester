@@ -2,9 +2,10 @@
 <movie>
   <title>Jurassic Park</title>
   <year>1993</year>
-  <plot>A billionaire invites scientists to preview his theme park of cloned dinosaurs on a remote island, but a sabotaged security system unleashes the prehistoric predators on the guests. Spielberg's landmark blend of animatronic and CGI creatures delivers awe and terror in equal measure, anchored by Ian Malcolm's prophetic chaos theory warnings.</plot>
-  <genre>Adventure</genre>
+  <plot>On a remote island, a pioneering theme park populated by cloned dinosaurs descends into chaos when the security systems fail and the prehistoric predators break free.</plot>
   <genre>Sci-Fi</genre>
+  <genre>Adventure</genre>
+  <genre>Thriller</genre>
   <director>Steven Spielberg</director>
   <actor>
     <name>Sam Neill</name>
@@ -21,4 +22,5 @@
   <studio>Universal Pictures</studio>
   <rating>8.2</rating>
   <runtime>127</runtime>
+  <country>United States of America</country>
 </movie>

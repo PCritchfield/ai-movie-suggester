@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Crimson Harbor</title>
+  <year>2007</year>
+  <plot>In this romance feature, a bittersweet romance between a retired detective drawn back for one final, personal case. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Romance</genre>
+  <genre>Fantasy</genre>
+  <director>Liam O'Sullivan</director>
+  <actor>
+    <name>Henry Whitfield</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Hangang Studios</studio>
+  <rating>8.0</rating>
+  <runtime>139</runtime>
+  <country>Korea, Republic of</country>
+</movie>

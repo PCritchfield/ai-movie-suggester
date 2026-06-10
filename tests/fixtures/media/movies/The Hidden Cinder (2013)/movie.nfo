@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Hidden Cinder</title>
+  <year>2013</year>
+  <plot>In this mystery feature, a twisting mystery surrounding a translator caught between two worlds and two loyalties. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Mystery</genre>
+  <genre>Documentary</genre>
+  <director>Hiroshi Tanaka</director>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Aria Lindqvist</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Maple Frame Pictures</studio>
+  <rating>8.4</rating>
+  <runtime>157</runtime>
+  <country>Canada</country>
+</movie>

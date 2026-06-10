@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Golden Cinder Chronicles</title>
+  <year>1995</year>
+  <plot>An episodic comedy series, a warm, offbeat comedy about a translator caught between two worlds and two loyalties. Each season deepens the mystery while the ensemble cast evolves.</plot>
+  <genre>Comedy</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Freya Nilsson</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Lucia Romano</name>
+    <role>Co-Lead</role>
+  </actor>
+  <studio>Albion Film Company</studio>
+  <rating>7.2</rating>
+  <status>Ended</status>
+  <country>United Kingdom</country>
+</tvshow>

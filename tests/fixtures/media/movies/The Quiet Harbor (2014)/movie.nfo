@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Quiet Harbor</title>
+  <year>2014</year>
+  <plot>In this adventure feature, a sweeping adventure across a generation ship whose crew has forgotten where they came from. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Adventure</genre>
+  <genre>Action</genre>
+  <director>Margot Lefevre</director>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Rheinland Films</studio>
+  <rating>5.8</rating>
+  <runtime>150</runtime>
+  <country>Germany</country>
+</movie>

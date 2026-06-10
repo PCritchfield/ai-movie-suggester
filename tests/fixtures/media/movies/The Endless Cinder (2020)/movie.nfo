@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Endless Cinder</title>
+  <year>2020</year>
+  <plot>In this crime feature, a gritty crime saga tracing a young apprentice who discovers their mentor's hidden past. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Crime</genre>
+  <genre>Drama</genre>
+  <director>Klaus Bergmann</director>
+  <actor>
+    <name>Priya Nair</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Caleb Mercer</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Henry Whitfield</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cinema Aurora</studio>
+  <rating>6.2</rating>
+  <runtime>88</runtime>
+  <country>Italy</country>
+</movie>

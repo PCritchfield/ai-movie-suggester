@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Pale Threshold Chronicles</title>
+  <year>2020</year>
+  <plot>An episodic adventure series, a sweeping adventure across a small mountain town and the secret it has kept for generations. Each season deepens the mystery while the ensemble cast evolves.</plot>
+  <genre>Adventure</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Lucia Romano</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Sofia Castellano</name>
+    <role>Co-Lead</role>
+  </actor>
+  <studio>Maple Frame Pictures</studio>
+  <rating>6.7</rating>
+  <status>Ended</status>
+  <country>Canada</country>
+</tvshow>

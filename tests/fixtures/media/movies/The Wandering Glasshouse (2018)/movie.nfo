@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Wandering Glasshouse</title>
+  <year>2018</year>
+  <plot>In this action feature, a high-octane action story pitting a town of misfits banding together against a faceless authority. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Action</genre>
+  <genre>Thriller</genre>
+  <director>Olivia Chen</director>
+  <actor>
+    <name>Ines Dubois</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Omar Haddad</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Norrsken Film</studio>
+  <rating>7.9</rating>
+  <runtime>102</runtime>
+  <country>Sweden</country>
+</movie>

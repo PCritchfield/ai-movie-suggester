@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Gladiator</title>
+  <year>2000</year>
+  <plot>A betrayed Roman general is reduced to slavery and rises through the gladiatorial arena, seeking vengeance against the corrupt emperor who murdered his family and stole his command.</plot>
+  <genre>Action</genre>
+  <genre>Drama</genre>
+  <genre>Adventure</genre>
+  <director>Ridley Scott</director>
+  <actor>
+    <name>Russell Crowe</name>
+    <role>Maximus</role>
+  </actor>
+  <actor>
+    <name>Joaquin Phoenix</name>
+    <role>Commodus</role>
+  </actor>
+  <actor>
+    <name>Connie Nielsen</name>
+    <role>Lucilla</role>
+  </actor>
+  <studio>DreamWorks Pictures</studio>
+  <rating>8.5</rating>
+  <runtime>155</runtime>
+  <country>United States of America</country>
+</movie>

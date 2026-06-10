@@ -2,8 +2,9 @@
 <movie>
   <title>The Shawshank Redemption</title>
   <year>1994</year>
-  <plot>A mild-mannered banker is sentenced to life in a brutal Maine prison for a murder he did not commit, where over two decades he quietly transforms the institution and forges an unlikely friendship with a fellow lifer. A story of patience, dignity, and hope that culminates in one of cinema's most satisfying escapes.</plot>
+  <plot>Wrongly convicted of murder, a quiet banker forms an enduring friendship inside a brutal prison and clings to hope across two decades while quietly engineering his own redemption.</plot>
   <genre>Drama</genre>
+  <genre>Crime</genre>
   <director>Frank Darabont</director>
   <actor>
     <name>Tim Robbins</name>
@@ -11,7 +12,7 @@
   </actor>
   <actor>
     <name>Morgan Freeman</name>
-    <role>Ellis "Red" Redding</role>
+    <role>Ellis Boyd Redding</role>
   </actor>
   <actor>
     <name>Bob Gunton</name>
@@ -20,4 +21,5 @@
   <studio>Columbia Pictures</studio>
   <rating>9.3</rating>
   <runtime>142</runtime>
+  <country>United States of America</country>
 </movie>

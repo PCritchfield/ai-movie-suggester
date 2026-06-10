@@ -2,9 +2,10 @@
 <movie>
   <title>Arrival</title>
   <year>2016</year>
-  <plot>When twelve mysterious spacecraft land around the globe, a linguist is recruited by the military to decipher the aliens' complex circular language before global tensions ignite war. As she learns their non-linear writing system, she begins experiencing time in ways that challenge everything she understands about choice and loss.</plot>
+  <plot>When mysterious alien craft touch down across the globe, a linguist is recruited to decipher their language and discovers that understanding it reshapes her perception of time itself.</plot>
   <genre>Sci-Fi</genre>
   <genre>Drama</genre>
+  <genre>Mystery</genre>
   <director>Denis Villeneuve</director>
   <actor>
     <name>Amy Adams</name>
@@ -21,4 +22,5 @@
   <studio>Paramount Pictures</studio>
   <rating>7.9</rating>
   <runtime>116</runtime>
+  <country>United States of America</country>
 </movie>

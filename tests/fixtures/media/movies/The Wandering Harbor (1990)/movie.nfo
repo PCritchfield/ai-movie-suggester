@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Wandering Harbor</title>
+  <year>1990</year>
+  <plot>In this action feature, a high-octane action story pitting a town of misfits banding together against a faceless authority. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Action</genre>
+  <genre>Thriller</genre>
+  <director>Ava Marchetti</director>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Yara Cohen</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Freya Nilsson</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Norrsken Film</studio>
+  <rating>7.5</rating>
+  <runtime>114</runtime>
+  <country>Sweden</country>
+</movie>

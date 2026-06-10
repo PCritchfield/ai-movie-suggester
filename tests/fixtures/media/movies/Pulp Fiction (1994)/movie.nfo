@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Pulp Fiction</title>
+  <year>1994</year>
+  <plot>The lives of two mob hitmen, a boxer, a gangster's wife, and a pair of diner robbers intertwine in four tales of violence and redemption told out of chronological order.</plot>
+  <genre>Crime</genre>
+  <genre>Drama</genre>
+  <genre>Thriller</genre>
+  <director>Quentin Tarantino</director>
+  <actor>
+    <name>John Travolta</name>
+    <role>Vincent Vega</role>
+  </actor>
+  <actor>
+    <name>Samuel L. Jackson</name>
+    <role>Jules Winnfield</role>
+  </actor>
+  <actor>
+    <name>Bruce Willis</name>
+    <role>Butch Coolidge</role>
+  </actor>
+  <studio>Miramax</studio>
+  <rating>8.9</rating>
+  <runtime>154</runtime>
+  <country>United States of America</country>
+</movie>

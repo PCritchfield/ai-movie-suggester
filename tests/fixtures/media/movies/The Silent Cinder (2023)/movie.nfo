@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Silent Cinder</title>
+  <year>2023</year>
+  <plot>In this comedy feature, a warm, offbeat comedy about two estranged siblings forced to share a crumbling family estate. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Comedy</genre>
+  <genre>Romance</genre>
+  <director>Nadia Petrova</director>
+  <actor>
+    <name>Henry Whitfield</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Theo Andersson</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Cascade Studios</studio>
+  <rating>7.6</rating>
+  <runtime>91</runtime>
+  <country>United States of America</country>
+</movie>

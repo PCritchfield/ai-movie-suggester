@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>The Last Vesper</title>
+  <year>1988</year>
+  <plot>In this drama feature, a quiet, character-driven story of a small mountain town and the secret it has kept for generations. As events unfold, loyalties are tested and nothing stays as it seems.</plot>
+  <genre>Drama</genre>
+  <genre>Horror</genre>
+  <director>Klaus Bergmann</director>
+  <actor>
+    <name>Grace Abara</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Marcus Reed</name>
+    <role>Supporting</role>
+  </actor>
+  <actor>
+    <name>Sofia Castellano</name>
+    <role>Featured</role>
+  </actor>
+  <studio>Beacon Hill Pictures</studio>
+  <rating>5.7</rating>
+  <runtime>128</runtime>
+  <country>United States of America</country>
+</movie>

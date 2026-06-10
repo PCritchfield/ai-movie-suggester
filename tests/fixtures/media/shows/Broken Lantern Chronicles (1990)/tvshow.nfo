@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Broken Lantern Chronicles</title>
+  <year>1990</year>
+  <plot>An episodic drama series, a quiet, character-driven story of a generation ship whose crew has forgotten where they came from. Each season deepens the mystery while the ensemble cast evolves.</plot>
+  <genre>Drama</genre>
+  <actor>
+    <name>Diego Morales</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Kenji Sato</name>
+    <role>Co-Lead</role>
+  </actor>
+  <studio>Cascade Studios</studio>
+  <rating>5.5</rating>
+  <status>Ended</status>
+  <country>United States of America</country>
+</tvshow>

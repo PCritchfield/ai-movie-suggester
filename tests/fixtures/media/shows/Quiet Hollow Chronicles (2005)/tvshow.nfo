@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tvshow>
+  <title>Quiet Hollow Chronicles</title>
+  <year>2005</year>
+  <plot>An episodic sci-fi series, a speculative science-fiction tale of a stranded traveller relying on the kindness of unlikely allies. Each season deepens the mystery while the ensemble cast evolves.</plot>
+  <genre>Sci-Fi</genre>
+  <genre>Drama</genre>
+  <actor>
+    <name>Henry Whitfield</name>
+    <role>Lead</role>
+  </actor>
+  <actor>
+    <name>Nina Kowalski</name>
+    <role>Co-Lead</role>
+  </actor>
+  <studio>Sakura Eiga</studio>
+  <rating>7.6</rating>
+  <status>Ended</status>
+  <country>Japan</country>
+</tvshow>

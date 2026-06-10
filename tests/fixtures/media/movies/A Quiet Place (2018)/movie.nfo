@@ -2,9 +2,10 @@
 <movie>
   <title>A Quiet Place</title>
   <year>2018</year>
-  <plot>A family survives in near-total silence to avoid blind extraterrestrial creatures that hunt by sound, communicating through sign language and walking barefoot on sand trails. When the mother becomes pregnant, the approaching birth threatens to shatter their fragile silence and bring the creatures down on them all.</plot>
+  <plot>In a world overrun by blind creatures that hunt by sound, a family survives by living in absolute silence, every footstep and breath a potentially fatal risk to their children.</plot>
   <genre>Horror</genre>
   <genre>Thriller</genre>
+  <genre>Drama</genre>
   <director>John Krasinski</director>
   <actor>
     <name>Emily Blunt</name>
@@ -21,4 +22,5 @@
   <studio>Paramount Pictures</studio>
   <rating>7.5</rating>
   <runtime>90</runtime>
+  <country>United States of America</country>
 </movie>

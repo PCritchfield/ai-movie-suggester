@@ -2,7 +2,7 @@
 <movie>
   <title>Alien</title>
   <year>1979</year>
-  <plot>The crew of the commercial starship Nostromo encounters a deadly extraterrestrial creature after investigating a mysterious signal on an uncharted planetoid. Trapped in the claustrophobic corridors of their own ship, they are hunted one by one by a perfect organism that bleeds acid and adapts to kill.</plot>
+  <plot>The crew of the commercial starship Nostromo encounters a deadly extraterrestrial creature after investigating a mysterious signal. Trapped aboard their own ship, they are hunted one by one.</plot>
   <genre>Sci-Fi</genre>
   <genre>Horror</genre>
   <director>Ridley Scott</director>
@@ -21,4 +21,5 @@
   <studio>20th Century Fox</studio>
   <rating>8.5</rating>
   <runtime>117</runtime>
+  <country>United States of America</country>
 </movie>
