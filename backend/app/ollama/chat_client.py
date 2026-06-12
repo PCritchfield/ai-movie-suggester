@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import httpx
+from pydantic import BaseModel, ValidationError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -24,10 +25,13 @@ from app.ollama.errors import (
     OllamaError,
     OllamaModelError,
     OllamaStreamError,
+    OllamaStructuredOutputError,
     OllamaTimeoutError,
 )
 
 logger = logging.getLogger(__name__)
+
+_StructuredT = TypeVar("_StructuredT", bound=BaseModel)
 
 
 class OllamaChatClient:
@@ -132,4 +136,72 @@ class OllamaChatClient:
         except httpx.TransportError as exc:
             raise OllamaConnectionError(
                 f"Cannot reach Ollama at {self._base_url}"
+            ) from exc
+
+    async def chat_structured(
+        self,
+        messages: list[dict[str, str]],
+        response_model: type[_StructuredT],
+    ) -> _StructuredT:
+        """Request a grammar-constrained structured response from Ollama.
+
+        POSTs to ``{base_url}/api/chat`` with ``stream: false``, the JSON
+        schema derived from ``response_model`` as ``format`` (constraining the
+        decoder to that shape), and ``temperature: 0`` for deterministic output.
+        Parses the model's ``message.content`` into ``response_model``.
+
+        Generic over the response model so this transport layer stays free of
+        any chat-domain coupling — the caller owns the schema.
+
+        Returns:
+            An instance of ``response_model`` validated from the response.
+
+        Raises:
+            OllamaTimeoutError: Ollama did not respond in time.
+            OllamaConnectionError: Ollama is unreachable.
+            OllamaModelError: The requested model is not available (404).
+            OllamaError: Any other non-2xx response.
+            OllamaStructuredOutputError: Content was not valid JSON, did not
+                match the schema, or the response shape was unexpected. The raw
+                content is never included in the error message.
+        """
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/api/chat",
+                json={
+                    "model": self._chat_model,
+                    "messages": messages,
+                    "stream": False,
+                    "format": response_model.model_json_schema(),
+                    "options": {"temperature": 0},
+                },
+            )
+        except httpx.TimeoutException as exc:
+            raise OllamaTimeoutError(
+                f"Ollama chat request timed out at {self._base_url}"
+            ) from exc
+        except httpx.TransportError as exc:
+            raise OllamaConnectionError(
+                f"Cannot reach Ollama at {self._base_url}"
+            ) from exc
+
+        if response.status_code == 404:
+            raise OllamaModelError(f"Model '{self._chat_model}' not found on Ollama")
+        if response.status_code >= 400:
+            raise OllamaError(
+                f"Unexpected response from Ollama: {response.status_code}"
+            )
+
+        try:
+            content = response.json()["message"]["content"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise OllamaStructuredOutputError(
+                "Unexpected response shape from Ollama chat API"
+            ) from exc
+
+        try:
+            return response_model.model_validate_json(content)
+        except ValidationError as exc:
+            raise OllamaStructuredOutputError(
+                "Ollama returned content that did not match the requested schema"
             ) from exc

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock
@@ -9,11 +11,14 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from app.chat.models import StructuredChatResponse
 from app.ollama.chat_client import OllamaChatClient
 from app.ollama.errors import (
     OllamaConnectionError,
     OllamaError,
+    OllamaModelError,
     OllamaStreamError,
+    OllamaStructuredOutputError,
     OllamaTimeoutError,
 )
 from tests.conftest import make_test_settings
@@ -267,6 +272,175 @@ class TestChatStream:
             chat_model="llama3.1:8b",
         )
         assert client._base_url == "http://ollama:11434"
+
+
+# ---------------------------------------------------------------------------
+# chat_structured() — Spec 27 grammar-constrained structured output
+# ---------------------------------------------------------------------------
+
+
+def _valid_payload_content() -> str:
+    """A schema-valid structured response, as Ollama returns it (JSON string)."""
+    return json.dumps(
+        {
+            "introductory_message": "Here are a couple of picks for you.",
+            "recommendations": [
+                {"jellyfin_id": "abc123", "reasoning": "Spooky and atmospheric."},
+                {"jellyfin_id": "def456", "reasoning": "A funnier take on the theme."},
+            ],
+        }
+    )
+
+
+def _structured_response(content: str, status_code: int = 200) -> httpx.Response:
+    """Build a non-streaming /api/chat response carrying `content`."""
+    return httpx.Response(
+        status_code,
+        json={"message": {"role": "assistant", "content": content}, "done": True},
+        request=_FAKE_REQUEST,
+    )
+
+
+class TestChatStructured:
+    async def test_sends_format_schema_stream_false_and_temperature_zero(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        """The request constrains decoding: format=schema, stream=False, temp=0."""
+        mock_http.post.return_value = _structured_response(_valid_payload_content())
+
+        await chat_client.chat_structured(
+            [{"role": "user", "content": "something spooky"}],
+            StructuredChatResponse,
+        )
+
+        sent = mock_http.post.call_args.kwargs["json"]
+        assert sent["model"] == "llama3.1:8b"
+        assert sent["messages"] == [{"role": "user", "content": "something spooky"}]
+        assert sent["stream"] is False
+        assert sent["format"] == StructuredChatResponse.model_json_schema()
+        assert sent["options"]["temperature"] == 0
+
+    async def test_posts_to_chat_endpoint(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = _structured_response(_valid_payload_content())
+        await chat_client.chat_structured(
+            [{"role": "user", "content": "hi"}], StructuredChatResponse
+        )
+        assert mock_http.post.call_args.args[0] == "http://ollama:11434/api/chat"
+
+    async def test_parses_valid_payload_into_model(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = _structured_response(_valid_payload_content())
+
+        result = await chat_client.chat_structured(
+            [{"role": "user", "content": "hi"}], StructuredChatResponse
+        )
+
+        assert isinstance(result, StructuredChatResponse)
+        assert [r.jellyfin_id for r in result.recommendations] == ["abc123", "def456"]
+        assert result.introductory_message == "Here are a couple of picks for you."
+
+    async def test_invalid_json_raises_structured_output_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = _structured_response("not valid json {")
+
+        with pytest.raises(OllamaStructuredOutputError):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
+    async def test_schema_violation_raises_structured_output_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        """Valid JSON, wrong shape (missing required reasoning) → structured error."""
+        bad = json.dumps({"recommendations": [{"jellyfin_id": "abc123"}]})
+        mock_http.post.return_value = _structured_response(bad)
+
+        with pytest.raises(OllamaStructuredOutputError):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
+    async def test_unexpected_response_shape_raises_structured_output_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        """Response missing message.content → structured error, not a crash."""
+        mock_http.post.return_value = httpx.Response(
+            200, json={"unexpected": "shape"}, request=_FAKE_REQUEST
+        )
+
+        with pytest.raises(OllamaStructuredOutputError):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
+    async def test_timeout_raises_ollama_timeout_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.side_effect = httpx.ReadTimeout("Read timed out")
+        with pytest.raises(OllamaTimeoutError):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
+    async def test_connection_error_raises_ollama_connection_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.side_effect = httpx.ConnectError("Connection refused")
+        with pytest.raises(OllamaConnectionError):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
+    async def test_404_raises_model_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = httpx.Response(
+            404, text="not found", request=_FAKE_REQUEST
+        )
+        with pytest.raises(OllamaModelError, match="not found"):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
+    async def test_server_error_raises_ollama_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = httpx.Response(
+            500, text="boom", request=_FAKE_REQUEST
+        )
+        with pytest.raises(OllamaError, match="Unexpected response"):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
+    async def test_does_not_log_response_payload(
+        self,
+        chat_client: OllamaChatClient,
+        mock_http: AsyncMock,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """No log record at any level may contain the model's reasoning text."""
+        secret_marker = "ATMOSPHERIC_SECRET_REASONING_TEXT"
+        content = json.dumps(
+            {
+                "introductory_message": None,
+                "recommendations": [
+                    {"jellyfin_id": "abc123", "reasoning": secret_marker}
+                ],
+            }
+        )
+        mock_http.post.return_value = _structured_response(content)
+
+        with caplog.at_level(logging.DEBUG):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
+        assert all(secret_marker not in rec.getMessage() for rec in caplog.records)
 
 
 # ---------------------------------------------------------------------------

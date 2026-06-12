@@ -26,3 +26,12 @@ class OllamaModelError(OllamaError):
 
 class OllamaStreamError(OllamaError):
     """An error occurred during streaming response from Ollama."""
+
+
+class OllamaStructuredOutputError(OllamaError):
+    """A structured (non-streaming) response could not be parsed or validated.
+
+    Raised when Ollama returns content that is not valid JSON or does not
+    match the requested schema. The raw content is NEVER included in the
+    message — it may echo user/chat text.
+    """
