@@ -26,7 +26,11 @@ export function MovieCard({ item, onClick, isPick = false }: MovieCardProps) {
         type="button"
         onClick={onClick}
         className="w-full text-left min-h-[44px]"
-        aria-label={`View details for ${item.title}`}
+        aria-label={
+          isPick
+            ? `Recommended pick: View details for ${item.title}`
+            : `View details for ${item.title}`
+        }
       >
         <div className="relative aspect-[2/3] overflow-hidden rounded-t-xl">
           {isPick && (

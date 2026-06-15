@@ -78,6 +78,21 @@ describe("RecommendationSections", () => {
     expect(screen.getByLabelText("View details for Predator")).toBeTruthy();
   });
 
+  it("exposes pick status to screen readers via the accessible name", () => {
+    render(
+      <RecommendationSections
+        recommendations={RECS}
+        picks={PICKS}
+        onCardClick={vi.fn()}
+      />
+    );
+    // Picked cards announce "Recommended pick"; unpicked cards do not.
+    expect(
+      screen.getByLabelText("Recommended pick: View details for Galaxy Quest")
+    ).toBeTruthy();
+    expect(screen.getByLabelText("View details for The Thing")).toBeTruthy();
+  });
+
   it("falls back to a single plain carousel when no picks resolve", () => {
     render(
       <RecommendationSections

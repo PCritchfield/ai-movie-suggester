@@ -123,7 +123,7 @@ export type ChatErrorCode =
 export interface MetadataEvent {
   type: "metadata";
   /** 1 = legacy free-prose contract; 2 = Spec 27 structured output (adds status/picks). */
-  version: number;
+  version: 1 | 2;
   recommendations: SearchResultItem[];
   search_status: SearchStatus;
   turn_count: number;
@@ -146,7 +146,7 @@ export interface PickItem {
 /** Spec 27 — terminal set of validated picks (version 2 contract). */
 export interface PicksEvent {
   type: "picks";
-  version: number;
+  version: 2;
   picks: PickItem[];
 }
 
