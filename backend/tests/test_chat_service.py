@@ -302,6 +302,32 @@ class TestChatServiceValidationAndFallback:
         assert [p["jellyfin_id"] for p in picks] == ["a1"]
         assert picks[0]["pick_order"] == 1
 
+    async def test_duplicate_picks_deduplicated_first_seen_order(self) -> None:
+        """A candidate the model names twice is kept once (first-seen), so a
+        duplicate doesn't waste a pick slot or double a card/prose line."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[
+                make_search_result_item(title="Alien", jellyfin_id="a1"),
+                make_search_result_item(title="Galaxy Quest", jellyfin_id="g1"),
+            ]
+        )
+        chat_client = _chat_client_returning(
+            _structured(
+                "Picks.",
+                [("a1", "scary"), ("g1", "funny"), ("a1", "scary again")],
+            )
+        )
+        service = _make_chat_service(search_service=search, chat_client=chat_client)
+
+        events = await _collect_events(
+            service, query="q", user_id="u", token="t", session_id="s1"
+        )
+
+        picks = next(e for e in events if e["type"] == "picks")["picks"]
+        assert [p["jellyfin_id"] for p in picks] == ["a1", "g1"]
+        assert [p["pick_order"] for p in picks] == [1, 2]
+
     async def test_dropped_ids_logged_counts_only_no_payload_text(self, caplog) -> None:
         """Drop log records counts/ids only — never reasoning/intro text."""
         search = AsyncMock()

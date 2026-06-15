@@ -31,7 +31,8 @@ class TestRecommendationSidecar:
     def test_turn_is_frozen(self) -> None:
         """The sidecar field is on a frozen dataclass (no mutable bolt-on)."""
         turn = ConversationTurn(role="assistant", content="hi")
-        with pytest.raises((AttributeError, Exception)):
+        # FrozenInstanceError subclasses AttributeError — assert the precise type.
+        with pytest.raises(AttributeError):
             turn.picks = ()  # type: ignore[misc]
 
     def test_pick_has_order_id_title_no_reasoning(self) -> None:

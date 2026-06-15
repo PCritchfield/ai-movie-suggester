@@ -478,7 +478,7 @@ class TestChatStreamsSSE:
         for event in parsed:
             assert "type" in event
 
-        # Metadata event has version: 1
+        # Metadata event has version: 2 (Spec 27 structured-output contract)
         assert parsed[0]["version"] == 2
 
         # Text events have content key

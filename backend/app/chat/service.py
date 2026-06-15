@@ -7,7 +7,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from app.chat.conversation_store import RecommendationPick
-from app.chat.models import ChatErrorCode, SSEEventType, StructuredChatResponse
+from app.chat.models import (
+    ChatErrorCode,
+    SSEEventType,
+    StructuredChatResponse,
+    StructuredRecommendation,
+)
 from app.chat.prompts import (
     build_chat_messages,
     format_watch_history_context,
@@ -27,6 +32,7 @@ if TYPE_CHECKING:
     from app.jellyfin.models import WatchHistoryEntry
     from app.library.store import LibraryStore
     from app.ollama.chat_client import OllamaChatClient
+    from app.search.models import SearchResultItem
     from app.search.service import SearchService
     from app.watch_history.service import WatchData, WatchHistoryService
 
@@ -253,13 +259,18 @@ class ChatService:
 
             # Validate every returned id against the permission-filtered
             # candidate set. A jellyfin_id from the model is a CLAIM, not a
-            # trusted reference — drop any that aren't real candidates.
+            # trusted reference — drop any that aren't real candidates, and
+            # drop repeats (the model can name the same candidate twice) so a
+            # duplicate doesn't waste a pick slot or show a card/prose line twice.
             candidate_by_id = {r.jellyfin_id: r for r in response.results}
-            valid = [
-                (rec, candidate_by_id[rec.jellyfin_id])
-                for rec in structured.recommendations
-                if rec.jellyfin_id in candidate_by_id
-            ]
+            valid: list[tuple[StructuredRecommendation, SearchResultItem]] = []
+            seen: set[str] = set()
+            for rec in structured.recommendations:
+                item = candidate_by_id.get(rec.jellyfin_id)
+                if item is None or rec.jellyfin_id in seen:
+                    continue
+                seen.add(rec.jellyfin_id)
+                valid.append((rec, item))
             dropped = len(structured.recommendations) - len(valid)
             if dropped:
                 logger.warning(
