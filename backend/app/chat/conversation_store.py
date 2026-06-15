@@ -16,11 +16,32 @@ MAX_TURN_CONTENT_CHARS = 4000
 
 
 @dataclass(frozen=True, slots=True)
+class RecommendationPick:
+    """A validated recommendation, stored as a turn's structured sidecar (Spec 27).
+
+    Holds only what follow-up resolution needs: the 1-based order, the candidate
+    id, and the title. ``reasoning`` is deliberately excluded — it is PII-adjacent
+    model output and not required to resolve "more like the second one".
+    """
+
+    pick_order: int
+    jellyfin_id: str
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationTurn:
-    """A single message in a conversation."""
+    """A single message in a conversation.
+
+    ``picks`` is the optional structured sidecar (Spec 27) attached to a
+    successful assistant turn — the validated recommendations behind the prose.
+    ``None`` for user turns and fallback assistant turns. In-memory only, like
+    all conversation state.
+    """
 
     role: str  # "user" or "assistant"
     content: str
+    picks: tuple[RecommendationPick, ...] | None = None
 
 
 @dataclass
@@ -83,11 +104,19 @@ class ConversationStore:
         self._conversations[session_id] = entry
         return entry
 
-    def add_turn(self, session_id: str, role: str, content: str) -> None:
+    def add_turn(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        picks: tuple[RecommendationPick, ...] | None = None,
+    ) -> None:
         """Add a turn to the conversation, creating entry if needed.
 
         Content is truncated to MAX_TURN_CONTENT_CHARS.
         deque(maxlen) handles FIFO eviction automatically.
+        ``picks`` is the optional Spec 27 structured sidecar (validated
+        recommendations) attached to a successful assistant turn.
 
         The caller is responsible for acquiring the conversation lock.
         """
@@ -96,7 +125,7 @@ class ConversationStore:
         if len(content) > MAX_TURN_CONTENT_CHARS:
             content = content[:MAX_TURN_CONTENT_CHARS]
 
-        entry.turns.append(ConversationTurn(role=role, content=content))
+        entry.turns.append(ConversationTurn(role=role, content=content, picks=picks))
         entry.last_active = time.monotonic()
 
     def get_turns(self, session_id: str) -> list[ConversationTurn]:

@@ -6,6 +6,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from app.chat.conversation_store import RecommendationPick
 from app.chat.models import ChatErrorCode, SSEEventType, StructuredChatResponse
 from app.chat.prompts import (
     build_chat_messages,
@@ -298,12 +299,24 @@ class ChatService:
             yield {"type": SSEEventType.TEXT, "content": prose}
             yield {"type": SSEEventType.DONE}
 
+            # Structured sidecar (Spec 27): the validated picks behind the prose,
+            # so ordinal follow-ups ("more like the second one") resolve reliably.
+            # IDs + titles + order only — reasoning is intentionally excluded.
+            sidecar = tuple(
+                RecommendationPick(
+                    pick_order=order, jellyfin_id=rec.jellyfin_id, title=item.title
+                )
+                for order, (rec, item) in enumerate(valid, start=1)
+            )
+
             # Mutation window 2: store assistant response (success only).
             # Re-acquire lock via get_lock() in case the original entry was
             # purged/evicted during the unlocked generation phase.
             window2_lock = self._conversation_store.get_lock(session_id)
             async with window2_lock:
-                self._conversation_store.add_turn(session_id, "assistant", prose)
+                self._conversation_store.add_turn(
+                    session_id, "assistant", prose, picks=sidecar
+                )
         except OllamaStructuredOutputError:
             # Got a response, but it didn't parse/validate. Do NOT downgrade to
             # free-prose (Angua veto) — emit the canned fallback instead.

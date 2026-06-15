@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from app.chat.models import RECOMMENDATION_RESPONSE_SCHEMA
 
 if TYPE_CHECKING:
-    from app.chat.conversation_store import ConversationTurn
+    from app.chat.conversation_store import ConversationTurn, RecommendationPick
     from app.search.models import SearchResultItem
 
 # XML delimiter tag names — shared with sanitize.py
@@ -126,6 +126,17 @@ def format_watch_history_context(
 def estimate_tokens(text: str) -> int:
     """Conservative character-based token estimate (chars / 4)."""
     return len(text) // 4
+
+
+def format_picks_reference(picks: tuple[RecommendationPick, ...]) -> str:
+    """Compact ordered reference to a prior turn's validated picks (Spec 27).
+
+    Built from the structured sidecar rather than the prose, so ordinal
+    follow-ups ("more like the second one") resolve reliably even if the prose
+    was truncated. Titles + order only — no reasoning (the sidecar omits it).
+    """
+    items = "; ".join(f"{p.pick_order}. {p.title}" for p in picks)
+    return f"(Earlier recommendations, in order: {items})"
 
 
 def get_system_prompt(operator_override: str | None = None) -> str:
@@ -304,10 +315,16 @@ def build_chat_messages(
         # that fits. Stop on the first turn that doesn't fit to preserve
         # conversational coherence (no orphaned user/assistant turns).
         for turn in reversed(history):
-            turn_tokens = estimate_tokens(turn.content)
+            content = turn.content
+            # Spec 27 — enrich a prior assistant turn with its structured pick
+            # reference so ordinal follow-ups resolve even if the prose was
+            # truncated. Source of truth is the sidecar, not the prose.
+            if turn.role == "assistant" and turn.picks:
+                content = f"{content}\n{format_picks_reference(turn.picks)}"
+            turn_tokens = estimate_tokens(content)
             if accumulated + turn_tokens > history_budget:
                 break
-            history_msgs.append({"role": turn.role, "content": turn.content})
+            history_msgs.append({"role": turn.role, "content": content})
             accumulated += turn_tokens
         # Reverse to restore chronological order.
         history_msgs.reverse()

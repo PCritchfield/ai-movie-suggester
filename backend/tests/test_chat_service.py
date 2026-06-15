@@ -499,6 +499,90 @@ class TestChatServiceConversationMemory:
         )
         assert events[0]["turn_count"] == 1
 
+    async def test_success_stores_sidecar_on_assistant_turn(self) -> None:
+        """Spec 27 Task 3.3a — successful turn stores the validated picks."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[
+                make_search_result_item(title="Alien", jellyfin_id="a1"),
+                make_search_result_item(title="Galaxy Quest", jellyfin_id="g1"),
+            ]
+        )
+        chat_client = _chat_client_returning(
+            _structured("Two.", [("a1", "Scary."), ("g1", "Funny.")])
+        )
+        store = ConversationStore(max_turns=10)
+        service = _make_chat_service(
+            search_service=search, chat_client=chat_client, conversation_store=store
+        )
+
+        await _collect_events(
+            service, query="q", user_id="u", token="t", session_id="s1"
+        )
+
+        turn = store.get_turns("s1")[-1]
+        assert turn.role == "assistant"
+        assert turn.picks is not None
+        assert [(p.pick_order, p.jellyfin_id, p.title) for p in turn.picks] == [
+            (1, "a1", "Alien"),
+            (2, "g1", "Galaxy Quest"),
+        ]
+
+    async def test_fallback_stores_no_sidecar(self) -> None:
+        """Spec 27 Task 3.3a — fallback assistant turn has picks=None."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response()
+        chat_client = AsyncMock()
+        chat_client.chat_structured.side_effect = OllamaTimeoutError("timed out")
+        store = ConversationStore(max_turns=10)
+        service = _make_chat_service(
+            search_service=search, chat_client=chat_client, conversation_store=store
+        )
+
+        await _collect_events(
+            service, query="q", user_id="u", token="t", session_id="s1"
+        )
+
+        assert store.get_turns("s1")[-1].picks is None
+
+    async def test_followup_turn_context_contains_prior_picks_in_order(self) -> None:
+        """Spec 27 Task 3.3c — a follow-up's prompt carries the prior picks in
+        order, so the model can resolve "more like the second one"."""
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[
+                make_search_result_item(title="Alien", jellyfin_id="a1"),
+                make_search_result_item(title="Galaxy Quest", jellyfin_id="g1"),
+            ]
+        )
+        chat_client = _chat_client_returning(
+            _structured("Two.", [("a1", "Scary."), ("g1", "Funny.")])
+        )
+        store = ConversationStore(max_turns=20)
+        service = _make_chat_service(
+            search_service=search, chat_client=chat_client, conversation_store=store
+        )
+
+        # Turn 1 — establishes picks (Alien #1, Galaxy Quest #2)
+        await _collect_events(
+            service, query="scary then funny", user_id="u", token="t", session_id="s1"
+        )
+        # Turn 2 — the follow-up
+        await _collect_events(
+            service,
+            query="more like the second one",
+            user_id="u",
+            token="t",
+            session_id="s1",
+        )
+
+        # Inspect the messages built for the SECOND generation call.
+        second_call_messages = chat_client.chat_structured.call_args_list[1].args[0]
+        blob = "\n".join(m["content"] for m in second_call_messages)
+        assert "1. Alien" in blob
+        assert "2. Galaxy Quest" in blob
+        assert blob.index("Alien") < blob.index("Galaxy Quest")
+
     async def test_history_truncation_graceful(self) -> None:
         search = AsyncMock()
         search.search.return_value = _make_search_response(

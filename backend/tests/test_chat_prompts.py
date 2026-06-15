@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.chat.conversation_store import ConversationTurn
+from app.chat.conversation_store import ConversationTurn, RecommendationPick
 from app.chat.prompts import (
     CONTEXT_PREFIX,
     CONTEXT_SUFFIX,
@@ -14,6 +14,7 @@ from app.chat.prompts import (
     build_chat_messages,
     estimate_tokens,
     format_movie_context,
+    format_picks_reference,
     format_watch_history_context,
     get_system_prompt,
     synthesize_recommendation_prose,
@@ -696,3 +697,63 @@ class TestSynthesizeRecommendationProse:
         assert synthesize_recommendation_prose(
             *args
         ) == synthesize_recommendation_prose(*args)
+
+
+# ---------------------------------------------------------------------------
+# Sidecar replay enrichment (Spec 27, Task 3.3b) — follow-up resolution context
+# ---------------------------------------------------------------------------
+
+
+class TestSidecarReplayEnrichment:
+    def test_format_picks_reference_lists_titles_in_order(self) -> None:
+        picks = (
+            RecommendationPick(pick_order=1, jellyfin_id="a1", title="Alien"),
+            RecommendationPick(pick_order=2, jellyfin_id="g1", title="Galaxy Quest"),
+        )
+        ref = format_picks_reference(picks)
+        assert "1. Alien" in ref
+        assert "2. Galaxy Quest" in ref
+        assert ref.index("Alien") < ref.index("Galaxy Quest")
+
+    def test_replay_surfaces_picks_from_sidecar_not_prose(self) -> None:
+        """The prior assistant turn's titles/order reach the model from the
+        sidecar even when the stored prose does NOT contain them."""
+        history = [
+            ConversationTurn(role="user", content="something scary then funny"),
+            ConversationTurn(
+                role="assistant",
+                content="Here are a couple of options.",  # prose lacks titles
+                picks=(
+                    RecommendationPick(pick_order=1, jellyfin_id="a1", title="Alien"),
+                    RecommendationPick(
+                        pick_order=2, jellyfin_id="g1", title="Galaxy Quest"
+                    ),
+                ),
+            ),
+        ]
+        messages = build_chat_messages(
+            query="more like the second one",
+            results=[_make_result()],
+            system_prompt=get_system_prompt(),
+            context_token_budget=6000,
+            history=history,
+        )
+        blob = "\n".join(m["content"] for m in messages)
+        assert "1. Alien" in blob
+        assert "2. Galaxy Quest" in blob
+        assert blob.index("Alien") < blob.index("Galaxy Quest")
+
+    def test_replay_unenriched_when_no_sidecar(self) -> None:
+        """Assistant turns without a sidecar replay their prose unchanged."""
+        history = [
+            ConversationTurn(role="assistant", content="Just some prose.", picks=None),
+        ]
+        messages = build_chat_messages(
+            query="q",
+            results=[_make_result()],
+            system_prompt=get_system_prompt(),
+            context_token_budget=6000,
+            history=history,
+        )
+        assistant_msgs = [m for m in messages if m["content"] == "Just some prose."]
+        assert len(assistant_msgs) == 1
