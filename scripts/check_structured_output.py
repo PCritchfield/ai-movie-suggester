@@ -69,6 +69,10 @@ _SCHEMA_TEXT = json.dumps(RECOMMENDATION_RESPONSE_SCHEMA)
 
 
 def _build_messages(query: str) -> list[dict[str, str]]:
+    # Deliberately minimal prompt — this is a capability gate (does `format`
+    # constrain the model at all?), not a production-fidelity check. It does NOT
+    # reuse app.chat.prompts.get_system_prompt(); the production prompt is
+    # exercised by the service/router tests and the real-inference transcripts.
     system = (
         "You recommend movies ONLY from the candidate list below. Respond with "
         "JSON matching this schema; use the exact jellyfin_id values from the "

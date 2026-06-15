@@ -61,6 +61,10 @@ class StructuredChatResponse(BaseModel):
     stays within the conversation token budget, and free-text fields are
     length-limited. These are advisory to the model (the grammar enforces them)
     and a guard against pathological output.
+
+    The cap (5) is intentionally below the search candidate limit (10): the
+    model sees a richer set to choose from than it surfaces, keeping the
+    "Recommended" list short while the rest remain browsable as "More matches".
     """
 
     introductory_message: str | None = Field(default=None, max_length=400)

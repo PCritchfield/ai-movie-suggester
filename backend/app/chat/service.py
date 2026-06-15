@@ -20,7 +20,7 @@ from app.ollama.errors import OllamaError, OllamaStructuredOutputError
 from app.search.models import SearchStatus, SearchUnavailableError
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator, AsyncIterator
 
     from app.chat.conversation_store import ConversationStore
     from app.config import Settings
@@ -217,13 +217,8 @@ class ChatService:
         # rephrase a query the system simply hasn't ingested yet.
         if not response.results:
             graceful_text = self._empty_results_message(response.status)
-            yield {"type": SSEEventType.TEXT, "content": graceful_text}
-            yield {"type": SSEEventType.DONE}
-            window2_lock = self._conversation_store.get_lock(session_id)
-            async with window2_lock:
-                self._conversation_store.add_turn(
-                    session_id, "assistant", graceful_text
-                )
+            async for event in self._emit_fallback(session_id, graceful_text):
+                yield event
             return
 
         # Resolve watch history titles for prompt context
@@ -343,7 +338,7 @@ class ChatService:
 
     async def _emit_fallback(
         self, session_id: str, message: str
-    ) -> AsyncIterator[dict]:
+    ) -> AsyncGenerator[dict, None]:
         """Emit the safe fallback: canned text + done, and store the turn.
 
         No ``picks`` event (the frontend keeps the raw search-result cards) and

@@ -137,7 +137,7 @@ class TestChatRateLimit:
         events = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
             },
@@ -204,7 +204,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [
                     {
                         "jellyfin_id": "jf-001",
@@ -244,12 +244,53 @@ class TestChatStreamsSSE:
         assert parsed[2]["type"] == "text"
         assert parsed[3]["type"] == "done"
 
+    def test_chat_endpoint_forwards_v2_event_types(self) -> None:
+        """The router transparently forwards the Spec 27 v2 event sequence
+        (status + picks), preserving each event's shape to the client."""
+        events_to_yield = [
+            {
+                "type": "metadata",
+                "version": 2,
+                "recommendations": [],
+                "search_status": "ok",
+            },
+            {"type": "status", "phase": "generating"},
+            {
+                "type": "picks",
+                "version": 2,
+                "picks": [
+                    {"jellyfin_id": "jf-001", "reasoning": "great fit", "pick_order": 1}
+                ],
+            },
+            {"type": "text", "content": "1. **Galaxy Quest** — great fit"},
+            {"type": "done"},
+        ]
+
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+        service = _make_stream_mock(events_to_yield)
+        _, client = _make_chat_app(session_store=session_store, chat_service=service)
+
+        resp = client.post("/api/chat", json={"message": "something funny"})
+        assert resp.status_code == 200
+        parsed = _parse_sse_events(resp.text)
+
+        assert [e["type"] for e in parsed] == [
+            "metadata",
+            "status",
+            "picks",
+            "text",
+            "done",
+        ]
+        assert parsed[1]["phase"] == "generating"
+        assert parsed[2]["picks"][0]["pick_order"] == 1
+
     def test_chat_endpoint_metadata_first(self) -> None:
         """First SSE event is metadata with recommendations."""
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "no_embeddings",
             },
@@ -277,7 +318,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "no_embeddings",
             },
@@ -305,7 +346,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
             },
@@ -340,7 +381,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
             },
@@ -375,7 +416,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [
                     {
                         "jellyfin_id": "jf-001",
@@ -413,7 +454,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
             },
@@ -438,7 +479,7 @@ class TestChatStreamsSSE:
             assert "type" in event
 
         # Metadata event has version: 1
-        assert parsed[0]["version"] == 1
+        assert parsed[0]["version"] == 2
 
         # Text events have content key
         text_events = [e for e in parsed if e["type"] == "text"]
@@ -465,7 +506,7 @@ class TestDeleteChatHistory:
         events = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
                 "turn_count": 1,
