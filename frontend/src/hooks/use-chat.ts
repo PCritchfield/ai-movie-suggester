@@ -6,6 +6,7 @@ import { apiDelete } from "@/lib/api/client";
 import { TRIGGERED_KEY } from "@/hooks/use-install-prompt";
 import type {
   ChatMessage,
+  PickItem,
   SearchResultItem,
   SearchStatus,
   ChatErrorCode,
@@ -34,6 +35,8 @@ type ChatAction =
         searchStatus: SearchStatus;
       };
     }
+  | { type: "SET_STATUS"; payload: { id: string; phase: "generating" } }
+  | { type: "SET_PICKS"; payload: { id: string; picks: PickItem[] } }
   | { type: "SET_STREAMING_DONE"; payload: { id: string; content: string } }
   | {
       type: "SET_ERROR";
@@ -72,7 +75,11 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "ADD_ASSISTANT_PLACEHOLDER":
       return {
         ...state,
-        messages: [...state.messages, action.payload],
+        // Spec 27 — staged wait state: searching until generation begins.
+        messages: [
+          ...state.messages,
+          { ...action.payload, statusPhase: "searching" },
+        ],
       };
     case "UPDATE_ASSISTANT_CONTENT":
       return {
@@ -96,6 +103,22 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
             : m
         ),
       };
+    case "SET_STATUS":
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === action.payload.id
+            ? { ...m, statusPhase: action.payload.phase }
+            : m
+        ),
+      };
+    case "SET_PICKS":
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === action.payload.id ? { ...m, picks: action.payload.picks } : m
+        ),
+      };
     case "SET_STREAMING_DONE":
       return {
         ...state,
@@ -105,6 +128,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
             ? {
                 ...m,
                 isStreaming: false,
+                statusPhase: undefined,
                 content: action.payload.content,
               }
             : m
@@ -252,6 +276,18 @@ export function useChat(): UseChatReturn {
                   recommendations: event.recommendations,
                   searchStatus: event.search_status,
                 },
+              });
+              break;
+            case "status":
+              dispatch({
+                type: "SET_STATUS",
+                payload: { id: assistantMessageId, phase: event.phase },
+              });
+              break;
+            case "picks":
+              dispatch({
+                type: "SET_PICKS",
+                payload: { id: assistantMessageId, picks: event.picks },
               });
               break;
             case "text":

@@ -60,13 +60,33 @@ sequenceDiagram
     B->>L: get_many() for top permitted matches
     L-->>B: Full metadata from local SQLite
     Note over B: If candidates are empty, emit graceful<br/>text + done and skip Ollama (Spec 25)
-    B->>O: Chat completion (llama3.1:8b) via SSE<br/>System prompt + conversation history +<br/>matched movie context (with [ID:&lt;jellyfin_id&gt;]<br/>prefixes) + user query
+    B-->>F: SSE: metadata event (version 2, candidates + search_status)
+    B-->>F: SSE: status event (generating)
+    B->>O: Structured chat (llama3.1:8b) — Ollama `format` JSON schema,<br/>temperature 0, non-streaming (Spec 27).<br/>System prompt (+ schema) + history + [ID:] candidate context + query
     Note over B: Cooperative GPU pause: embedding worker<br/>yields GPU while chat is active
-    O-->>B: Streaming token chunks
-    B-->>F: SSE stream: metadata event → text chunks → done
-    B->>C: Store assistant turn (under lock)
-    F-->>U: Chat response + movie cards (streamed)
+    O-->>B: Grammar-constrained JSON payload<br/>{introductory_message, recommendations[{jellyfin_id, reasoning}]}
+    Note over B: Validate each jellyfin_id against the candidate set;<br/>drop hallucinated ids. Zero valid / parse error / timeout<br/>→ canned fallback (text + done, no picks event)
+    B-->>F: SSE: picks event (validated, 1-based order)
+    B-->>F: SSE: text (prose synthesized from picks) → done
+    B->>C: Store assistant turn + structured sidecar (under lock)
+    F-->>U: Cards + prose from one validated payload (cannot diverge)
 ```
+
+### Chat SSE event contract (Spec 27, version 2)
+
+The `metadata` event carries `version: 2`. Events are additive over the v1
+contract, so a v1 frontend ignores unknown event types and still works:
+
+- `metadata` — `{version: 2, recommendations: SearchResultItem[], search_status, turn_count}` (all candidates; instant)
+- `status` — `{phase: "generating"}` (staged wait state; emitted when generation begins)
+- `picks` — `{version: 2, picks: [{jellyfin_id, reasoning, pick_order}]}` (validated recommendations, LLM order; **absent on the fallback path**)
+- `text` — `{content}` (prose synthesized deterministically from the picks; one event, not token-streamed)
+- `done` — stream complete
+- `error` — only for pre-search failures (`search_unavailable`); generation failures degrade to the canned-text fallback, never an error event
+
+Generation is non-streaming (grammar-constrained decoding produces the whole
+payload at once), so the 120s chat timeout now bounds a single blocking call;
+the `status` event is the user-facing mitigation.
 
 ## Data Flow: Library Sync & Embedding
 
@@ -146,7 +166,7 @@ Rationale: Different access patterns (sessions are small/frequent; library is la
 ### Ollama
 - **Embedding model**: `nomic-embed-text` for library indexing (uses asymmetric `search_document:` / `search_query:` prefixes)
 - **Chat model**: `llama3.1:8b` for conversational recommendations
-- **Split clients**: `OllamaEmbeddingClient` (120s timeout, batch support) and `OllamaChatClient` (300s timeout, SSE streaming) — separate classes due to different I/O contracts
+- **Split clients**: `OllamaEmbeddingClient` (120s timeout, batch support) and `OllamaChatClient` (300s timeout; `chat_stream` for legacy streaming + `chat_structured` for grammar-constrained JSON via `format`, Spec 27) — separate classes due to different I/O contracts
 - **Deployment**: Either bundled sidecar or user's existing instance
 - **Constraint**: Single-model-at-a-time on consumer GPUs; cooperative GPU pause yields to chat when both are active
 
@@ -160,7 +180,7 @@ Rationale: Different access patterns (sessions are small/frequent; library is la
 - **Network**: Docker Compose maps backend port to `127.0.0.1:8000`. External access via existing reverse proxy (Caddy).
 - **Privacy**: All AI inference is local. Conversation history is in-memory only — never persisted to disk (PII constraint). No outbound calls to third-party metadata services — movie metadata comes from Jellyfin only.
 - **API hardening**: CORS restricted to frontend origin. `/docs` disabled in production. Rate limiting on login (5/min), chat (10/min), and search (10/min) endpoints. Security headers via middleware. Request validation errors return HTTP 422 (FastAPI/Pydantic convention), not 400.
-- **Prompt injection**: Soft mitigation via system prompt instructions plus structural separation — every candidate line carries a `[ID:<jellyfin_id>]` prefix and the framing constrains the model to "ONLY recommend movies from the following list of candidates." No hard sandboxing — Spec 25 (#238) shipped the soft-mitigation hardening (IDs in candidate context + strengthened system prompt + empty-result graceful path); Spec 27 (#239) tracks the structural fix via tool-calling / structured output.
+- **Prompt injection**: Structural mitigation via grammar-constrained output plus prompt separation. Spec 25 (#238) shipped the soft hardening (IDs in candidate context + strengthened system prompt + empty-result graceful path). **Spec 27 (#239) shipped the structural fix**: the LLM emits a JSON-schema-constrained payload (Ollama `format`), and the backend validates every `jellyfin_id` against the permission-filtered candidate set — the model can no longer fabricate a recommendation or smuggle one in via metadata, because card identity comes only from validated ids, not free text. Residual surface: the `reasoning`/`introductory_message` free-text fields remain attacker-influenceable (via crafted metadata) and are rendered through the sanitized markdown path — a severity reduction, not elimination. The fallback path is a canned message (never free-prose), so a forced structured-output failure cannot downgrade to the soft-prompt-only surface.
 - **Service worker**: Cache-first for static shell only. No API response or image caching — cross-user data leakage risk on shared household devices.
 - **Credential distinction**: Two types of Jellyfin credentials are used, with different handling:
   - **User tokens** (per-session): Encrypted at rest in `sessions.db` using Fernet with HKDF-derived keys. Never persisted to objects, never logged. Request-scoped — passed as parameters, not stored on instances.
