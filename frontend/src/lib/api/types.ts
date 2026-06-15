@@ -122,7 +122,13 @@ export type ChatErrorCode =
 
 export interface MetadataEvent {
   type: "metadata";
-  /** 1 = legacy free-prose contract; 2 = Spec 27 structured output (adds status/picks). */
+  /**
+   * 1 = legacy free-prose contract; 2 = Spec 27 structured output (adds status/picks).
+   * Wire documentation only: the client does NOT branch on this value. v1/v2
+   * compatibility is governed by event PRESENCE — a `picks` event triggers the
+   * two-section layout; its absence falls back to the plain carousel. A future
+   * contract change should keep that presence-based dispatch in mind.
+   */
   version: 1 | 2;
   recommendations: SearchResultItem[];
   search_status: SearchStatus;
@@ -138,6 +144,13 @@ export interface StatusEvent {
 /** Spec 27 — a single validated recommendation in the LLM's order. */
 export interface PickItem {
   jellyfin_id: string;
+  /**
+   * LLM-authored, attacker-influenceable free text. MUST NOT be rendered as
+   * raw HTML. If ever displayed, route it through the sanitized markdown path
+   * (ReactMarkdown + rehypeSanitize), never `dangerouslySetInnerHTML`. Not
+   * rendered anywhere as of Spec 27 — card identity/metadata come from the
+   * validated SearchResultItem resolved by jellyfin_id, not from this field.
+   */
   reasoning: string;
   /** 1-based position in the model's recommendation list. */
   pick_order: number;

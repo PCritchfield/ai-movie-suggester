@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { CardCarousel } from "./card-carousel";
 import type { PickItem, SearchResultItem } from "@/lib/api/types";
 
@@ -26,8 +26,14 @@ export function RecommendationSections({
   picks,
   onCardClick,
 }: RecommendationSectionsProps) {
-  const byId = new Map(recommendations.map((r) => [r.jellyfin_id, r]));
-  const pickIds = new Set(picks.map((p) => p.jellyfin_id));
+  const byId = useMemo(
+    () => new Map(recommendations.map((r) => [r.jellyfin_id, r])),
+    [recommendations]
+  );
+  const pickIds = useMemo(
+    () => new Set(picks.map((p) => p.jellyfin_id)),
+    [picks]
+  );
 
   // Recommended: picks in LLM order, resolved against the candidate set.
   const recommended = picks

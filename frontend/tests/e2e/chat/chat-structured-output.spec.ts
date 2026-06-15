@@ -36,8 +36,8 @@ import type { SSEEvent, SearchResultItem } from "../../../src/lib/api/types";
 interface MockStep {
   /** Delay (ms) added to the running clock before this frame is enqueued. */
   delayMs: number;
-  /** SSE event to emit; null = a pure delay (advance the clock, emit nothing). */
-  event: SSEEvent | null;
+  /** SSE event to emit at this point in the schedule. */
+  event: SSEEvent;
 }
 
 interface MockScenario {
@@ -179,7 +179,6 @@ function installChatStreamMock(scenario: MockScenario): void {
         for (const step of scenario.steps) {
           clock += step.delayMs;
           const frame = step.event;
-          if (frame === null) continue;
           setTimeout(() => {
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify(frame)}\n\n`)
@@ -228,8 +227,12 @@ test.describe("Structured chat output (v2 SSE)", () => {
     const searching = page.getByText("Searching your library…");
     const thinking = page.getByText("Thinking about your picks…");
 
-    // 1) Staged status — IN ORDER. "Searching…" first…
+    // 1) Staged status — IN ORDER. "Searching…" is visible while
+    //    "Thinking…" has NOT yet appeared — this proves the ORDER, not just
+    //    that both labels eventually rendered (toBeHidden resolves the instant
+    //    the element is absent, so it asserts the current frame, not a wait).
     await expect(searching).toBeVisible();
+    await expect(thinking).toBeHidden();
 
     // 2) …then transitions to "Thinking about your picks…" (and "Searching…"
     //    is gone — proving a real transition, not two overlapping labels).
