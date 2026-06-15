@@ -199,9 +199,17 @@ class OllamaChatClient:
                 "Unexpected response shape from Ollama chat API"
             ) from exc
 
+        # message.content is expected to be a JSON string. Guard against a
+        # non-string (e.g. an already-parsed object) so it maps to a typed
+        # structured-output error rather than an uncaught TypeError.
+        if not isinstance(content, str):
+            raise OllamaStructuredOutputError(
+                "Ollama chat response content was not a JSON string"
+            )
+
         try:
             return response_model.model_validate_json(content)
-        except ValidationError as exc:
+        except (ValidationError, TypeError) as exc:
             raise OllamaStructuredOutputError(
                 "Ollama returned content that did not match the requested schema"
             ) from exc

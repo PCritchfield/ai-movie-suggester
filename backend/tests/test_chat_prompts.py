@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from app.chat.conversation_store import ConversationTurn, RecommendationPick
 from app.chat.prompts import (
     CONTEXT_PREFIX,
@@ -625,8 +627,11 @@ class TestSchemaInSystemPrompt:
         override_prompt = get_system_prompt("A totally different operator tone.")
         assert SCHEMA_INSTRUCTION in default_prompt
         assert SCHEMA_INSTRUCTION in override_prompt
-        # No templating placeholders that could admit interpolation.
-        assert "{" not in SCHEMA_INSTRUCTION.replace("{", "", 0) or True
+        # No interpolation placeholders that could admit user/movie data. The
+        # JSON schema legitimately contains `{` followed by `"` (JSON objects),
+        # so we only reject `{` followed by an identifier char — the shape of a
+        # Python str.format placeholder like `{name}`.
+        assert re.search(r"\{[A-Za-z_]", SCHEMA_INSTRUCTION) is None
         assert "%s" not in SCHEMA_INSTRUCTION
 
     def test_schema_tokens_counted_in_budget_up_front(self) -> None:

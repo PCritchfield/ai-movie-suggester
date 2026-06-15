@@ -377,6 +377,22 @@ class TestChatStructured:
                 [{"role": "user", "content": "hi"}], StructuredChatResponse
             )
 
+    async def test_non_string_content_raises_structured_output_error(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        """A non-string message.content (already-parsed object) maps to a typed
+        structured-output error, not an uncaught TypeError."""
+        mock_http.post.return_value = httpx.Response(
+            200,
+            json={"message": {"role": "assistant", "content": {"already": "parsed"}}},
+            request=_FAKE_REQUEST,
+        )
+
+        with pytest.raises(OllamaStructuredOutputError):
+            await chat_client.chat_structured(
+                [{"role": "user", "content": "hi"}], StructuredChatResponse
+            )
+
     async def test_timeout_raises_ollama_timeout_error(
         self, chat_client: OllamaChatClient, mock_http: AsyncMock
     ) -> None:
