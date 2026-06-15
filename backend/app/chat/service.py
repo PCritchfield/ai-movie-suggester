@@ -6,19 +6,16 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from app.chat.models import ChatErrorCode, SSEEventType
+from app.chat.models import ChatErrorCode, SSEEventType, StructuredChatResponse
 from app.chat.prompts import (
     build_chat_messages,
     format_watch_history_context,
     get_system_prompt,
+    synthesize_recommendation_prose,
 )
 from app.chat.sanitize import check_injection_patterns, sanitize_user_input
 from app.jellyfin.errors import JellyfinError
-from app.ollama.errors import (
-    OllamaConnectionError,
-    OllamaStreamError,
-    OllamaTimeoutError,
-)
+from app.ollama.errors import OllamaError, OllamaStructuredOutputError
 from app.search.models import SearchStatus, SearchUnavailableError
 
 if TYPE_CHECKING:
@@ -33,6 +30,19 @@ if TYPE_CHECKING:
     from app.watch_history.service import WatchData, WatchHistoryService
 
 logger = logging.getLogger(__name__)
+
+# Spec 27 — safe fallback messages. The structured-output path NEVER falls back
+# to free-prose LLM generation (Angua veto: that would be an attacker-triggerable
+# downgrade to the soft-prompt-only surface). Instead it emits a canned message
+# and leaves the already-shown search-result cards in place.
+FALLBACK_NO_PICKS_MESSAGE = (
+    "I found some options in your library, but I couldn't put together a "
+    "confident recommendation this time. Take a look at the matches above."
+)
+FALLBACK_UNAVAILABLE_MESSAGE = (
+    "I wasn't able to finish that recommendation just now — the AI service "
+    "may be busy. The closest matches from your library are shown above."
+)
 
 
 class ChatPauseCounter:
@@ -189,7 +199,7 @@ class ChatService:
 
         yield {
             "type": SSEEventType.METADATA,
-            "version": 1,
+            "version": 2,
             "recommendations": [r.model_dump() for r in response.results],
             "search_status": response.status.value,
             "turn_count": turn_count,
@@ -235,54 +245,104 @@ class ChatService:
         # Increment pause counter so embedding worker yields to chat
         await self._pause_counter.acquire()
         try:
-            assistant_chunks: list[str] = []
-            async with asyncio.timeout(120.0):
-                async for content in self._chat_client.chat_stream(messages):
-                    assistant_chunks.append(content)
-                    yield {"type": SSEEventType.TEXT, "content": content}
+            # Generation now blocks until the whole structured payload is ready
+            # (no token streaming under grammar-constrained decoding), so signal
+            # a staged wait state the frontend can surface while we wait.
+            yield {"type": SSEEventType.STATUS, "phase": "generating"}
 
-            assistant_text = "".join(assistant_chunks)
+            async with asyncio.timeout(120.0):
+                structured = await self._chat_client.chat_structured(
+                    messages, StructuredChatResponse
+                )
+
+            # Validate every returned id against the permission-filtered
+            # candidate set. A jellyfin_id from the model is a CLAIM, not a
+            # trusted reference — drop any that aren't real candidates.
+            candidate_by_id = {r.jellyfin_id: r for r in response.results}
+            valid = [
+                (rec, candidate_by_id[rec.jellyfin_id])
+                for rec in structured.recommendations
+                if rec.jellyfin_id in candidate_by_id
+            ]
+            dropped = len(structured.recommendations) - len(valid)
+            if dropped:
+                logger.warning(
+                    "chat_picks_dropped dropped=%d kept=%d", dropped, len(valid)
+                )
+
+            if not valid:
+                # Zero valid picks → safe canned fallback (cards already shown).
+                async for event in self._emit_fallback(
+                    session_id, FALLBACK_NO_PICKS_MESSAGE
+                ):
+                    yield event
+                return
+
+            yield {
+                "type": SSEEventType.PICKS,
+                "version": 2,
+                "picks": [
+                    {
+                        "jellyfin_id": rec.jellyfin_id,
+                        "reasoning": rec.reasoning,
+                        "pick_order": order,
+                    }
+                    for order, (rec, _item) in enumerate(valid, start=1)
+                ],
+            }
+
+            prose = synthesize_recommendation_prose(
+                structured.introductory_message,
+                [(item.title, rec.reasoning) for rec, item in valid],
+            )
+            yield {"type": SSEEventType.TEXT, "content": prose}
             yield {"type": SSEEventType.DONE}
 
             # Mutation window 2: store assistant response (success only).
-            # Re-acquire lock via get_lock() in case the original entry
-            # was purged/evicted during the unlocked streaming phase.
+            # Re-acquire lock via get_lock() in case the original entry was
+            # purged/evicted during the unlocked generation phase.
             window2_lock = self._conversation_store.get_lock(session_id)
             async with window2_lock:
-                self._conversation_store.add_turn(
-                    session_id, "assistant", assistant_text
-                )
-        except (TimeoutError, OllamaTimeoutError):
-            yield {
-                "type": SSEEventType.ERROR,
-                "code": ChatErrorCode.GENERATION_TIMEOUT,
-                "message": (
-                    "The response took too long to generate. "
-                    "Your recommendations are shown above."
-                ),
-            }
-        except (OllamaConnectionError, OllamaStreamError):
-            yield {
-                "type": SSEEventType.ERROR,
-                "code": ChatErrorCode.OLLAMA_UNAVAILABLE,
-                "message": (
-                    "The AI service became unavailable. "
-                    "Your recommendations are shown above."
-                ),
-            }
+                self._conversation_store.add_turn(session_id, "assistant", prose)
+        except OllamaStructuredOutputError:
+            # Got a response, but it didn't parse/validate. Do NOT downgrade to
+            # free-prose (Angua veto) — emit the canned fallback instead.
+            async for event in self._emit_fallback(
+                session_id, FALLBACK_NO_PICKS_MESSAGE
+            ):
+                yield event
+        except (TimeoutError, OllamaError):
+            # Timeout / transport / model error — AI unavailable. Canned message,
+            # cards retained, no free-prose path.
+            async for event in self._emit_fallback(
+                session_id, FALLBACK_UNAVAILABLE_MESSAGE
+            ):
+                yield event
         except Exception:
             # exc_info logged here — ensure no exception embeds user query content
-            logger.exception("chat_stream_interrupted")
-            yield {
-                "type": SSEEventType.ERROR,
-                "code": ChatErrorCode.STREAM_INTERRUPTED,
-                "message": (
-                    "The response was interrupted. "
-                    "Your recommendations are shown above."
-                ),
-            }
+            logger.exception("chat_generation_interrupted")
+            async for event in self._emit_fallback(
+                session_id, FALLBACK_UNAVAILABLE_MESSAGE
+            ):
+                yield event
         finally:
             await self._pause_counter.release()
+
+    async def _emit_fallback(
+        self, session_id: str, message: str
+    ) -> AsyncIterator[dict]:
+        """Emit the safe fallback: canned text + done, and store the turn.
+
+        No ``picks`` event (the frontend keeps the raw search-result cards) and
+        no free-prose LLM call. The canned message is stored as the assistant
+        turn so the conversation transcript stays coherent (sidecar is None —
+        added in Spec 27 Task 3).
+        """
+        yield {"type": SSEEventType.TEXT, "content": message}
+        yield {"type": SSEEventType.DONE}
+        window2_lock = self._conversation_store.get_lock(session_id)
+        async with window2_lock:
+            self._conversation_store.add_turn(session_id, "assistant", message)
 
     @staticmethod
     def _empty_results_message(status: SearchStatus) -> str:

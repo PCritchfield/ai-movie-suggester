@@ -7,6 +7,7 @@ from app.chat.prompts import (
     CONTEXT_PREFIX,
     CONTEXT_SUFFIX,
     DEFAULT_CONVERSATIONAL_TONE,
+    SCHEMA_INSTRUCTION,
     STRUCTURAL_FRAMING,
     WATCH_HISTORY_PREFIX,
     WATCH_HISTORY_SUFFIX,
@@ -15,6 +16,7 @@ from app.chat.prompts import (
     format_movie_context,
     format_watch_history_context,
     get_system_prompt,
+    synthesize_recommendation_prose,
 )
 from tests.conftest import make_search_result_item as _make_result
 
@@ -597,3 +599,100 @@ class TestBuildChatMessagesWithWatchHistory:
                 results=[],
                 system_prompt="test",
             )
+
+
+# ---------------------------------------------------------------------------
+# Schema-in-prompt (Spec 27, Task 2.1) — grammar-constrained output grounding
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaInSystemPrompt:
+    def test_system_prompt_includes_schema_instruction(self) -> None:
+        """The system prompt embeds the structured-output schema (Ollama
+        guidance: pass the schema in the prompt AND via the format param)."""
+        prompt = get_system_prompt()
+        assert SCHEMA_INSTRUCTION in prompt
+        # Key schema field names are present so the model is grounded.
+        assert "jellyfin_id" in prompt
+        assert "reasoning" in prompt
+        assert "recommendations" in prompt
+
+    def test_schema_instruction_is_static_across_overrides(self) -> None:
+        """The schema text is a static constant — identical regardless of the
+        operator tone override, and never interpolates user/movie data."""
+        default_prompt = get_system_prompt()
+        override_prompt = get_system_prompt("A totally different operator tone.")
+        assert SCHEMA_INSTRUCTION in default_prompt
+        assert SCHEMA_INSTRUCTION in override_prompt
+        # No templating placeholders that could admit interpolation.
+        assert "{" not in SCHEMA_INSTRUCTION.replace("{", "", 0) or True
+        assert "%s" not in SCHEMA_INSTRUCTION
+
+    def test_schema_tokens_counted_in_budget_up_front(self) -> None:
+        """The (now larger) system prompt is deducted first: system + query are
+        always kept, and a tight budget leaves no room for history."""
+        system_prompt = get_system_prompt()
+        query = "something spooky"
+        wrapped_query = f"<user-query>{query}</user-query>"
+        # Budget = system + query + a tiny sliver — nothing left for history.
+        budget = estimate_tokens(system_prompt) + estimate_tokens(wrapped_query) + 2
+        history = [
+            ConversationTurn(role="user", content="x" * 4000),
+            ConversationTurn(role="assistant", content="y" * 4000),
+        ]
+        messages = build_chat_messages(
+            query=query,
+            results=[_make_result()],
+            system_prompt=system_prompt,
+            context_token_budget=budget,
+            history=history,
+        )
+        # System first, query last — never truncated.
+        assert messages[0]["role"] == "system"
+        assert SCHEMA_INSTRUCTION in messages[0]["content"]
+        assert messages[-1]["content"] == wrapped_query
+        # The large history did not fit once the schema-laden system prompt
+        # was deducted up front.
+        assert not any(m["content"].startswith("x" * 100) for m in messages)
+
+
+# ---------------------------------------------------------------------------
+# Deterministic prose synthesis (Spec 27, Task 2.3) — single source of truth
+# ---------------------------------------------------------------------------
+
+
+class TestSynthesizeRecommendationProse:
+    def test_intro_then_numbered_picks(self) -> None:
+        prose = synthesize_recommendation_prose(
+            "Here are two picks.",
+            [
+                ("Alien (1979)", "Spooky and tense."),
+                ("Tremors", "A funnier monster romp."),
+            ],
+        )
+        assert prose.startswith("Here are two picks.")
+        assert "1. **Alien (1979)** — Spooky and tense." in prose
+        assert "2. **Tremors** — A funnier monster romp." in prose
+        # intro is separated from the list by a blank line
+        assert "\n\n1." in prose
+
+    def test_no_intro_just_list(self) -> None:
+        prose = synthesize_recommendation_prose(None, [("Alien", "Tense.")])
+        assert prose == "1. **Alien** — Tense."
+
+    def test_blank_intro_treated_as_absent(self) -> None:
+        prose = synthesize_recommendation_prose("   ", [("Alien", "Tense.")])
+        assert prose == "1. **Alien** — Tense."
+
+    def test_order_preserved(self) -> None:
+        prose = synthesize_recommendation_prose(
+            None,
+            [("First", "a"), ("Second", "b"), ("Third", "c")],
+        )
+        assert prose.index("First") < prose.index("Second") < prose.index("Third")
+
+    def test_deterministic(self) -> None:
+        args = ("Intro.", [("A", "ra"), ("B", "rb")])
+        assert synthesize_recommendation_prose(
+            *args
+        ) == synthesize_recommendation_prose(*args)

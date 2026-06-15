@@ -11,6 +11,8 @@ class SSEEventType(StrEnum):
     """SSE event type identifiers for the chat stream."""
 
     METADATA = "metadata"
+    STATUS = "status"  # Spec 27 — staged wait state ("generating")
+    PICKS = "picks"  # Spec 27 — validated LLM recommendations (version 2)
     TEXT = "text"
     DONE = "done"
     ERROR = "error"

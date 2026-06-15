@@ -521,3 +521,80 @@ class TestSessionCascade:
         store.purge_session("session-1")
         assert store.turn_count("session-1") == 0
         assert store.get_turns("session-1") == []
+
+
+# ---------------------------------------------------------------------------
+# Structured-output fallback through the REAL service (Spec 27, Task 2.6)
+# ---------------------------------------------------------------------------
+
+
+class TestChatEndpointStructuredFallback:
+    def test_all_hallucinated_ids_fall_back_through_real_endpoint(self) -> None:
+        """A real ChatService whose LLM returns only hallucinated ids must, end
+        to end through the router, emit metadata(v2) → status → text(canned) →
+        done with NO picks event and NO free-prose call (Angua veto criterion)."""
+        from app.chat.models import StructuredChatResponse, StructuredRecommendation
+        from app.chat.service import ChatPauseCounter, ChatService
+        from app.search.models import (
+            SearchResponse,
+            SearchResultItem,
+            SearchStatus,
+        )
+
+        # One real candidate; the model recommends ids that are NOT in it.
+        candidate = SearchResultItem(
+            jellyfin_id="real-1",
+            title="Galaxy Quest",
+            overview="A comedy.",
+            genres=["Comedy"],
+            year=1999,
+            score=0.8,
+            poster_url="/Items/real-1/Images/Primary",
+        )
+        search = AsyncMock()
+        search.search.return_value = SearchResponse(
+            status=SearchStatus.OK,
+            results=[candidate],
+            total_candidates=1,
+            filtered_count=0,
+            query_time_ms=5,
+        )
+
+        chat_client = AsyncMock()
+        chat_client.chat_structured.return_value = StructuredChatResponse(
+            introductory_message="Sure!",
+            recommendations=[
+                StructuredRecommendation(jellyfin_id="FAKE-1", reasoning="nope"),
+                StructuredRecommendation(jellyfin_id="FAKE-2", reasoning="also nope"),
+            ],
+        )
+
+        real_service = ChatService(
+            search_service=search,
+            chat_client=chat_client,
+            pause_counter=ChatPauseCounter(),
+            settings=make_test_settings(),
+            conversation_store=ConversationStore(
+                max_turns=10, ttl_seconds=7200, max_sessions=100
+            ),
+        )
+
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+
+        _, client = _make_chat_app(
+            session_store=session_store, chat_service=real_service
+        )
+
+        resp = client.post("/api/chat", json={"message": "something funny"})
+        assert resp.status_code == 200
+        parsed = _parse_sse_events(resp.text)
+        types = [e["type"] for e in parsed]
+
+        assert types == ["metadata", "status", "text", "done"]
+        assert parsed[0]["version"] == 2
+        assert "picks" not in types
+        assert "error" not in types
+        assert "couldn't put together" in parsed[2]["content"].lower()
+        # The free-prose path must never be invoked on the fallback.
+        chat_client.chat_stream.assert_not_called()
