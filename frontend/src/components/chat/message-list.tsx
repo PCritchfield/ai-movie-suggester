@@ -10,6 +10,7 @@ import type {
   SearchResultItem,
 } from "@/lib/api/types";
 import { CardCarousel } from "./card-carousel";
+import { RecommendationSections } from "./recommendation-sections";
 import { CardDetail } from "./card-detail";
 
 interface MessageListProps {
@@ -18,16 +19,31 @@ interface MessageListProps {
   onRetry?: (messageId: string) => void;
 }
 
-/** Dots animation for streaming loading state */
-function LoadingIndicator() {
+/** Dots animation + staged status text for the streaming loading state.
+ *
+ * Spec 27 — generation no longer streams tokens, so a tens-of-seconds wait can
+ * look frozen. A changing status line ("Searching…" → "Thinking about your
+ * picks…") keeps the app reading as alive (Adorabelle ruling). */
+function LoadingIndicator({
+  statusPhase,
+}: {
+  statusPhase?: "searching" | "generating";
+}) {
+  const label =
+    statusPhase === "generating"
+      ? "Thinking about your picks…"
+      : "Searching your library…";
   return (
     <div
-      className="flex items-center gap-1 px-4 py-2"
+      className="flex items-center gap-2 px-4 py-2"
       aria-label="Loading response"
     >
-      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+      <span className="flex items-center gap-1" aria-hidden="true">
+        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+      </span>
+      <span className="text-sm text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -171,7 +187,7 @@ export function MessageList({
               {msg.role === "assistant" ? (
                 <>
                   {msg.isStreaming && !msg.content ? (
-                    <LoadingIndicator />
+                    <LoadingIndicator statusPhase={msg.statusPhase} />
                   ) : (
                     <div className="prose prose-sm dark:prose-invert max-w-none break-words">
                       <ReactMarkdown
@@ -182,12 +198,22 @@ export function MessageList({
                       </ReactMarkdown>
                     </div>
                   )}
-                  {msg.recommendations && msg.recommendations.length > 0 && (
-                    <CardCarousel
-                      items={msg.recommendations}
-                      onCardClick={setSelectedMovie}
-                    />
-                  )}
+                  {msg.recommendations &&
+                    msg.recommendations.length > 0 &&
+                    (msg.picks && msg.picks.length > 0 ? (
+                      // Spec 27 v2 — two-section layout when the LLM picked.
+                      <RecommendationSections
+                        recommendations={msg.recommendations}
+                        picks={msg.picks}
+                        onCardClick={setSelectedMovie}
+                      />
+                    ) : (
+                      // No picks (legacy v1 backend or fallback) — plain carousel.
+                      <CardCarousel
+                        items={msg.recommendations}
+                        onCardClick={setSelectedMovie}
+                      />
+                    ))}
                   {msg.error && (
                     <MessageError
                       error={msg.error}

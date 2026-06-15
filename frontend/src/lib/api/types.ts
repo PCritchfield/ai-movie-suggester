@@ -122,10 +122,32 @@ export type ChatErrorCode =
 
 export interface MetadataEvent {
   type: "metadata";
+  /** 1 = legacy free-prose contract; 2 = Spec 27 structured output (adds status/picks). */
   version: number;
   recommendations: SearchResultItem[];
   search_status: SearchStatus;
   turn_count: number;
+}
+
+/** Spec 27 — staged wait state emitted when LLM generation begins. */
+export interface StatusEvent {
+  type: "status";
+  phase: "generating";
+}
+
+/** Spec 27 — a single validated recommendation in the LLM's order. */
+export interface PickItem {
+  jellyfin_id: string;
+  reasoning: string;
+  /** 1-based position in the model's recommendation list. */
+  pick_order: number;
+}
+
+/** Spec 27 — terminal set of validated picks (version 2 contract). */
+export interface PicksEvent {
+  type: "picks";
+  version: number;
+  picks: PickItem[];
 }
 
 export interface TextEvent {
@@ -144,7 +166,13 @@ export interface ErrorEvent {
 }
 
 /** Discriminated union of all SSE event types from POST /api/chat */
-export type SSEEvent = MetadataEvent | TextEvent | DoneEvent | ErrorEvent;
+export type SSEEvent =
+  | MetadataEvent
+  | StatusEvent
+  | PicksEvent
+  | TextEvent
+  | DoneEvent
+  | ErrorEvent;
 
 // --- Chat message for client state ---
 
@@ -153,7 +181,11 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   recommendations?: SearchResultItem[];
+  /** Spec 27 — validated LLM picks (subset of recommendations, in LLM order). */
+  picks?: PickItem[];
   searchStatus?: SearchStatus;
+  /** Spec 27 — staged wait state while the response is being produced. */
+  statusPhase?: "searching" | "generating";
   error?: { code: ChatErrorCode; message: string };
   isStreaming?: boolean;
 }
