@@ -71,7 +71,7 @@ describe("MessageList", () => {
       <MessageList messages={[userMessage, streamingMsg]} isStreaming={true} />
     );
 
-    expect(screen.getByLabelText("Loading response")).toBeInTheDocument();
+    expect(screen.getByText("Searching your library…")).toBeInTheDocument();
   });
 
   it("does not show loading indicator when content has arrived", () => {
@@ -89,7 +89,9 @@ describe("MessageList", () => {
       />
     );
 
-    expect(screen.queryByLabelText("Loading response")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Searching your library…")
+    ).not.toBeInTheDocument();
   });
 });
 

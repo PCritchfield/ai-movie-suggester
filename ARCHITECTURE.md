@@ -60,7 +60,7 @@ sequenceDiagram
     B->>L: get_many() for top permitted matches
     L-->>B: Full metadata from local SQLite
     Note over B: If candidates are empty, emit graceful<br/>text + done and skip Ollama (Spec 25)
-    B-->>F: SSE: metadata event (version 2, candidates + status)
+    B-->>F: SSE: metadata event (version 2, candidates + search_status)
     B-->>F: SSE: status event (generating)
     B->>O: Structured chat (llama3.1:8b) — Ollama `format` JSON schema,<br/>temperature 0, non-streaming (Spec 27).<br/>System prompt (+ schema) + history + [ID:] candidate context + query
     Note over B: Cooperative GPU pause: embedding worker<br/>yields GPU while chat is active

@@ -221,7 +221,7 @@ async function sendChat(page: Page, scenario: MockScenario): Promise<void> {
 test.describe("Structured chat output (v2 SSE)", () => {
   test("renders the staged status sequence in order, then picks + prose together, then 'Show more'", async ({
     authenticatedPage: page,
-  }) => {
+  }, testInfo) => {
     await sendChat(page, SUCCESS_SCENARIO);
 
     const searching = page.getByText("Searching your library…");
@@ -265,8 +265,10 @@ test.describe("Structured chat output (v2 SSE)", () => {
     await expect(moreMatches).toBeVisible();
 
     // Screenshot (Task 4.7): mobile, two-section layout, disclosure collapsed.
+    // testInfo.outputPath namespaces by project (chromium/firefox) + retry, so
+    // parallel projects never collide on a shared filename.
     await page.screenshot({
-      path: "test-results/spec27-mobile-recommended-collapsed.png",
+      path: testInfo.outputPath("spec27-mobile-recommended-collapsed.png"),
       fullPage: true,
     });
 
@@ -278,7 +280,7 @@ test.describe("Structured chat output (v2 SSE)", () => {
 
     // Screenshot (Task 4.7): mobile, "More matches" expanded.
     await page.screenshot({
-      path: "test-results/spec27-mobile-more-matches-expanded.png",
+      path: testInfo.outputPath("spec27-mobile-more-matches-expanded.png"),
       fullPage: true,
     });
   });

@@ -34,10 +34,12 @@ function LoadingIndicator({
       ? "Thinking about your picks…"
       : "Searching your library…";
   return (
-    <div
-      className="flex items-center gap-2 px-4 py-2"
-      aria-label="Loading response"
-    >
+    // No container aria-label: it would override the visible staged text as the
+    // accessible name, hiding the "Searching…" → "Thinking…" phase change from
+    // screen readers (the whole point of the staged status). The decorative dots
+    // are aria-hidden, so the accessible name is the phase label, announced via
+    // the surrounding role="log" region.
+    <div className="flex items-center gap-2 px-4 py-2">
       <span className="flex items-center gap-1" aria-hidden="true">
         <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
         <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
