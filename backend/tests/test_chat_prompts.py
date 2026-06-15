@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
-from app.chat.conversation_store import ConversationTurn
+import re
+
+from app.chat.conversation_store import ConversationTurn, RecommendationPick
 from app.chat.prompts import (
     CONTEXT_PREFIX,
     CONTEXT_SUFFIX,
     DEFAULT_CONVERSATIONAL_TONE,
+    SCHEMA_INSTRUCTION,
     STRUCTURAL_FRAMING,
     WATCH_HISTORY_PREFIX,
     WATCH_HISTORY_SUFFIX,
     build_chat_messages,
     estimate_tokens,
     format_movie_context,
+    format_picks_reference,
     format_watch_history_context,
     get_system_prompt,
+    synthesize_recommendation_prose,
 )
 from tests.conftest import make_search_result_item as _make_result
 
@@ -597,3 +602,163 @@ class TestBuildChatMessagesWithWatchHistory:
                 results=[],
                 system_prompt="test",
             )
+
+
+# ---------------------------------------------------------------------------
+# Schema-in-prompt (Spec 27, Task 2.1) — grammar-constrained output grounding
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaInSystemPrompt:
+    def test_system_prompt_includes_schema_instruction(self) -> None:
+        """The system prompt embeds the structured-output schema (Ollama
+        guidance: pass the schema in the prompt AND via the format param)."""
+        prompt = get_system_prompt()
+        assert SCHEMA_INSTRUCTION in prompt
+        # Key schema field names are present so the model is grounded.
+        assert "jellyfin_id" in prompt
+        assert "reasoning" in prompt
+        assert "recommendations" in prompt
+
+    def test_schema_instruction_is_static_across_overrides(self) -> None:
+        """The schema text is a static constant — identical regardless of the
+        operator tone override, and never interpolates user/movie data."""
+        default_prompt = get_system_prompt()
+        override_prompt = get_system_prompt("A totally different operator tone.")
+        assert SCHEMA_INSTRUCTION in default_prompt
+        assert SCHEMA_INSTRUCTION in override_prompt
+        # No interpolation placeholders that could admit user/movie data. The
+        # JSON schema legitimately contains `{` followed by `"` (JSON objects),
+        # so we only reject `{` followed by an identifier char — the shape of a
+        # Python str.format placeholder like `{name}`.
+        assert re.search(r"\{[A-Za-z_]", SCHEMA_INSTRUCTION) is None
+        assert "%s" not in SCHEMA_INSTRUCTION
+
+    def test_schema_tokens_counted_in_budget_up_front(self) -> None:
+        """The (now larger) system prompt is deducted first: system + query are
+        always kept, and a tight budget leaves no room for history."""
+        system_prompt = get_system_prompt()
+        query = "something spooky"
+        wrapped_query = f"<user-query>{query}</user-query>"
+        # Budget = system + query + a tiny sliver — nothing left for history.
+        budget = estimate_tokens(system_prompt) + estimate_tokens(wrapped_query) + 2
+        history = [
+            ConversationTurn(role="user", content="x" * 4000),
+            ConversationTurn(role="assistant", content="y" * 4000),
+        ]
+        messages = build_chat_messages(
+            query=query,
+            results=[_make_result()],
+            system_prompt=system_prompt,
+            context_token_budget=budget,
+            history=history,
+        )
+        # System first, query last — never truncated.
+        assert messages[0]["role"] == "system"
+        assert SCHEMA_INSTRUCTION in messages[0]["content"]
+        assert messages[-1]["content"] == wrapped_query
+        # The large history did not fit once the schema-laden system prompt
+        # was deducted up front.
+        assert not any(m["content"].startswith("x" * 100) for m in messages)
+
+
+# ---------------------------------------------------------------------------
+# Deterministic prose synthesis (Spec 27, Task 2.3) — single source of truth
+# ---------------------------------------------------------------------------
+
+
+class TestSynthesizeRecommendationProse:
+    def test_intro_then_numbered_picks(self) -> None:
+        prose = synthesize_recommendation_prose(
+            "Here are two picks.",
+            [
+                ("Alien (1979)", "Spooky and tense."),
+                ("Tremors", "A funnier monster romp."),
+            ],
+        )
+        assert prose.startswith("Here are two picks.")
+        assert "1. **Alien (1979)** — Spooky and tense." in prose
+        assert "2. **Tremors** — A funnier monster romp." in prose
+        # intro is separated from the list by a blank line
+        assert "\n\n1." in prose
+
+    def test_no_intro_just_list(self) -> None:
+        prose = synthesize_recommendation_prose(None, [("Alien", "Tense.")])
+        assert prose == "1. **Alien** — Tense."
+
+    def test_blank_intro_treated_as_absent(self) -> None:
+        prose = synthesize_recommendation_prose("   ", [("Alien", "Tense.")])
+        assert prose == "1. **Alien** — Tense."
+
+    def test_order_preserved(self) -> None:
+        prose = synthesize_recommendation_prose(
+            None,
+            [("First", "a"), ("Second", "b"), ("Third", "c")],
+        )
+        assert prose.index("First") < prose.index("Second") < prose.index("Third")
+
+    def test_deterministic(self) -> None:
+        args = ("Intro.", [("A", "ra"), ("B", "rb")])
+        assert synthesize_recommendation_prose(
+            *args
+        ) == synthesize_recommendation_prose(*args)
+
+
+# ---------------------------------------------------------------------------
+# Sidecar replay enrichment (Spec 27, Task 3.3b) — follow-up resolution context
+# ---------------------------------------------------------------------------
+
+
+class TestSidecarReplayEnrichment:
+    def test_format_picks_reference_lists_titles_in_order(self) -> None:
+        picks = (
+            RecommendationPick(pick_order=1, jellyfin_id="a1", title="Alien"),
+            RecommendationPick(pick_order=2, jellyfin_id="g1", title="Galaxy Quest"),
+        )
+        ref = format_picks_reference(picks)
+        assert "1. Alien" in ref
+        assert "2. Galaxy Quest" in ref
+        assert ref.index("Alien") < ref.index("Galaxy Quest")
+
+    def test_replay_surfaces_picks_from_sidecar_not_prose(self) -> None:
+        """The prior assistant turn's titles/order reach the model from the
+        sidecar even when the stored prose does NOT contain them."""
+        history = [
+            ConversationTurn(role="user", content="something scary then funny"),
+            ConversationTurn(
+                role="assistant",
+                content="Here are a couple of options.",  # prose lacks titles
+                picks=(
+                    RecommendationPick(pick_order=1, jellyfin_id="a1", title="Alien"),
+                    RecommendationPick(
+                        pick_order=2, jellyfin_id="g1", title="Galaxy Quest"
+                    ),
+                ),
+            ),
+        ]
+        messages = build_chat_messages(
+            query="more like the second one",
+            results=[_make_result()],
+            system_prompt=get_system_prompt(),
+            context_token_budget=6000,
+            history=history,
+        )
+        blob = "\n".join(m["content"] for m in messages)
+        assert "1. Alien" in blob
+        assert "2. Galaxy Quest" in blob
+        assert blob.index("Alien") < blob.index("Galaxy Quest")
+
+    def test_replay_unenriched_when_no_sidecar(self) -> None:
+        """Assistant turns without a sidecar replay their prose unchanged."""
+        history = [
+            ConversationTurn(role="assistant", content="Just some prose.", picks=None),
+        ]
+        messages = build_chat_messages(
+            query="q",
+            results=[_make_result()],
+            system_prompt=get_system_prompt(),
+            context_token_budget=6000,
+            history=history,
+        )
+        assistant_msgs = [m for m in messages if m["content"] == "Just some prose."]
+        assert len(assistant_msgs) == 1

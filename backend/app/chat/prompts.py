@@ -11,10 +11,13 @@ CHAT_SYSTEM_PROMPT env var.
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
+from app.chat.models import RECOMMENDATION_RESPONSE_SCHEMA
+
 if TYPE_CHECKING:
-    from app.chat.conversation_store import ConversationTurn
+    from app.chat.conversation_store import ConversationTurn, RecommendationPick
     from app.search.models import SearchResultItem
 
 # XML delimiter tag names — shared with sanitize.py
@@ -47,6 +50,20 @@ DEFAULT_CONVERSATIONAL_TONE = (
     "Be friendly and conversational. When recommending movies, briefly explain "
     "why each pick matches what the user is looking for. If nothing in the "
     "library fits well, say so honestly rather than forcing a bad match."
+)
+
+# Spec 27 — structured-output grounding. Ollama guidance is to pass the JSON
+# schema in the prompt IN ADDITION to the `format` parameter so the model is
+# grounded, not just grammar-constrained. This MUST stay a static constant:
+# the schema is derived once from the Pydantic model and no user input or movie
+# metadata is ever interpolated into it, so it cannot become an injection
+# carrier. The decoder enforces the shape; this text improves field quality.
+SCHEMA_INSTRUCTION = (
+    "Respond ONLY with a JSON object matching this schema. Use the exact "
+    "jellyfin_id values from the candidate list — never invent or alter an id. "
+    "Give each recommendation a one-sentence 'reasoning'. If nothing fits, "
+    "return an empty 'recommendations' list.\n"
+    f"{json.dumps(RECOMMENDATION_RESPONSE_SCHEMA)}"
 )
 
 CONTEXT_PREFIX = (
@@ -111,6 +128,17 @@ def estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 
+def format_picks_reference(picks: tuple[RecommendationPick, ...]) -> str:
+    """Compact ordered reference to a prior turn's validated picks (Spec 27).
+
+    Built from the structured sidecar rather than the prose, so ordinal
+    follow-ups ("more like the second one") resolve reliably even if the prose
+    was truncated. Titles + order only — no reasoning (the sidecar omits it).
+    """
+    items = "; ".join(f"{p.pick_order}. {p.title}" for p in picks)
+    return f"(Earlier recommendations, in order: {items})"
+
+
 def get_system_prompt(operator_override: str | None = None) -> str:
     """Assemble the full system prompt.
 
@@ -125,8 +153,41 @@ def get_system_prompt(operator_override: str | None = None) -> str:
         The assembled system prompt string.
     """
     tone = operator_override or DEFAULT_CONVERSATIONAL_TONE
-    inner = STRUCTURAL_FRAMING + "\n\n" + tone
+    inner = STRUCTURAL_FRAMING + "\n\n" + tone + "\n\n" + SCHEMA_INSTRUCTION
     return f"<{TAG_SYSTEM}>\n{inner}\n</{TAG_SYSTEM}>"
+
+
+def synthesize_recommendation_prose(
+    introductory_message: str | None,
+    picks: list[tuple[str, str]],
+) -> str:
+    """Assemble assistant prose deterministically from the structured payload.
+
+    Spec 27: prose and movie cards are two renderings of ONE validated source
+    (the structured picks), so they cannot diverge. This is pure template
+    assembly — there is deliberately no second LLM pass, which would re-open the
+    divergence bug this spec exists to close.
+
+    Args:
+        introductory_message: Optional conversational lead-in from the model.
+        picks: ``(title, reasoning)`` pairs in the model's recommendation order.
+
+    Returns:
+        Markdown prose: an optional intro paragraph followed by a numbered list
+        of ``**title** — reasoning`` items. Empty string if there is nothing to
+        say (caller routes the empty case to the fallback path).
+    """
+    blocks: list[str] = []
+    intro = (introductory_message or "").strip()
+    if intro:
+        blocks.append(intro)
+    if picks:
+        lines = [
+            f"{i}. **{title}** — {reasoning.strip()}"
+            for i, (title, reasoning) in enumerate(picks, start=1)
+        ]
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 def format_movie_context(
@@ -254,10 +315,16 @@ def build_chat_messages(
         # that fits. Stop on the first turn that doesn't fit to preserve
         # conversational coherence (no orphaned user/assistant turns).
         for turn in reversed(history):
-            turn_tokens = estimate_tokens(turn.content)
+            content = turn.content
+            # Spec 27 — enrich a prior assistant turn with its structured pick
+            # reference so ordinal follow-ups resolve even if the prose was
+            # truncated. Source of truth is the sidecar, not the prose.
+            if turn.role == "assistant" and turn.picks:
+                content = f"{content}\n{format_picks_reference(turn.picks)}"
+            turn_tokens = estimate_tokens(content)
             if accumulated + turn_tokens > history_budget:
                 break
-            history_msgs.append({"role": turn.role, "content": turn.content})
+            history_msgs.append({"role": turn.role, "content": content})
             accumulated += turn_tokens
         # Reverse to restore chronological order.
         history_msgs.reverse()

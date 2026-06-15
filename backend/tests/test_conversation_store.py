@@ -10,8 +10,64 @@ from pydantic import ValidationError
 from app.chat.conversation_store import (
     MAX_TURN_CONTENT_CHARS,
     ConversationStore,
+    ConversationTurn,
+    RecommendationPick,
 )
 from tests.conftest import make_test_settings
+
+
+class TestRecommendationSidecar:
+    """Spec 27 — optional structured sidecar of validated picks on a turn.
+
+    Stores IDs + titles + 1-based order (reasoning deliberately excluded — it is
+    PII-adjacent model output and not needed for follow-up resolution).
+    """
+
+    def test_turn_defaults_to_no_picks(self) -> None:
+        """Prose-only construction is unchanged — picks default to None."""
+        turn = ConversationTurn(role="assistant", content="hi")
+        assert turn.picks is None
+
+    def test_turn_is_frozen(self) -> None:
+        """The sidecar field is on a frozen dataclass (no mutable bolt-on)."""
+        turn = ConversationTurn(role="assistant", content="hi")
+        # FrozenInstanceError subclasses AttributeError — assert the precise type.
+        with pytest.raises(AttributeError):
+            turn.picks = ()  # type: ignore[misc]
+
+    def test_pick_has_order_id_title_no_reasoning(self) -> None:
+        pick = RecommendationPick(pick_order=1, jellyfin_id="a1", title="Alien")
+        assert pick.pick_order == 1
+        assert pick.jellyfin_id == "a1"
+        assert pick.title == "Alien"
+        assert not hasattr(pick, "reasoning")
+
+    def test_add_turn_stores_sidecar(self) -> None:
+        store = ConversationStore(max_turns=10)
+        picks = (
+            RecommendationPick(pick_order=1, jellyfin_id="a1", title="Alien"),
+            RecommendationPick(pick_order=2, jellyfin_id="g1", title="Galaxy Quest"),
+        )
+        store.add_turn("s1", "assistant", "1. Alien 2. Galaxy Quest", picks=picks)
+        turns = store.get_turns("s1")
+        assert turns[-1].picks == picks
+
+    def test_add_turn_without_picks_unchanged(self) -> None:
+        """Existing call sites (no picks kwarg) keep working, picks=None."""
+        store = ConversationStore(max_turns=10)
+        store.add_turn("s1", "user", "hello")
+        assert store.get_turns("s1")[-1].picks is None
+
+    def test_truncation_unchanged_with_sidecar(self) -> None:
+        """Content truncation still applies; sidecar is independent."""
+        store = ConversationStore(max_turns=10)
+        picks = (RecommendationPick(pick_order=1, jellyfin_id="a1", title="Alien"),)
+        store.add_turn(
+            "s1", "assistant", "z" * (MAX_TURN_CONTENT_CHARS + 50), picks=picks
+        )
+        turn = store.get_turns("s1")[-1]
+        assert len(turn.content) == MAX_TURN_CONTENT_CHARS
+        assert turn.picks == picks
 
 
 class TestConversationStoreBasics:

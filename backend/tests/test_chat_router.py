@@ -137,7 +137,7 @@ class TestChatRateLimit:
         events = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
             },
@@ -204,7 +204,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [
                     {
                         "jellyfin_id": "jf-001",
@@ -244,12 +244,53 @@ class TestChatStreamsSSE:
         assert parsed[2]["type"] == "text"
         assert parsed[3]["type"] == "done"
 
+    def test_chat_endpoint_forwards_v2_event_types(self) -> None:
+        """The router transparently forwards the Spec 27 v2 event sequence
+        (status + picks), preserving each event's shape to the client."""
+        events_to_yield = [
+            {
+                "type": "metadata",
+                "version": 2,
+                "recommendations": [],
+                "search_status": "ok",
+            },
+            {"type": "status", "phase": "generating"},
+            {
+                "type": "picks",
+                "version": 2,
+                "picks": [
+                    {"jellyfin_id": "jf-001", "reasoning": "great fit", "pick_order": 1}
+                ],
+            },
+            {"type": "text", "content": "1. **Galaxy Quest** — great fit"},
+            {"type": "done"},
+        ]
+
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+        service = _make_stream_mock(events_to_yield)
+        _, client = _make_chat_app(session_store=session_store, chat_service=service)
+
+        resp = client.post("/api/chat", json={"message": "something funny"})
+        assert resp.status_code == 200
+        parsed = _parse_sse_events(resp.text)
+
+        assert [e["type"] for e in parsed] == [
+            "metadata",
+            "status",
+            "picks",
+            "text",
+            "done",
+        ]
+        assert parsed[1]["phase"] == "generating"
+        assert parsed[2]["picks"][0]["pick_order"] == 1
+
     def test_chat_endpoint_metadata_first(self) -> None:
         """First SSE event is metadata with recommendations."""
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "no_embeddings",
             },
@@ -277,7 +318,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "no_embeddings",
             },
@@ -305,7 +346,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
             },
@@ -340,7 +381,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
             },
@@ -375,7 +416,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [
                     {
                         "jellyfin_id": "jf-001",
@@ -413,7 +454,7 @@ class TestChatStreamsSSE:
         events_to_yield = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
             },
@@ -437,8 +478,8 @@ class TestChatStreamsSSE:
         for event in parsed:
             assert "type" in event
 
-        # Metadata event has version: 1
-        assert parsed[0]["version"] == 1
+        # Metadata event has version: 2 (Spec 27 structured-output contract)
+        assert parsed[0]["version"] == 2
 
         # Text events have content key
         text_events = [e for e in parsed if e["type"] == "text"]
@@ -465,7 +506,7 @@ class TestDeleteChatHistory:
         events = [
             {
                 "type": "metadata",
-                "version": 1,
+                "version": 2,
                 "recommendations": [],
                 "search_status": "ok",
                 "turn_count": 1,
@@ -521,3 +562,80 @@ class TestSessionCascade:
         store.purge_session("session-1")
         assert store.turn_count("session-1") == 0
         assert store.get_turns("session-1") == []
+
+
+# ---------------------------------------------------------------------------
+# Structured-output fallback through the REAL service (Spec 27, Task 2.6)
+# ---------------------------------------------------------------------------
+
+
+class TestChatEndpointStructuredFallback:
+    def test_all_hallucinated_ids_fall_back_through_real_endpoint(self) -> None:
+        """A real ChatService whose LLM returns only hallucinated ids must, end
+        to end through the router, emit metadata(v2) → status → text(canned) →
+        done with NO picks event and NO free-prose call (Angua veto criterion)."""
+        from app.chat.models import StructuredChatResponse, StructuredRecommendation
+        from app.chat.service import ChatPauseCounter, ChatService
+        from app.search.models import (
+            SearchResponse,
+            SearchResultItem,
+            SearchStatus,
+        )
+
+        # One real candidate; the model recommends ids that are NOT in it.
+        candidate = SearchResultItem(
+            jellyfin_id="real-1",
+            title="Galaxy Quest",
+            overview="A comedy.",
+            genres=["Comedy"],
+            year=1999,
+            score=0.8,
+            poster_url="/Items/real-1/Images/Primary",
+        )
+        search = AsyncMock()
+        search.search.return_value = SearchResponse(
+            status=SearchStatus.OK,
+            results=[candidate],
+            total_candidates=1,
+            filtered_count=0,
+            query_time_ms=5,
+        )
+
+        chat_client = AsyncMock()
+        chat_client.chat_structured.return_value = StructuredChatResponse(
+            introductory_message="Sure!",
+            recommendations=[
+                StructuredRecommendation(jellyfin_id="FAKE-1", reasoning="nope"),
+                StructuredRecommendation(jellyfin_id="FAKE-2", reasoning="also nope"),
+            ],
+        )
+
+        real_service = ChatService(
+            search_service=search,
+            chat_client=chat_client,
+            pause_counter=ChatPauseCounter(),
+            settings=make_test_settings(),
+            conversation_store=ConversationStore(
+                max_turns=10, ttl_seconds=7200, max_sessions=100
+            ),
+        )
+
+        session_store = AsyncMock()
+        session_store.get_token = AsyncMock(return_value="jf-token")
+
+        _, client = _make_chat_app(
+            session_store=session_store, chat_service=real_service
+        )
+
+        resp = client.post("/api/chat", json={"message": "something funny"})
+        assert resp.status_code == 200
+        parsed = _parse_sse_events(resp.text)
+        types = [e["type"] for e in parsed]
+
+        assert types == ["metadata", "status", "text", "done"]
+        assert parsed[0]["version"] == 2
+        assert "picks" not in types
+        assert "error" not in types
+        assert "couldn't put together" in parsed[2]["content"].lower()
+        # The free-prose path must never be invoked on the fallback.
+        chat_client.chat_stream.assert_not_called()
