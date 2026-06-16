@@ -1,4 +1,4 @@
-.PHONY: help dev dev-full dev-ui dev-down build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down eval-router eval-retrieval backfill-country backfill-country-dry-run
+.PHONY: help dev dev-full dev-ui dev-down build test lint ci clean logs health hooks jellyfin-up jellyfin-down test-integration test-integration-full test-injection validate-pipeline pipeline-up pipeline-down eval-router eval-retrieval spike-rerank backfill-country backfill-country-dry-run
 
 .DEFAULT_GOAL := help
 
@@ -109,6 +109,11 @@ eval-router: ## Run query-router eval cases against live stack (Spec 24)
 eval-retrieval: ## Run retrieval eval (golden set -> IR metrics + regression gate) against live stack (Spec 26)
 	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama first, or run: make pipeline-up"; exit 1; }
 	@$(MAKE) jellyfin-up && JELLYFIN_TEST_URL=http://localhost:8096 uv run --directory backend pytest -m pipeline -v tests/pipeline/test_retrieval_eval.py ; ret=$$?; $(MAKE) jellyfin-down; exit $$ret
+
+spike-rerank: ## Spec 28 (#253) cross-encoder rerank spike — three-way + latency, Ollama-only, NO Jellyfin/Docker
+	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama first: ollama serve"; exit 1; }
+	@echo "Runs offline by default. First run only (fetch cross-encoder weights once): HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 make spike-rerank"
+	@uv run --directory backend --extra spike pytest -m pipeline -s -v tests/pipeline/test_rerank_spike.py
 
 # ---------------------------------------------------------------------------
 # Adversarial injection test harness

@@ -32,6 +32,19 @@ dev = [
     # implementation in tests/pipeline/_eval_scoring.py.
     "ranx>=0.3.0",
 ]
+# Spec 28 (#253) cross-encoder reranking spike. Heavy (pulls torch) and
+# experiment-only, so it lives in its OWN extra — NOT in `dev` — to keep the
+# default dev/CI install (and image builds) torch-free. Dev/test-only —
+# NEVER import under backend/app/ (an import-isolation guard in
+# tests/pipeline/test_rerank_spike.py enforces this).
+#
+# Reproducibility: the spike pins the cross-encoder *model weights* by commit
+# SHA at load time (see tests/pipeline/rerank_spike.py:MODEL_REVISION =
+# c5ee24cb16019beea0893ab7796b1df96625c6b8), which is what actually determines
+# the scores; the library range below is the looser axis.
+spike = [
+    "sentence-transformers>=3.0,<4.0",
+]
 
 [tool.ruff]
 line-length = 88
