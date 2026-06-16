@@ -244,7 +244,7 @@ The test suite uses `docker-compose.test.yml` to provision a disposable Jellyfin
 | 3. Conversational Discovery | Chat endpoint, conversation memory, chat UI, movie cards, watch history ranking | Specs 12–15; #114, #116–#119 | **Complete** |
 | 3.5. Validation — But Does It Work? | Pipeline validation, test media fixtures, real-inference checks | Specs 22–23; #190 (open) | **In Progress** |
 | 4. Remote Control | Session/device detection, "Play on TV" trigger | #202, #203, #208, #212; test-infra tail #195 (open) | **Complete** |
-| 5. Recommendation Quality & Evaluation | Eval harness, LLM tool-calling/structured output, reranking + hybrid retrieval spikes, embedding experiments | #252, #239, #253, #254, #255 | **Planned — Next** |
+| 5. Recommendation Quality & Evaluation | Eval harness, structured-output chat, reranking + hybrid retrieval spikes, embedding experiments | #252 ✓ (Spec 26), #239 ✓ (Spec 27); #253, #254, #255, #268 | **In Progress** |
 
 Build order: Epic 0 → 1 → 2 → 3 → 3.5 → 4 → 5 (sequential, not parallel).
 
@@ -281,8 +281,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    I252["#252<br/>Spec 26: Eval Harness<br/>(foundation — measure first)"]
-    I239["#239<br/>Spec 27: Tool-Calling<br/>/ Structured Output"]
+    I252["#252 ✓<br/>Spec 26: Eval Harness<br/>(foundation — measure first)"]
+    I239["#239 ✓<br/>Spec 27: Structured Output"]
     I253["#253<br/>Spike: Cross-Encoder<br/>Reranking"]
     I254["#254<br/>Spike: Hybrid Retrieval<br/>BM25 + Dense"]
     I255["#255<br/>Spike: Embedding Model<br/>/ Template Experiments"]
