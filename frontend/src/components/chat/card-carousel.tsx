@@ -7,9 +7,15 @@ import type { SearchResultItem } from "@/lib/api/types";
 interface CardCarouselProps {
   items: SearchResultItem[];
   onCardClick: (item: SearchResultItem) => void;
+  /** Spec 27 — mark every card in this carousel as a validated pick. */
+  isPick?: boolean;
 }
 
-export function CardCarousel({ items, onCardClick }: CardCarouselProps) {
+export function CardCarousel({
+  items,
+  onCardClick,
+  isPick = false,
+}: CardCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -46,7 +52,11 @@ export function CardCarousel({ items, onCardClick }: CardCarouselProps) {
             key={item.jellyfin_id}
             className="w-[80vw] flex-shrink-0 snap-start md:w-auto"
           >
-            <MovieCard item={item} onClick={() => onCardClick(item)} />
+            <MovieCard
+              item={item}
+              onClick={() => onCardClick(item)}
+              isPick={isPick}
+            />
           </div>
         ))}
       </div>

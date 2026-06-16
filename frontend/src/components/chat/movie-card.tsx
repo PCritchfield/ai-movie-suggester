@@ -8,9 +8,11 @@ import type { SearchResultItem } from "@/lib/api/types";
 interface MovieCardProps {
   item: SearchResultItem;
   onClick: () => void;
+  /** Spec 27 — mark a card as one of the assistant's validated recommendations. */
+  isPick?: boolean;
 }
 
-export function MovieCard({ item, onClick }: MovieCardProps) {
+export function MovieCard({ item, onClick, isPick = false }: MovieCardProps) {
   const [posterError, setPosterError] = useState(false);
 
   const altText = item.year ? `${item.title} (${item.year})` : item.title;
@@ -24,9 +26,18 @@ export function MovieCard({ item, onClick }: MovieCardProps) {
         type="button"
         onClick={onClick}
         className="w-full text-left min-h-[44px]"
-        aria-label={`View details for ${item.title}`}
+        aria-label={
+          isPick
+            ? `Recommended pick: View details for ${item.title}`
+            : `View details for ${item.title}`
+        }
       >
-        <div className="aspect-[2/3] overflow-hidden rounded-t-xl">
+        <div className="relative aspect-[2/3] overflow-hidden rounded-t-xl">
+          {isPick && (
+            <span className="absolute left-2 top-2 z-10 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground shadow">
+              ★ Pick
+            </span>
+          )}
           {posterError || !item.poster_url ? (
             <PosterPlaceholder title={item.title} />
           ) : (

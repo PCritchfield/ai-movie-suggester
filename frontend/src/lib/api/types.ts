@@ -122,10 +122,45 @@ export type ChatErrorCode =
 
 export interface MetadataEvent {
   type: "metadata";
-  version: number;
+  /**
+   * 1 = legacy free-prose contract; 2 = Spec 27 structured output (adds status/picks).
+   * Wire documentation only: the client does NOT branch on this value. v1/v2
+   * compatibility is governed by event PRESENCE — a `picks` event triggers the
+   * two-section layout; its absence falls back to the plain carousel. A future
+   * contract change should keep that presence-based dispatch in mind.
+   */
+  version: 1 | 2;
   recommendations: SearchResultItem[];
   search_status: SearchStatus;
   turn_count: number;
+}
+
+/** Spec 27 — staged wait state emitted when LLM generation begins. */
+export interface StatusEvent {
+  type: "status";
+  phase: "generating";
+}
+
+/** Spec 27 — a single validated recommendation in the LLM's order. */
+export interface PickItem {
+  jellyfin_id: string;
+  /**
+   * LLM-authored, attacker-influenceable free text. MUST NOT be rendered as
+   * raw HTML. If ever displayed, route it through the sanitized markdown path
+   * (ReactMarkdown + rehypeSanitize), never `dangerouslySetInnerHTML`. Not
+   * rendered anywhere as of Spec 27 — card identity/metadata come from the
+   * validated SearchResultItem resolved by jellyfin_id, not from this field.
+   */
+  reasoning: string;
+  /** 1-based position in the model's recommendation list. */
+  pick_order: number;
+}
+
+/** Spec 27 — terminal set of validated picks (version 2 contract). */
+export interface PicksEvent {
+  type: "picks";
+  version: 2;
+  picks: PickItem[];
 }
 
 export interface TextEvent {
@@ -144,7 +179,13 @@ export interface ErrorEvent {
 }
 
 /** Discriminated union of all SSE event types from POST /api/chat */
-export type SSEEvent = MetadataEvent | TextEvent | DoneEvent | ErrorEvent;
+export type SSEEvent =
+  | MetadataEvent
+  | StatusEvent
+  | PicksEvent
+  | TextEvent
+  | DoneEvent
+  | ErrorEvent;
 
 // --- Chat message for client state ---
 
@@ -153,7 +194,11 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   recommendations?: SearchResultItem[];
+  /** Spec 27 — validated LLM picks (subset of recommendations, in LLM order). */
+  picks?: PickItem[];
   searchStatus?: SearchStatus;
+  /** Spec 27 — staged wait state while the response is being produced. */
+  statusPhase?: "searching" | "generating";
   error?: { code: ChatErrorCode; message: string };
   isStreaming?: boolean;
 }
