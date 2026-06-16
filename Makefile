@@ -113,7 +113,7 @@ eval-retrieval: ## Run retrieval eval (golden set -> IR metrics + regression gat
 spike-rerank: ## Spec 28 (#253) cross-encoder rerank spike — three-way + latency, Ollama-only, NO Jellyfin/Docker
 	@curl -sf http://localhost:11434/ > /dev/null 2>&1 || { echo "ERROR: Ollama not reachable at http://localhost:11434/"; echo "Start Ollama first: ollama serve"; exit 1; }
 	@echo "Runs offline by default. First run only (fetch cross-encoder weights once): HF_HUB_OFFLINE=0 make spike-rerank"
-	uv run --directory backend --extra spike pytest -m pipeline -s -v tests/pipeline/test_rerank_spike.py
+	@uv run --directory backend --extra spike pytest -m pipeline -s -v tests/pipeline/test_rerank_spike.py
 
 # ---------------------------------------------------------------------------
 # Adversarial injection test harness

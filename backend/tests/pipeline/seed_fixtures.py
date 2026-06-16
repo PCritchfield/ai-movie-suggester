@@ -155,14 +155,14 @@ async def seed_embeddings(
     *,
     max_cycles: int = 200,
 ) -> int:
-    """Upsert ``rows``, enqueue them, and drain the embedding queue via Ollama.
+    """Upsert ``rows`` and drain the embedding queue via Ollama (idempotent).
 
     Returns the number of embedded vectors. Uses the production
     ``EmbeddingWorker`` so the composite-text template and vec0 upsert match
-    the real pipeline exactly.
+    the real pipeline exactly. Cheap to call on a warm cache: nothing is
+    re-embedded unless an item is new or the composite-text template changed.
     """
     await store.upsert_many(rows)
-    await store.enqueue_for_embedding([r.jellyfin_id for r in rows])
 
     worker = EmbeddingWorker(
         library_store=store,
@@ -172,6 +172,15 @@ async def seed_embeddings(
         sync_event=asyncio.Event(),
         pause_counter=None,
     )
+
+    # Re-enqueue everything if the composite-text template version changed
+    # (mirrors production startup) and stamp the version — process_cycle alone
+    # never does this, so without it a warm cache would silently score stale
+    # vectors after a template bump.
+    await worker.check_template_version()
+    # Enqueue anything not yet embedded (new items / first run).
+    if await vec_repo.count() < len(rows):
+        await store.enqueue_for_embedding([r.jellyfin_id for r in rows])
 
     cycles = 0
     while await store.count_pending_embeddings() > 0 and cycles < max_cycles:
@@ -196,9 +205,9 @@ async def build_seeded_stack(
 ) -> tuple[LibraryStore, SqliteVecRepository, OllamaEmbeddingClient]:
     """Construct + initialize store/repo/client and seed the corpus.
 
-    Idempotent: if the store already holds the full corpus (re-using a cached
-    ``library_db_path`` across runs), skips re-embedding. Caller owns closing
-    the returned store + repo.
+    Idempotent: ``seed_embeddings`` self-skips when the cached ``library_db_path``
+    is already fully embedded at the current template version, and re-embeds only
+    new or template-stale items. Caller owns closing the returned store + repo.
     """
     store = LibraryStore(settings.library_db_path)
     await store.init()
@@ -215,7 +224,6 @@ async def build_seeded_stack(
     )
 
     rows = load_fixture_rows(media_dir)
-    if await vec_repo.count() < len(rows):
-        await seed_embeddings(store, vec_repo, ollama_client, settings, rows)
+    await seed_embeddings(store, vec_repo, ollama_client, settings, rows)
 
     return store, vec_repo, ollama_client

@@ -29,6 +29,8 @@ import os
 # imported (the CrossEncoder import is lazy, well after this module loads).
 # ``setdefault`` so the ONE-TIME weight fetch can override with HF_HUB_OFFLINE=0;
 # every subsequent scoring run inherits offline=1 and proves local-only serving.
+# Telemetry is disabled UNCONDITIONALLY (plain assignment, not setdefault) — it
+# must never be re-enabled by an outer environment.
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
@@ -54,7 +56,6 @@ if TYPE_CHECKING:
     from app.vectors.repository import SqliteVecRepository
 
     Scorer = Callable[[Sequence[tuple[str, str]]], Sequence[float]]
-    PermitFn = Callable[[list[str]], list[str]]
 
 # Pinned cross-encoder. ms-marco-MiniLM-L-6-v2 is the canonical small reranker
 # (~80MB, CPU-friendly). MODEL_REVISION pins the *weights* by Hub commit SHA —
@@ -108,7 +109,8 @@ def composite_text(row: LibraryItemRow) -> str:
     That prefix is a nomic-embed-text asymmetric-retrieval artifact — meaningless
     to a ms-marco cross-encoder, which was trained on natural query/passage text.
     Using the identical section template otherwise keeps the comparison honest:
-    the cross-encoder sees the same content the bi-encoder embedded.
+    the cross-encoder sees the same section *content* the bi-encoder embedded,
+    just without the ``search_document:`` prefix that was prepended at index time.
     """
     return build_sections(
         title=row.title,
@@ -156,22 +158,12 @@ class Pool:
     ids: list[str]  # cosine-ordered (vec0 distance ASC)
     rows: dict[str, LibraryItemRow]
 
-    @property
-    def size(self) -> int:
-        return len(self.ids)
-
-
-def _identity_permit(ids: list[str]) -> list[str]:
-    """Permit-all permission filter — the only Jellyfin touch, mocked off."""
-    return ids
-
 
 async def reconstruct_pool(
     case: GoldenCase,
     store: LibraryStore,
     vec_repo: SqliteVecRepository,
     ollama_client: OllamaEmbeddingClient,
-    permit: PermitFn = _identity_permit,
 ) -> Pool:
     """Rebuild one query's candidate pool by replicating ``SearchService``'s
     retrieval-up-to-permission-filter stages — WITHOUT calling ``search()``.
@@ -185,7 +177,9 @@ async def reconstruct_pool(
     embedding = await ollama_client.embed(QUERY_PREFIX + case.query)
     corpus_size = await vec_repo.count()
     candidates = await vec_repo.search(embedding.vector, limit=corpus_size)
-    permitted = permit([c.jellyfin_id for c in candidates])
+    # Permit-all: the permission filter is the only Jellyfin touch, mocked off
+    # for the offline eval (it scores retrieval relevance, not authorization).
+    permitted = [c.jellyfin_id for c in candidates]
     rows = {r.jellyfin_id: r for r in await store.get_many(permitted)}
     # Keep only ids whose metadata resolved (mirrors service.py's item_map join).
     ordered = [jid for jid in permitted if jid in rows]
@@ -245,17 +239,20 @@ async def run_experiment(
     ollama_client: OllamaEmbeddingClient,
     scorer: Scorer,
     *,
-    permit: PermitFn = _identity_permit,
     ks: tuple[int, ...] = (5, 10, 20),
 ) -> ExperimentResult:
     """Reconstruct pools, score the three orderings, and time the reranks."""
     cases = load_golden_set()
+    # evaluate() keys rankings by query string; a duplicate query would silently
+    # overwrite a pool and under-count cases (a zero-scored hole). Guard it.
+    if len({c.query for c in cases}) != len(cases):
+        msg = "golden set has duplicate query strings; rankings would collide"
+        raise ValueError(msg)
     title_index = await store.get_title_index()
     person_index = PersonIndex(names=await store.get_all_people_names())
 
     pools = [
-        await reconstruct_pool(case, store, vec_repo, ollama_client, permit)
-        for case in cases
+        await reconstruct_pool(case, store, vec_repo, ollama_client) for case in cases
     ]
 
     cosine_ranked: dict[str, list[str]] = {}
@@ -268,17 +265,20 @@ async def run_experiment(
         cosine_ranked[pool.query] = order_pure_cosine(pool)
         heuristic_ranked[pool.query] = order_genre_heuristic(pool)
 
-        # Large (whole-corpus) pool — the worst-case latency point.
+        # Large (whole-corpus) pool — the worst-case latency point. This runs
+        # first per query, so it also warms the scorer (model dispatch / caches)
+        # for the small-pool timing below — matching production, where the
+        # CrossEncoder object is reused across requests (not cold per call).
         start = time.perf_counter()
         cross_ranked[pool.query] = order_cross_encoder(pool, scorer)
-        latencies.append(LatencySample(idx, pool.size, time.perf_counter() - start))
+        latencies.append(LatencySample(idx, len(pool.ids), time.perf_counter() - start))
 
         # Small (pure-semantic) pool — top limit*overfetch of the same pool.
         small = Pool(pool.query, pool.intent, pool.ids[:SMALL_POOL_SIZE], pool.rows)
         start = time.perf_counter()
         order_cross_encoder(small, scorer)
         small_latencies.append(
-            LatencySample(idx, small.size, time.perf_counter() - start)
+            LatencySample(idx, len(small.ids), time.perf_counter() - start)
         )
 
     cosine = evaluate(
@@ -297,7 +297,7 @@ async def run_experiment(
         cross_encoder=cross,
         latencies=latencies,
         small_latencies=small_latencies,
-        pool_sizes=[p.size for p in pools],
+        pool_sizes=[len(p.ids) for p in pools],
         metrics=cosine.metrics,
         offline_env={
             "HF_HUB_OFFLINE": os.environ.get("HF_HUB_OFFLINE"),

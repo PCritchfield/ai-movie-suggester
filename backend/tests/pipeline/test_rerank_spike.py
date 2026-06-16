@@ -28,6 +28,7 @@ from app.config import Settings
 from tests.pipeline.conftest import EMBED_MODEL, OLLAMA_HOST
 from tests.pipeline.rerank_spike import (
     build_rerank_pairs,
+    format_report,
     make_cross_encoder_scorer,
     rerank,
     run_experiment,
@@ -81,6 +82,10 @@ def test_no_heavy_imports_under_app() -> None:
 
     The spike's heavy deps live in the ``spike`` extra and load lazily inside
     ``make_cross_encoder_scorer`` — production code stays torch-free.
+
+    Line-level check (no ``if TYPE_CHECKING:`` block tracking): a type-only torch
+    import under ``app/`` would register as a false positive. None exists today,
+    and the runtime-import-leak case this guards is the one that matters.
     """
     offenders: list[str] = []
     for py in _APP_DIR.rglob("*.py"):
@@ -127,8 +132,6 @@ async def test_rerank_spike_experiment(capsys: pytest.CaptureFixture[str]) -> No
 
             scorer = make_cross_encoder_scorer()
             result = await run_experiment(store, vec_repo, ollama_client, scorer)
-
-            from tests.pipeline.rerank_spike import format_report
 
             with capsys.disabled():
                 print("\n" + format_report(result))
@@ -195,7 +198,7 @@ async def _sanity_check_pool(
         overlap = len(set(service_top) & set(replica_top))
         notes.append(
             f"  [{case.intent}] service_top={len(service_top)} "
-            f"replica∩service={overlap}/{len(service_top)} (pool={pool.size})"
+            f"replica∩service={overlap}/{len(service_top)} (pool={len(pool.ids)})"
         )
     with capsys.disabled():
         print("\nPool-reconstruction sanity check (replica vs live SearchService):")
