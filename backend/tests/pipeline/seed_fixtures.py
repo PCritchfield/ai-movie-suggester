@@ -162,7 +162,7 @@ async def seed_embeddings(
     the real pipeline exactly. Cheap to call on a warm cache: nothing is
     re-embedded unless an item is new or the composite-text template changed.
     """
-    await store.upsert_many(rows)
+    upserted = await store.upsert_many(rows)
 
     worker = EmbeddingWorker(
         library_store=store,
@@ -178,8 +178,11 @@ async def seed_embeddings(
     # never does this, so without it a warm cache would silently score stale
     # vectors after a template bump.
     await worker.check_template_version()
-    # Enqueue anything not yet embedded (new items / first run).
-    if await vec_repo.count() < len(rows):
+    # Enqueue when anything is new or content-changed (upsert_many does NOT
+    # auto-enqueue updated ids — that's the sync engine's job in prod, so a
+    # fixture edit would otherwise leave a stale embedding) or the cache is
+    # incomplete. Fully-warm + unchanged → skip (created==updated==0, count==N).
+    if upserted.created or upserted.updated or await vec_repo.count() < len(rows):
         await store.enqueue_for_embedding([r.jellyfin_id for r in rows])
 
     cycles = 0

@@ -16,6 +16,7 @@ Two layers:
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -140,8 +141,14 @@ async def test_rerank_spike_experiment(capsys: pytest.CaptureFixture[str]) -> No
             assert len(result.cosine.cases) == len(result.cross_encoder.cases)
             assert all(size > 0 for size in result.pool_sizes)
             assert result.latencies and result.small_latencies
-            # Ran offline (post one-time fetch).
-            assert result.offline_env["HF_HUB_OFFLINE"] == "1"
+            # Success Metric 4: the scoring run is offline (no per-query
+            # outbound) and telemetry-free. Relaxed only on the documented
+            # one-time online fetch (HF_HUB_OFFLINE=0), which the Makefile
+            # advertises — that run downloads weights, so it can't be offline.
+            if os.environ.get("HF_HUB_OFFLINE") != "0":
+                assert result.offline_env["HF_HUB_OFFLINE"] == "1"
+                assert result.offline_env["TRANSFORMERS_OFFLINE"] == "1"
+            assert result.offline_env["HF_HUB_DISABLE_TELEMETRY"] == "1"
 
             await _sanity_check_pool(store, vec_repo, ollama_client, capsys)
         finally:
