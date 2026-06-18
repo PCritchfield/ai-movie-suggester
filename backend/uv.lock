@@ -36,7 +36,7 @@ dev = [
     { name = "ranx" },
     { name = "ruff" },
 ]
-spike = [
+rerank = [
     { name = "sentence-transformers" },
 ]
 
@@ -55,12 +55,12 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
     { name = "ranx", marker = "extra == 'dev'", specifier = ">=0.3.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
-    { name = "sentence-transformers", marker = "extra == 'spike'", specifier = ">=3.0,<4.0" },
+    { name = "sentence-transformers", marker = "extra == 'rerank'", specifier = ">=3.0,<4.0" },
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "sqlite-vec", specifier = "==0.1.6" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
-provides-extras = ["dev", "spike"]
+provides-extras = ["dev", "rerank"]
 
 [[package]]
 name = "aiosqlite"
