@@ -10,6 +10,8 @@ from app.search.service import SearchService
 from tests.factories import make_embedding_result, make_library_item, make_search_result
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import pytest
 
     from app.search.reranker import RerankerProtocol
@@ -1338,7 +1340,7 @@ class TestSearchResponseMetadata:
 class _StubReranker:
     """Minimal RerankerProtocol impl for wiring tests (no torch)."""
 
-    def rerank(self, query: str, candidates: list[tuple[str, str]]) -> list[str]:
+    def rerank(self, query: str, candidates: Sequence[tuple[str, str]]) -> list[str]:
         return [jid for jid, _doc in candidates]
 
 
@@ -1368,7 +1370,7 @@ class _CapturingReranker:
         self._reorder = reorder
         self._raises = raises
 
-    def rerank(self, query: str, candidates: list[tuple[str, str]]) -> list[str]:
+    def rerank(self, query: str, candidates: Sequence[tuple[str, str]]) -> list[str]:
         self.calls.append((query, list(candidates)))
         if self._raises is not None:
             raise self._raises
