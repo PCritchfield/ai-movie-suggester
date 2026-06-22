@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from app.ollama.client import OllamaEmbeddingClient
     from app.permissions.service import PermissionService
     from app.search.person_index import PersonIndex
+    from app.search.reranker import RerankerProtocol
     from app.search.rewriter import QueryRewriter
     from app.vectors.repository import SqliteVecRepository
 
@@ -53,6 +54,7 @@ class SearchService:
         intent_filter_rating_enabled: bool = True,
         rewriter: QueryRewriter | None = None,
         foreign_film_home_countries: list[str] | None = None,
+        reranker: RerankerProtocol | None = None,
     ) -> None:
         self._ollama = ollama_client
         self._vec_repo = vec_repo
@@ -67,6 +69,7 @@ class SearchService:
         self._filter_year = intent_filter_year_enabled
         self._filter_rating = intent_filter_rating_enabled
         self._rewriter = rewriter
+        self._reranker = reranker
         self._home_countries: list[str] = list(foreign_film_home_countries or [])
         self._status_cache: SearchStatus | None = None
         self._status_cache_time: float = 0.0
@@ -80,6 +83,17 @@ class SearchService:
         configuration without reaching into private state.
         """
         return self._person_index
+
+    @property
+    def reranker(self) -> RerankerProtocol | None:
+        """Read-only handle to the injected reranker (or ``None``).
+
+        Mirrors ``person_index``: exposed so tests and the eval harness can
+        introspect rerank configuration without reaching into private state.
+        The reranker is stored here in this spec but not yet engaged by
+        ``search`` — the live bounded-rerank path lands in task 4.0.
+        """
+        return self._reranker
 
     @property
     def home_countries(self) -> list[str]:

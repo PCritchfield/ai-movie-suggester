@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 from app.search.person_index import PersonIndex
 from app.search.service import SearchService
 from tests.factories import make_embedding_result, make_library_item, make_search_result
+
+if TYPE_CHECKING:
+    from app.search.reranker import RerankerProtocol
 
 
 def _make_service(
@@ -22,6 +26,7 @@ def _make_service(
     intent_filter_rating_enabled: bool = True,
     rewriter: AsyncMock | None = None,
     foreign_film_home_countries: list[str] | None = None,
+    reranker: RerankerProtocol | None = None,
 ) -> SearchService:
     """Build a SearchService with mocked dependencies.
 
@@ -60,6 +65,7 @@ def _make_service(
         intent_filter_rating_enabled=intent_filter_rating_enabled,
         rewriter=rewriter,
         foreign_film_home_countries=foreign_film_home_countries,
+        reranker=reranker,
     )
 
 
@@ -1318,3 +1324,27 @@ class TestSearchResponseMetadata:
         assert result.filtered_count == 0
         # total_candidates still reports the raw vector-search count.
         assert result.total_candidates == 3
+
+
+# --- Spec 29 — reranker optional collaborator (inert wiring) ---
+
+
+class _StubReranker:
+    """Minimal RerankerProtocol impl for wiring tests (no torch)."""
+
+    def rerank(self, query: str, candidates: list[tuple[str, str]]) -> list[str]:
+        return [jid for jid, _doc in candidates]
+
+
+def test_reranker_defaults_to_none() -> None:
+    """SearchService constructs without a reranker; the property is None."""
+    service = _make_service()
+    assert service.reranker is None
+
+
+def test_reranker_is_exposed_when_injected() -> None:
+    """An injected reranker is exposed via the read-only property (mirrors
+    person_index), so the eval harness can introspect it."""
+    stub = _StubReranker()
+    service = _make_service(reranker=stub)
+    assert service.reranker is stub

@@ -293,6 +293,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.query_rewriter = query_rewriter
 
+        # Spec 29 (#276) — cross-encoder reranker. Opt-in, default OFF: built
+        # only when enabled (the model imports/loads lazily on first query, so
+        # construction here is cheap and the default boot path never touches
+        # torch). Requires the `rerank` dependency extra.
+        reranker = None
+        if settings.search_rerank_enabled:
+            from app.search.reranker import CrossEncoderReranker
+
+            reranker = CrossEncoderReranker()
+            _logger.info(
+                "cross-encoder reranking ENABLED (pool=%d, timeout=%dms)",
+                settings.search_rerank_pool_size,
+                settings.search_rerank_timeout_ms,
+            )
+
         # Create search service and mount router
         from app.search.service import SearchService
 
@@ -309,6 +324,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             intent_filter_rating_enabled=settings.intent_filter_rating_enabled,
             rewriter=query_rewriter,
             foreign_film_home_countries=settings.foreign_film_home_countries,
+            reranker=reranker,
         )
         app.state.search_service = search_service
         search_router = create_search_router(
