@@ -325,6 +325,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             rewriter=query_rewriter,
             foreign_film_home_countries=settings.foreign_film_home_countries,
             reranker=reranker,
+            rerank_pool_size=settings.search_rerank_pool_size,
+            rerank_timeout_ms=settings.search_rerank_timeout_ms,
         )
         app.state.search_service = search_service
         search_router = create_search_router(
