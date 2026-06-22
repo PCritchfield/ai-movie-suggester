@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -89,6 +90,15 @@ async def _amain(args: argparse.Namespace) -> int:
             )
             permissions = AsyncMock()
             permissions.filter_permitted.side_effect = lambda *a, **_kw: a[2]
+            reranker = None
+            if args.rerank:
+                from app.search.reranker import CrossEncoderReranker
+
+                reranker = CrossEncoderReranker()
+                print(
+                    f"Cross-encoder reranking ON (pool={args.rerank_pool_size}, "
+                    f"timeout={args.rerank_timeout_ms}ms)\n"
+                )
             service = SearchService(
                 ollama_client=embed_client,
                 vec_repo=repo,
@@ -96,14 +106,33 @@ async def _amain(args: argparse.Namespace) -> int:
                 library_store=store,
                 person_index=person_index,
                 rewriter=rewriter,
+                reranker=reranker,
+                rerank_pool_size=args.rerank_pool_size,
+                rerank_timeout_ms=args.rerank_timeout_ms,
             )
 
             ranked: dict[str, list[str]] = {}
+            search_elapsed: list[float] = []
             for case in cases:
+                _t0 = time.perf_counter()
                 response = await service.search(
                     case.query, limit=max(args.ks), user_id="eval", token="eval-token"
                 )
+                search_elapsed.append(time.perf_counter() - _t0)
                 ranked[case.query] = [r.jellyfin_id for r in response.results]
+
+            if args.rerank and search_elapsed:
+                ordered = sorted(search_elapsed)
+                p50 = ordered[len(ordered) // 2]
+                p95 = ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
+                # Informational only — NOT a gate. Whole-search wall-time
+                # (rerank-dominated for filtered queries); grounds the
+                # SEARCH_RERANK_TIMEOUT_MS default. Real-hardware p95 is Spec 30.
+                print(
+                    f"[informational] search wall-time incl. rerank over "
+                    f"{len(search_elapsed)} queries: p50={p50 * 1000:.0f}ms "
+                    f"p95={p95 * 1000:.0f}ms (not a gate)\n"
+                )
 
             title_index = await store.get_title_index()
             outcome = evaluate(
@@ -174,6 +203,24 @@ def main() -> None:
         "--update-baseline",
         action="store_true",
         help="Append the current gated scores as a new baseline record.",
+    )
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Engage the Spec 29 cross-encoder reranker (requires the 'rerank' "
+        "extra). Off by default; matches the SEARCH_RERANK_ENABLED flag.",
+    )
+    parser.add_argument(
+        "--rerank-pool-size",
+        type=int,
+        default=100,
+        help="Top-N cosine candidates the reranker re-scores (default: 100).",
+    )
+    parser.add_argument(
+        "--rerank-timeout-ms",
+        type=int,
+        default=5000,
+        help="Per-query rerank deadline in ms (default: 5000).",
     )
     args = parser.parse_args()
     sys.exit(asyncio.run(_amain(args)))
