@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import sys
 import time
 from datetime import UTC, datetime
@@ -61,6 +62,13 @@ _BASELINE_PATH = str(BACKEND / "tests" / "fixtures" / "eval_baseline.json")
 
 
 async def _amain(args: argparse.Namespace) -> int:
+    if args.rerank and importlib.util.find_spec("sentence_transformers") is None:
+        print(
+            "ERROR: --rerank requires the optional 'rerank' extra "
+            "(it is not installed). Install with: uv sync --extra rerank",
+            file=sys.stderr,
+        )
+        return 1
     cases = load_golden_set()
     print(f"Loaded {len(cases)} golden cases; scoring against {args.db}\n")
 

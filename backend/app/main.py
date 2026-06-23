@@ -299,14 +299,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # torch). Requires the `rerank` dependency extra.
         reranker = None
         if settings.search_rerank_enabled:
-            from app.search.reranker import CrossEncoderReranker
+            import importlib.util
 
-            reranker = CrossEncoderReranker()
-            _logger.info(
-                "cross-encoder reranking ENABLED (pool=%d, timeout=%dms)",
-                settings.search_rerank_pool_size,
-                settings.search_rerank_timeout_ms,
-            )
+            if importlib.util.find_spec("sentence_transformers") is None:
+                # Flag on but the opt-in extra absent: fail soft with a clear,
+                # actionable message rather than letting every query hit an
+                # ImportError and silently fall back to the heuristic.
+                _logger.warning(
+                    "SEARCH_RERANK_ENABLED=true but the optional 'rerank' extra "
+                    "is not installed; reranking is DISABLED (genre heuristic). "
+                    "Install it with: uv sync --extra rerank"
+                )
+            else:
+                from app.search.reranker import CrossEncoderReranker
+
+                reranker = CrossEncoderReranker()
+                _logger.info(
+                    "cross-encoder reranking ENABLED (pool=%d, timeout=%dms)",
+                    settings.search_rerank_pool_size,
+                    settings.search_rerank_timeout_ms,
+                )
 
         # Create search service and mount router
         from app.search.service import SearchService
