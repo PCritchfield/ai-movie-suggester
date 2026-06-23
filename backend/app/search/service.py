@@ -96,8 +96,8 @@ class SearchService:
 
         Mirrors ``person_index``: exposed so tests and the eval harness can
         introspect rerank configuration without reaching into private state.
-        The reranker is stored here in this spec but not yet engaged by
-        ``search`` — the live bounded-rerank path lands in task 4.0.
+        When set, ``search`` engages it as the bounded rerank step (replacing
+        the genre heuristic), degrading to the heuristic on timeout/error.
         """
         return self._reranker
 
@@ -517,6 +517,19 @@ class SearchService:
                 "rerank failed (pool=%d), falling back to genre heuristic: %s",
                 len(candidates),
                 type(exc).__name__,
+            )
+            return self._rerank_by_genre(genre_groups, permitted_ids, item_map)
+
+        # Trust-but-verify the reranker output: it must be a permutation of the
+        # scored pool ids. A non-permutation (dropped/duplicate/foreign ids from
+        # a buggy or future implementation) would drop valid candidates or emit
+        # duplicate cards downstream — degrade to the heuristic instead.
+        pool_ids = [jid for jid, _doc in candidates]
+        if sorted(reordered_pool) != sorted(pool_ids):
+            logger.warning(
+                "rerank returned a non-permutation (pool=%d), "
+                "falling back to genre heuristic",
+                len(candidates),
             )
             return self._rerank_by_genre(genre_groups, permitted_ids, item_map)
 

@@ -1521,6 +1521,18 @@ async def test_rerank_error_falls_back_to_genre_heuristic() -> None:
     assert [r.jellyfin_id for r in result.results] == ["m0", "m1", "m2", "m3", "m4"]
 
 
+async def test_rerank_non_permutation_falls_back_to_genre_heuristic() -> None:
+    """A reranker that returns ids outside the scored pool (or drops/dupes them)
+    is rejected — the search degrades to the genre-heuristic ordering rather than
+    silently dropping valid candidates or emitting duplicate cards."""
+    reranker = _CapturingReranker(reorder=lambda _cands: ["bogus-id"])
+    service = _ordering_service(reranker, pool_size=3, n=5)
+
+    result = await service.search("q", limit=5, user_id="u1", token="tok")
+
+    assert [r.jellyfin_id for r in result.results] == ["m0", "m1", "m2", "m3", "m4"]
+
+
 async def test_rerank_failure_logs_without_pii(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

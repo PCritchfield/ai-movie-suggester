@@ -122,9 +122,18 @@ async def _amain(args: argparse.Namespace) -> int:
                 ranked[case.query] = [r.jellyfin_id for r in response.results]
 
             if args.rerank and search_elapsed:
-                ordered = sorted(search_elapsed)
-                p50 = ordered[len(ordered) // 2]
-                p95 = ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
+
+                def _pct(values: list[float], p: float) -> float:
+                    # Linear interpolation between closest ranks (numpy-style),
+                    # so small samples don't snap p95 to the max.
+                    s = sorted(values)
+                    k = (len(s) - 1) * p
+                    lo = int(k)
+                    hi = min(lo + 1, len(s) - 1)
+                    return s[lo] + (s[hi] - s[lo]) * (k - lo)
+
+                p50 = _pct(search_elapsed, 0.50)
+                p95 = _pct(search_elapsed, 0.95)
                 # Informational only — NOT a gate. Whole-search wall-time
                 # (rerank-dominated for filtered queries); grounds the
                 # SEARCH_RERANK_TIMEOUT_MS default. Real-hardware p95 is Spec 30.

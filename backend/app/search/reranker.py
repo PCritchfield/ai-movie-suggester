@@ -20,6 +20,7 @@ touching the seam.
 from __future__ import annotations
 
 import os
+import threading
 
 # Offline-by-default Hugging Face: these MUST be set before huggingface_hub is
 # imported. The CrossEncoder import is lazy (inside ``_ensure_scorer``), well
@@ -97,6 +98,12 @@ class CrossEncoderReranker:
         self._model_name = model_name
         self._revision = revision
         self._scorer: Scorer | None = None
+        # Guards lazy init: ``_ensure_scorer`` runs inside ``asyncio.to_thread``
+        # workers, so concurrent first-use requests could otherwise each load a
+        # separate model. Double-checked locking loads exactly one. (Serialising
+        # ``model.predict`` itself — a throughput question under concurrency — is
+        # deferred to Spec 30 alongside the real-hardware latency measurement.)
+        self._lock = threading.Lock()
 
     def _ensure_scorer(self) -> Scorer:
         """Build (once) and cache the CrossEncoder-backed scorer.
@@ -109,18 +116,20 @@ class CrossEncoderReranker:
         silent fallback.
         """
         if self._scorer is None:
-            from sentence_transformers import CrossEncoder
+            with self._lock:
+                if self._scorer is None:  # double-checked under the lock
+                    from sentence_transformers import CrossEncoder
 
-            model = CrossEncoder(
-                self._model_name,
-                revision=self._revision,
-                automodel_args={"use_safetensors": True},
-            )
+                    model = CrossEncoder(
+                        self._model_name,
+                        revision=self._revision,
+                        automodel_args={"use_safetensors": True},
+                    )
 
-            def scorer(pairs: Sequence[tuple[str, str]]) -> list[float]:
-                return [float(s) for s in model.predict(list(pairs))]
+                    def scorer(pairs: Sequence[tuple[str, str]]) -> list[float]:
+                        return [float(s) for s in model.predict(list(pairs))]
 
-            self._scorer = scorer
+                    self._scorer = scorer
         return self._scorer
 
     def rerank(self, query: str, candidates: Sequence[tuple[str, str]]) -> list[str]:
