@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND))
 
+from app.config import Settings  # noqa: E402
 from app.library.store import LibraryStore  # noqa: E402
 from app.ollama.chat_client import OllamaChatClient  # noqa: E402
 from app.ollama.client import OllamaEmbeddingClient  # noqa: E402
@@ -219,17 +220,20 @@ def main() -> None:
         help="Engage the Spec 29 cross-encoder reranker (requires the 'rerank' "
         "extra). Off by default; matches the SEARCH_RERANK_ENABLED flag.",
     )
+    # Defaults sourced from the Settings field defaults so the script can't
+    # drift from config.py.
+    _fields = Settings.model_fields
     parser.add_argument(
         "--rerank-pool-size",
         type=int,
-        default=100,
-        help="Top-N cosine candidates the reranker re-scores (default: 100).",
+        default=_fields["search_rerank_pool_size"].default,
+        help="Top-N cosine candidates the reranker re-scores.",
     )
     parser.add_argument(
         "--rerank-timeout-ms",
         type=int,
-        default=5000,
-        help="Per-query rerank deadline in ms (default: 5000).",
+        default=_fields["search_rerank_timeout_ms"].default,
+        help="Per-query rerank deadline in ms.",
     )
     args = parser.parse_args()
     sys.exit(asyncio.run(_amain(args)))

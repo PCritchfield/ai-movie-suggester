@@ -1491,7 +1491,7 @@ async def test_rerank_timeout_falls_back_to_genre_heuristic() -> None:
     reranker = _CapturingReranker(reorder=_slow)
     service = _ordering_service(reranker, pool_size=3, n=5)
     # 50ms deadline << 500ms scorer sleep.
-    service._rerank_timeout_ms = 50  # type: ignore[attr-defined]
+    service._rerank_timeout_s = 0.05  # type: ignore[attr-defined]
 
     ticks = 0
 

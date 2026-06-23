@@ -109,7 +109,9 @@ class Settings(BaseSettings):
     # real-hardware numbers).
     search_rerank_enabled: bool = False
     search_rerank_pool_size: Annotated[int, Field(ge=1, le=1000)] = 100
-    search_rerank_timeout_ms: Annotated[int, Field(ge=1)] = 5000
+    # Upper bound guards operator misconfiguration: a multi-minute timeout would
+    # tie up a request slot on a hung reranker before wait_for cancels it.
+    search_rerank_timeout_ms: Annotated[int, Field(ge=1, le=60000)] = 5000
 
     # Spec 24 — query router per-filter disable switches. All default to
     # True (router on); flip individually to demonstrate regression at

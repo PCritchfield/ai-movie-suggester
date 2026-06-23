@@ -583,3 +583,11 @@ def test_rerank_timeout_rejects_zero() -> None:
     env = {**_REQUIRED_ENV, "SEARCH_RERANK_TIMEOUT_MS": "0"}
     with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
         Settings()  # type: ignore[call-arg]
+
+
+def test_rerank_timeout_rejects_over_max() -> None:
+    """search_rerank_timeout_ms is capped at 60000ms to catch misconfiguration
+    (a multi-minute deadline would tie up a request slot on a hung reranker)."""
+    env = {**_REQUIRED_ENV, "SEARCH_RERANK_TIMEOUT_MS": "60001"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]

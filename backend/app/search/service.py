@@ -75,7 +75,8 @@ class SearchService:
         self._rewriter = rewriter
         self._reranker = reranker
         self._rerank_pool_size = rerank_pool_size
-        self._rerank_timeout_ms = rerank_timeout_ms
+        # Stored in seconds (the ctor param is ms to match the config field).
+        self._rerank_timeout_s = rerank_timeout_ms / 1000
         self._home_countries: list[str] = list(foreign_film_home_countries or [])
         self._status_cache: SearchStatus | None = None
         self._status_cache_time: float = 0.0
@@ -509,7 +510,7 @@ class SearchService:
         try:
             reordered_pool = await asyncio.wait_for(
                 asyncio.to_thread(self._reranker.rerank, query, candidates),
-                timeout=self._rerank_timeout_ms / 1000,
+                timeout=self._rerank_timeout_s,
             )
         except Exception as exc:  # noqa: BLE001 — degrade safely on ANY failure
             # Count- and type-keyed only: no query/document text (PII).
@@ -524,8 +525,8 @@ class SearchService:
         # scored pool ids. A non-permutation (dropped/duplicate/foreign ids from
         # a buggy or future implementation) would drop valid candidates or emit
         # duplicate cards downstream — degrade to the heuristic instead.
-        pool_ids = [jid for jid, _doc in candidates]
-        if sorted(reordered_pool) != sorted(pool_ids):
+        scored_ids = [jid for jid, _doc in candidates]
+        if sorted(reordered_pool) != sorted(scored_ids):
             logger.warning(
                 "rerank returned a non-permutation (pool=%d), "
                 "falling back to genre heuristic",
