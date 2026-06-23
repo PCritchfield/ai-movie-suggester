@@ -39,7 +39,6 @@ from tests.pipeline.seed_fixtures import build_seeded_stack, load_fixture_rows
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-_APP_DIR = Path(__file__).resolve().parents[2] / "app"
 # 64 hex chars: ≥32 long, >2 distinct chars, no blocklist word — passes the
 # SESSION_SECRET validator. Not a real secret (this stack faces no network).
 _SPIKE_SECRET = "0123456789abcdef" * 4
@@ -78,26 +77,14 @@ def test_rerank_empty_pool_returns_empty() -> None:
     assert rerank("q", [], _stub_scorer({})) == []
 
 
-def test_no_heavy_imports_under_app() -> None:
-    """Guard: torch / sentence_transformers must NEVER be imported under app/.
-
-    The spike's heavy deps live in the ``spike`` extra and load lazily inside
-    ``make_cross_encoder_scorer`` — production code stays torch-free.
-
-    Line-level check (no ``if TYPE_CHECKING:`` block tracking): a type-only torch
-    import under ``app/`` would register as a false positive. None exists today,
-    and the runtime-import-leak case this guards is the one that matters.
-    """
-    offenders: list[str] = []
-    for py in _APP_DIR.rglob("*.py"):
-        text = py.read_text(encoding="utf-8")
-        for line in text.splitlines():
-            stripped = line.strip()
-            if stripped.startswith(("import ", "from ")) and (
-                "sentence_transformers" in stripped or "torch" in stripped
-            ):
-                offenders.append(f"{py.relative_to(_APP_DIR.parent)}: {stripped}")
-    assert not offenders, "heavy-dep import leaked under app/:\n" + "\n".join(offenders)
+# NOTE: the import-isolation guard moved to ``tests/test_reranker.py``
+# (``test_no_heavy_imports_under_app``). That copy is AST-precise — it allows the
+# legitimate *lazy* ``sentence_transformers`` import inside
+# ``app/search/reranker.py:CrossEncoderReranker`` while still failing on any
+# module-load-time heavy import — and lives at the top level so it runs in CI
+# (this pipeline file is skipped when Ollama is absent). The old line-scan copy
+# here was removed (Spec 29 #276): it false-positived on the production lazy
+# import.
 
 
 # --------------------------------------------------------------------------- #
