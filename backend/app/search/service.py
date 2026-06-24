@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING
 
 from app.ollama.errors import OllamaConnectionError, OllamaError, OllamaTimeoutError
+from app.ollama.text_builder import build_sections
 from app.search.genre_keywords import detect_query_genres
 from app.search.intent import QueryIntent, detect_intent
 from app.search.models import (
@@ -25,6 +27,7 @@ if TYPE_CHECKING:
     from app.ollama.client import OllamaEmbeddingClient
     from app.permissions.service import PermissionService
     from app.search.person_index import PersonIndex
+    from app.search.reranker import RerankerProtocol
     from app.search.rewriter import QueryRewriter
     from app.vectors.repository import SqliteVecRepository
 
@@ -53,6 +56,9 @@ class SearchService:
         intent_filter_rating_enabled: bool = True,
         rewriter: QueryRewriter | None = None,
         foreign_film_home_countries: list[str] | None = None,
+        reranker: RerankerProtocol | None = None,
+        rerank_pool_size: int = 100,
+        rerank_timeout_ms: int = 5000,
     ) -> None:
         self._ollama = ollama_client
         self._vec_repo = vec_repo
@@ -67,6 +73,10 @@ class SearchService:
         self._filter_year = intent_filter_year_enabled
         self._filter_rating = intent_filter_rating_enabled
         self._rewriter = rewriter
+        self._reranker = reranker
+        self._rerank_pool_size = rerank_pool_size
+        # Stored in seconds (the ctor param is ms to match the config field).
+        self._rerank_timeout_s = rerank_timeout_ms / 1000
         self._home_countries: list[str] = list(foreign_film_home_countries or [])
         self._status_cache: SearchStatus | None = None
         self._status_cache_time: float = 0.0
@@ -80,6 +90,17 @@ class SearchService:
         configuration without reaching into private state.
         """
         return self._person_index
+
+    @property
+    def reranker(self) -> RerankerProtocol | None:
+        """Read-only handle to the injected reranker (or ``None``).
+
+        Mirrors ``person_index``: exposed so tests and the eval harness can
+        introspect rerank configuration without reaching into private state.
+        When set, ``search`` engages it as the bounded rerank step (replacing
+        the genre heuristic), degrading to the heuristic on timeout/error.
+        """
+        return self._reranker
 
     @property
     def home_countries(self) -> list[str]:
@@ -215,16 +236,26 @@ class SearchService:
         items = await self._library.get_many(permitted_ids)
         item_map = {item.jellyfin_id: item for item in items}
 
-        # Soft genre rerank: bucket-sort by genre match while preserving
-        # cosine order (the input ``permitted_ids`` order) within each tier.
-        # Reuse the genre groups already computed by ``detect_intent`` if
-        # available — otherwise fall back to a fresh detection so callers
-        # bypassing the router (e.g. unit tests) still get the rerank.
+        # Genre groups are computed regardless: they drive the genre heuristic
+        # AND serve as the cross-encoder's safe-degradation fallback. Reuse the
+        # groups already computed by ``detect_intent`` if available — otherwise
+        # a fresh detection so callers bypassing the router (e.g. unit tests)
+        # still get a sensible ordering.
         if effective_intent is not None and effective_intent.genres:
             genre_groups = effective_intent.genres
         else:
             genre_groups = detect_query_genres(effective_query)
-        ordered_ids = self._rerank_by_genre(genre_groups, permitted_ids, item_map)
+
+        if self._reranker is not None:
+            # Spec 29: bounded cross-encoder rerank REPLACES the genre heuristic
+            # when enabled. Degrades to the heuristic on timeout/error.
+            ordered_ids = await self._rerank_cross_encoder(
+                effective_query, permitted_ids, item_map, genre_groups
+            )
+        else:
+            # Soft genre rerank: bucket-sort by genre match while preserving
+            # cosine order (the input ``permitted_ids`` order) within each tier.
+            ordered_ids = self._rerank_by_genre(genre_groups, permitted_ids, item_map)
         ordered_ids = ordered_ids[:limit]
 
         results: list[SearchResultItem] = []
@@ -419,6 +450,91 @@ class SearchService:
             else:
                 tier3.append(jid)
         return tier1 + tier2 + tier3
+
+    @staticmethod
+    def _rerank_document_text(item: LibraryItemRow) -> str:
+        """Cross-encoder document side: the SAME composite template used for
+        embeddings (``build_sections``), minus the nomic ``search_document:``
+        prefix (a bi-encoder asymmetric-retrieval artifact, meaningless to a
+        ms-marco cross-encoder). Same section content, just no prefix.
+        """
+        return build_sections(
+            title=item.title,
+            overview=item.overview,
+            genres=item.genres,
+            production_year=item.production_year,
+            runtime_minutes=item.runtime_minutes,
+            cast=item.people,
+            directors=item.directors,
+            writers=item.writers,
+            composers=item.composers,
+            studios=item.studios,
+            tags=item.tags,
+        )
+
+    async def _rerank_cross_encoder(
+        self,
+        query: str,
+        permitted_ids: list[str],
+        item_map: Mapping[str, LibraryItemRow],
+        genre_groups: list[frozenset[str]],
+    ) -> list[str]:
+        """Bounded cross-encoder rerank with safe degradation.
+
+        Caps the rerank input to the top ``rerank_pool_size`` cosine candidates,
+        scores them OFF the event loop (``asyncio.to_thread``) under a per-query
+        deadline (``asyncio.wait_for``), and reorders that pool; the un-reranked
+        tail keeps cosine order and is appended after. On timeout or ANY reranker
+        error, degrades to the genre-heuristic ordering so a slow/broken reranker
+        never hangs or fails the request. Logging is count-keyed only — never the
+        query or document text (PII).
+        """
+        assert self._reranker is not None  # guarded by caller
+        pool_ids = permitted_ids[: self._rerank_pool_size]
+        tail_ids = permitted_ids[self._rerank_pool_size :]
+
+        candidates: list[tuple[str, str]] = []
+        missing_pool: list[str] = []
+        for jid in pool_ids:
+            item = item_map.get(jid)
+            if item is None:
+                # Lost between permission filter and metadata fetch — keep it
+                # rather than drop it (matches ``_rerank_by_genre``).
+                missing_pool.append(jid)
+            else:
+                candidates.append((jid, self._rerank_document_text(item)))
+
+        if not candidates:
+            return permitted_ids
+
+        try:
+            reordered_pool = await asyncio.wait_for(
+                asyncio.to_thread(self._reranker.rerank, query, candidates),
+                timeout=self._rerank_timeout_s,
+            )
+        except Exception as exc:  # noqa: BLE001 — degrade safely on ANY failure
+            # Count- and type-keyed only: no query/document text (PII).
+            logger.warning(
+                "rerank failed (pool=%d), falling back to genre heuristic: %s",
+                len(candidates),
+                type(exc).__name__,
+            )
+            return self._rerank_by_genre(genre_groups, permitted_ids, item_map)
+
+        # Trust-but-verify the reranker output: it must be a permutation of the
+        # scored pool ids. A non-permutation (dropped/duplicate/foreign ids from
+        # a buggy or future implementation) would drop valid candidates or emit
+        # duplicate cards downstream — degrade to the heuristic instead.
+        scored_ids = [jid for jid, _doc in candidates]
+        if sorted(reordered_pool) != sorted(scored_ids):
+            logger.warning(
+                "rerank returned a non-permutation (pool=%d), "
+                "falling back to genre heuristic",
+                len(candidates),
+            )
+            return self._rerank_by_genre(genre_groups, permitted_ids, item_map)
+
+        return list(reordered_pool) + missing_pool + tail_ids
 
     async def _determine_status(self) -> SearchStatus:
         """Check embedding completeness and return status (cached 30s)."""

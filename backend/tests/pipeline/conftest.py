@@ -288,6 +288,20 @@ async def eval_search_service(
         )
         permissions = AsyncMock()
         permissions.filter_permitted.side_effect = lambda *args, **_kw: args[2]
+        # Spec 29 — optionally engage the cross-encoder reranker. The flag and
+        # tuning come from Settings (env-driven SEARCH_RERANK_*), never raw
+        # os.environ. Default OFF, so router/retrieval evals are unchanged
+        # unless an operator opts in (then the eval measures the rerank path).
+        settings = Settings(
+            jellyfin_url="http://localhost:8096",
+            session_secret=TEST_SECRET,
+            ollama_host=OLLAMA_HOST,
+        )  # type: ignore[call-arg]
+        reranker = None
+        if settings.search_rerank_enabled:
+            from app.search.reranker import CrossEncoderReranker
+
+            reranker = CrossEncoderReranker()
         service = SearchService(
             ollama_client=embed_client,
             vec_repo=embedded_library,
@@ -295,5 +309,8 @@ async def eval_search_service(
             library_store=pipeline_library_store,
             person_index=person_index,
             rewriter=rewriter,
+            reranker=reranker,
+            rerank_pool_size=settings.search_rerank_pool_size,
+            rerank_timeout_ms=settings.search_rerank_timeout_ms,
         )
         yield service

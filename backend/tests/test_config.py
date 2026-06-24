@@ -536,3 +536,58 @@ def test_rewriter_settings_bounds() -> None:
             pytest.raises(ValidationError),
         ):
             Settings()  # type: ignore[call-arg]
+
+
+# --- Spec 29 — cross-encoder reranking settings ---
+
+
+def test_rerank_settings_defaults() -> None:
+    """Reranking ships OFF by default with a 100-item pool and 5s timeout.
+
+    Default OFF is a hard requirement (Spec 29): the quality win is proven
+    but its CPU-only latency is unmeasured until Spec 30, so the live path
+    must not engage until an operator opts in.
+    """
+    env = _REQUIRED_ENV.copy()
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.search_rerank_enabled is False
+    assert s.search_rerank_pool_size == 100
+    assert s.search_rerank_timeout_ms == 5000
+
+
+def test_rerank_settings_env_override() -> None:
+    """All three rerank settings load from environment variables."""
+    env = {
+        **_REQUIRED_ENV,
+        "SEARCH_RERANK_ENABLED": "true",
+        "SEARCH_RERANK_POOL_SIZE": "75",
+        "SEARCH_RERANK_TIMEOUT_MS": "2000",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        s = Settings()  # type: ignore[call-arg]
+    assert s.search_rerank_enabled is True
+    assert s.search_rerank_pool_size == 75
+    assert s.search_rerank_timeout_ms == 2000
+
+
+def test_rerank_pool_size_rejects_zero() -> None:
+    """search_rerank_pool_size must be >= 1 (a zero pool reranks nothing)."""
+    env = {**_REQUIRED_ENV, "SEARCH_RERANK_POOL_SIZE": "0"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_rerank_timeout_rejects_zero() -> None:
+    """search_rerank_timeout_ms must be >= 1 (a zero deadline is unusable)."""
+    env = {**_REQUIRED_ENV, "SEARCH_RERANK_TIMEOUT_MS": "0"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]
+
+
+def test_rerank_timeout_rejects_over_max() -> None:
+    """search_rerank_timeout_ms is capped at 60000ms to catch misconfiguration
+    (a multi-minute deadline would tie up a request slot on a hung reranker)."""
+    env = {**_REQUIRED_ENV, "SEARCH_RERANK_TIMEOUT_MS": "60001"}
+    with patch.dict(os.environ, env, clear=True), pytest.raises(ValidationError):
+        Settings()  # type: ignore[call-arg]

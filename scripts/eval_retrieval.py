@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -34,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND))
 
+from app.config import Settings  # noqa: E402
 from app.library.store import LibraryStore  # noqa: E402
 from app.ollama.chat_client import OllamaChatClient  # noqa: E402
 from app.ollama.client import OllamaEmbeddingClient  # noqa: E402
@@ -59,6 +62,13 @@ _BASELINE_PATH = str(BACKEND / "tests" / "fixtures" / "eval_baseline.json")
 
 
 async def _amain(args: argparse.Namespace) -> int:
+    if args.rerank and importlib.util.find_spec("sentence_transformers") is None:
+        print(
+            "ERROR: --rerank requires the optional 'rerank' extra "
+            "(it is not installed). Install with: uv sync --extra rerank",
+            file=sys.stderr,
+        )
+        return 1
     cases = load_golden_set()
     print(f"Loaded {len(cases)} golden cases; scoring against {args.db}\n")
 
@@ -89,6 +99,15 @@ async def _amain(args: argparse.Namespace) -> int:
             )
             permissions = AsyncMock()
             permissions.filter_permitted.side_effect = lambda *a, **_kw: a[2]
+            reranker = None
+            if args.rerank:
+                from app.search.reranker import CrossEncoderReranker
+
+                reranker = CrossEncoderReranker()
+                print(
+                    f"Cross-encoder reranking ON (pool={args.rerank_pool_size}, "
+                    f"timeout={args.rerank_timeout_ms}ms)\n"
+                )
             service = SearchService(
                 ollama_client=embed_client,
                 vec_repo=repo,
@@ -96,14 +115,42 @@ async def _amain(args: argparse.Namespace) -> int:
                 library_store=store,
                 person_index=person_index,
                 rewriter=rewriter,
+                reranker=reranker,
+                rerank_pool_size=args.rerank_pool_size,
+                rerank_timeout_ms=args.rerank_timeout_ms,
             )
 
             ranked: dict[str, list[str]] = {}
+            search_elapsed: list[float] = []
             for case in cases:
+                _t0 = time.perf_counter()
                 response = await service.search(
                     case.query, limit=max(args.ks), user_id="eval", token="eval-token"
                 )
+                search_elapsed.append(time.perf_counter() - _t0)
                 ranked[case.query] = [r.jellyfin_id for r in response.results]
+
+            if args.rerank and search_elapsed:
+
+                def _pct(values: list[float], p: float) -> float:
+                    # Linear interpolation between closest ranks (numpy-style),
+                    # so small samples don't snap p95 to the max.
+                    s = sorted(values)
+                    k = (len(s) - 1) * p
+                    lo = int(k)
+                    hi = min(lo + 1, len(s) - 1)
+                    return s[lo] + (s[hi] - s[lo]) * (k - lo)
+
+                p50 = _pct(search_elapsed, 0.50)
+                p95 = _pct(search_elapsed, 0.95)
+                # Informational only — NOT a gate. Whole-search wall-time
+                # (rerank-dominated for filtered queries); grounds the
+                # SEARCH_RERANK_TIMEOUT_MS default. Real-hardware p95 is Spec 30.
+                print(
+                    f"[informational] search wall-time incl. rerank over "
+                    f"{len(search_elapsed)} queries: p50={p50 * 1000:.0f}ms "
+                    f"p95={p95 * 1000:.0f}ms (not a gate)\n"
+                )
 
             title_index = await store.get_title_index()
             outcome = evaluate(
@@ -174,6 +221,27 @@ def main() -> None:
         "--update-baseline",
         action="store_true",
         help="Append the current gated scores as a new baseline record.",
+    )
+    parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Engage the Spec 29 cross-encoder reranker (requires the 'rerank' "
+        "extra). Off by default; matches the SEARCH_RERANK_ENABLED flag.",
+    )
+    # Defaults sourced from the Settings field defaults so the script can't
+    # drift from config.py.
+    _fields = Settings.model_fields
+    parser.add_argument(
+        "--rerank-pool-size",
+        type=int,
+        default=_fields["search_rerank_pool_size"].default,
+        help="Top-N cosine candidates the reranker re-scores.",
+    )
+    parser.add_argument(
+        "--rerank-timeout-ms",
+        type=int,
+        default=_fields["search_rerank_timeout_ms"].default,
+        help="Per-query rerank deadline in ms.",
     )
     args = parser.parse_args()
     sys.exit(asyncio.run(_amain(args)))

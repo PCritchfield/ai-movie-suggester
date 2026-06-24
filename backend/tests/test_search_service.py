@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 from app.search.person_index import PersonIndex
 from app.search.service import SearchService
 from tests.factories import make_embedding_result, make_library_item, make_search_result
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import pytest
+
+    from app.search.reranker import RerankerProtocol
 
 
 def _make_service(
@@ -22,6 +30,9 @@ def _make_service(
     intent_filter_rating_enabled: bool = True,
     rewriter: AsyncMock | None = None,
     foreign_film_home_countries: list[str] | None = None,
+    reranker: RerankerProtocol | None = None,
+    rerank_pool_size: int = 100,
+    rerank_timeout_ms: int = 5000,
 ) -> SearchService:
     """Build a SearchService with mocked dependencies.
 
@@ -60,6 +71,9 @@ def _make_service(
         intent_filter_rating_enabled=intent_filter_rating_enabled,
         rewriter=rewriter,
         foreign_film_home_countries=foreign_film_home_countries,
+        reranker=reranker,
+        rerank_pool_size=rerank_pool_size,
+        rerank_timeout_ms=rerank_timeout_ms,
     )
 
 
@@ -1318,3 +1332,226 @@ class TestSearchResponseMetadata:
         assert result.filtered_count == 0
         # total_candidates still reports the raw vector-search count.
         assert result.total_candidates == 3
+
+
+# --- Spec 29 — reranker optional collaborator (inert wiring) ---
+
+
+class _StubReranker:
+    """Minimal RerankerProtocol impl for wiring tests (no torch)."""
+
+    def rerank(self, query: str, candidates: Sequence[tuple[str, str]]) -> list[str]:
+        return [jid for jid, _doc in candidates]
+
+
+def test_reranker_defaults_to_none() -> None:
+    """SearchService constructs without a reranker; the property is None."""
+    service = _make_service()
+    assert service.reranker is None
+
+
+def test_reranker_is_exposed_when_injected() -> None:
+    """An injected reranker is exposed via the read-only property (mirrors
+    person_index), so the eval harness can introspect it."""
+    stub = _StubReranker()
+    service = _make_service(reranker=stub)
+    assert service.reranker is stub
+
+
+# --- Spec 29 — live bounded rerank + safe degradation (flag ON) ---
+
+
+class _CapturingReranker:
+    """A reranker stub that records the candidates it was given and reorders
+    them via an injectable rule (default: identity)."""
+
+    def __init__(self, reorder=None, *, raises: Exception | None = None) -> None:
+        self.calls: list[tuple[str, list[tuple[str, str]]]] = []
+        self._reorder = reorder
+        self._raises = raises
+
+    def rerank(self, query: str, candidates: Sequence[tuple[str, str]]) -> list[str]:
+        self.calls.append((query, list(candidates)))
+        if self._raises is not None:
+            raise self._raises
+        if self._reorder is not None:
+            return self._reorder(list(candidates))
+        return [jid for jid, _doc in candidates]
+
+
+def _ordering_service(reranker, *, pool_size=100, n=5):
+    """Build a SearchService whose pipeline yields ``n`` cosine-ordered,
+    permitted candidates m0..m(n-1), wired to ``reranker``."""
+    ollama = AsyncMock()
+    ollama.embed.return_value = make_embedding_result()
+    vec_repo = AsyncMock()
+    vec_repo.count.return_value = 100
+    vec_repo.search.return_value = [
+        make_search_result(f"m{i}", 0.9 - i * 0.1) for i in range(n)
+    ]
+    permissions = AsyncMock()
+    permissions.filter_permitted.return_value = [f"m{i}" for i in range(n)]
+    library = AsyncMock()
+    library.get_many.return_value = [
+        make_library_item(f"m{i}", f"Title{i}") for i in range(n)
+    ]
+    library.get_queue_counts.return_value = {"pending": 0, "processing": 0, "failed": 0}
+    library.search_filtered_ids = AsyncMock(return_value=None)
+    return _make_service(
+        ollama=ollama,
+        vec_repo=vec_repo,
+        permissions=permissions,
+        library=library,
+        reranker=reranker,
+        rerank_pool_size=pool_size,
+    )
+
+
+async def test_live_rerank_bounds_pool_and_keeps_cosine_tail() -> None:
+    """With the flag ON: only the top-``pool_size`` cosine candidates are
+    reranked; the tail keeps cosine order and is appended after the reordered
+    pool; ``[:limit]`` applies last."""
+
+    def _reverse(cands: list[tuple[str, str]]) -> list[str]:
+        return [jid for jid, _doc in reversed(cands)]
+
+    reranker = _CapturingReranker(reorder=_reverse)
+    service = _ordering_service(reranker, pool_size=3, n=5)
+
+    result = await service.search("aliens", limit=5, user_id="u1", token="tok")
+
+    # pool = [m0,m1,m2] reversed -> [m2,m1,m0]; tail = [m3,m4] cosine-ordered.
+    assert [r.jellyfin_id for r in result.results] == ["m2", "m1", "m0", "m3", "m4"]
+    # Only the top-3 were handed to the reranker (bounded pool).
+    assert len(reranker.calls) == 1
+    passed_ids = [jid for jid, _doc in reranker.calls[0][1]]
+    assert passed_ids == ["m0", "m1", "m2"]
+
+
+async def test_live_rerank_document_text_uses_build_sections_without_prefix() -> None:
+    """The document side reuses the composite template (``build_sections``)
+    minus the nomic ``search_document:`` prefix."""
+    reranker = _CapturingReranker()
+    service = _ordering_service(reranker, pool_size=10, n=2)
+
+    await service.search("q", limit=10, user_id="u1", token="tok")
+
+    docs = [doc for _jid, doc in reranker.calls[0][1]]
+    assert docs, "reranker received no candidates"
+    for doc in docs:
+        assert not doc.startswith("search_document:")
+    # build_sections emits the title; confirm the real composite text flows through.
+    assert any("Title0" in doc for doc in docs)
+
+
+async def test_rerank_replaces_genre_heuristic_when_enabled() -> None:
+    """When the reranker is ON, ``_rerank_by_genre`` is NOT called (replace,
+    not layer)."""
+    from unittest.mock import patch
+
+    reranker = _CapturingReranker()
+    service = _ordering_service(reranker, n=4)
+
+    with patch.object(
+        SearchService, "_rerank_by_genre", wraps=SearchService._rerank_by_genre
+    ) as spy:
+        await service.search("q", limit=10, user_id="u1", token="tok")
+
+    spy.assert_not_called()
+
+
+async def test_genre_heuristic_used_when_reranker_absent() -> None:
+    """Sanity: with no reranker, ``_rerank_by_genre`` IS the ordering path."""
+    from unittest.mock import patch
+
+    service = _ordering_service(None, n=4)
+
+    with patch.object(
+        SearchService, "_rerank_by_genre", wraps=SearchService._rerank_by_genre
+    ) as spy:
+        await service.search("q", limit=10, user_id="u1", token="tok")
+
+    spy.assert_called_once()
+
+
+async def test_rerank_timeout_falls_back_to_genre_heuristic() -> None:
+    """A reranker slower than the deadline raises TimeoutError internally; the
+    search degrades to the genre-heuristic ordering and still returns results,
+    without blocking the event loop."""
+    import asyncio
+
+    def _slow(_cands: list[tuple[str, str]]) -> list[str]:
+        # Block the worker thread past the deadline. Runs in a thread (via
+        # asyncio.to_thread), so a concurrent event-loop probe must still tick.
+        import time
+
+        time.sleep(0.5)
+        return []
+
+    reranker = _CapturingReranker(reorder=_slow)
+    service = _ordering_service(reranker, pool_size=3, n=5)
+    # 50ms deadline << 500ms scorer sleep.
+    service._rerank_timeout_s = 0.05  # type: ignore[attr-defined]
+
+    ticks = 0
+
+    async def _probe() -> None:
+        nonlocal ticks
+        for _ in range(20):
+            await asyncio.sleep(0.01)
+            ticks += 1
+
+    probe = asyncio.create_task(_probe())
+    result = await service.search("q", limit=5, user_id="u1", token="tok")
+    await probe
+
+    # Fell back to cosine/genre ordering (all 5, original order — no rerank).
+    assert [r.jellyfin_id for r in result.results] == ["m0", "m1", "m2", "m3", "m4"]
+    # The event loop kept ticking while the rerank thread was blocked.
+    assert ticks >= 5
+
+
+async def test_rerank_error_falls_back_to_genre_heuristic() -> None:
+    """Any reranker exception degrades to the genre-heuristic ordering."""
+    reranker = _CapturingReranker(raises=RuntimeError("model exploded"))
+    service = _ordering_service(reranker, pool_size=3, n=5)
+
+    result = await service.search("q", limit=5, user_id="u1", token="tok")
+
+    assert [r.jellyfin_id for r in result.results] == ["m0", "m1", "m2", "m3", "m4"]
+
+
+async def test_rerank_non_permutation_falls_back_to_genre_heuristic() -> None:
+    """A reranker that returns ids outside the scored pool (or drops/dupes them)
+    is rejected — the search degrades to the genre-heuristic ordering rather than
+    silently dropping valid candidates or emitting duplicate cards."""
+    reranker = _CapturingReranker(reorder=lambda _cands: ["bogus-id"])
+    service = _ordering_service(reranker, pool_size=3, n=5)
+
+    result = await service.search("q", limit=5, user_id="u1", token="tok")
+
+    assert [r.jellyfin_id for r in result.results] == ["m0", "m1", "m2", "m3", "m4"]
+
+
+async def test_rerank_failure_logs_without_pii(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The fallback warning is count/index-keyed and contains no query or
+    document text (PII constraint)."""
+    import logging
+
+    reranker = _CapturingReranker(raises=RuntimeError("boom: secret query leaked?"))
+    service = _ordering_service(reranker, pool_size=3, n=5)
+
+    with caplog.at_level(logging.WARNING):
+        await service.search(
+            "my private late-night query", limit=5, user_id="u1", token="tok"
+        )
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("rerank" in m.lower() for m in warnings), "expected a rerank warning"
+    blob = "\n".join(warnings)
+    assert "my private late-night query" not in blob
+    assert "Title0" not in blob
+    # The exception's own message must not be interpolated verbatim either.
+    assert "secret query leaked" not in blob

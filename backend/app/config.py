@@ -98,6 +98,21 @@ class Settings(BaseSettings):
     search_overfetch_multiplier: Annotated[int, Field(ge=1, le=10)] = 3
     search_rate_limit: Annotated[str, Field(pattern=_RATE_LIMIT_RE)] = "10/minute"
 
+    # Spec 29 — cross-encoder reranking. Defaults OFF: the quality win is
+    # proven (NDCG@10 0.338 -> 0.591) but its CPU-only latency is unmeasured
+    # until Spec 30, so the live path must not engage without an explicit
+    # opt-in. ``pool_size`` caps how many top cosine candidates the
+    # cross-encoder re-scores (latency/quality knob, distinct from
+    # ``search_overfetch_multiplier`` which governs the cosine fetch window).
+    # ``timeout_ms`` is provisional (revised in Spec 29 task 5.x from an
+    # observed fixture wall-time; authoritative tuning waits on Spec 30
+    # real-hardware numbers).
+    search_rerank_enabled: bool = False
+    search_rerank_pool_size: Annotated[int, Field(ge=1, le=1000)] = 100
+    # Upper bound guards operator misconfiguration: a multi-minute timeout would
+    # tie up a request slot on a hung reranker before wait_for cancels it.
+    search_rerank_timeout_ms: Annotated[int, Field(ge=1, le=60000)] = 5000
+
     # Spec 24 — query router per-filter disable switches. All default to
     # True (router on); flip individually to demonstrate regression at
     # eval time or to mute a noisy filter without redeploying code.
