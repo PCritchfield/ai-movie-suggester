@@ -1,6 +1,5 @@
-import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+// All call sites pass plain class strings (no clsx conditional-object syntax),
+// so twMerge alone covers merge + dedupe — clsx was redundant indirection.
+export const cn = twMerge;
