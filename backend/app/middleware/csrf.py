@@ -19,11 +19,6 @@ if TYPE_CHECKING:
 _EXEMPT_PATHS = {"/api/auth/login"}
 _STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-_CSRF_REJECT = JSONResponse(
-    status_code=403,
-    content={"detail": "CSRF token missing or invalid"},
-)
-
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     """Validates CSRF token on state-changing requests."""
