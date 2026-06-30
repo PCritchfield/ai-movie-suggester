@@ -57,3 +57,8 @@ coverage/
 
 # SDD workflow artifacts — point-in-time, kept locally only
 docs/specs/
+
+# Claude Code — local-only config + agent worktrees (never commit).
+# Scoped (not all of .claude/) so shared config could be committed later if wanted.
+.claude/settings.local.json
+.claude/worktrees/
