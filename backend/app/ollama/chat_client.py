@@ -75,6 +75,31 @@ class OllamaChatClient:
         except Exception:
             return False
 
+    async def is_model_resident(self) -> bool:
+        """Return ``True`` if the configured chat model is currently loaded.
+
+        GETs ``{base_url}/api/ps`` with the health timeout. Used by the query
+        rewriter to avoid triggering a cold model load it cannot wait for
+        (Ollama aborts an in-flight load when the client disconnects, which
+        would waste the load the main generation call then has to restart).
+        Returns ``False`` on any error — callers treat "unknown" as "cold".
+        """
+        try:
+            resp = await self._client.get(
+                f"{self._base_url}/api/ps",
+                timeout=self._health_timeout,
+            )
+            if resp.status_code != 200:
+                return False
+            models = resp.json().get("models", [])
+        except Exception:
+            return False
+        want = _with_default_tag(self._chat_model)
+        return any(
+            _with_default_tag(m.get("name") or m.get("model") or "") == want
+            for m in models
+        )
+
     async def chat_stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
         """Stream chat tokens from Ollama.
 
@@ -213,3 +238,8 @@ class OllamaChatClient:
             raise OllamaStructuredOutputError(
                 "Ollama returned content that did not match the requested schema"
             ) from exc
+
+
+def _with_default_tag(name: str) -> str:
+    """Normalise an Ollama model reference: ``llama3.1`` → ``llama3.1:latest``."""
+    return name if ":" in name else f"{name}:latest"

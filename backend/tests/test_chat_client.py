@@ -472,3 +472,71 @@ class TestConfigChatFields:
     def test_chat_system_prompt_default_none(self) -> None:
         settings = make_test_settings()
         assert settings.chat_system_prompt is None
+
+
+# ---------------------------------------------------------------------------
+# is_model_resident — GET /api/ps (cold-start fix)
+# ---------------------------------------------------------------------------
+
+
+def _ps_response(names: list[str]) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={"models": [{"name": n, "model": n} for n in names]},
+        request=httpx.Request("GET", "http://fake"),
+    )
+
+
+class TestIsModelResident:
+    async def test_true_when_chat_model_listed(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = _ps_response(
+            ["nomic-embed-text:latest", "llama3.1:8b"]
+        )
+        assert await chat_client.is_model_resident() is True
+        assert mock_http.get.call_args.args[0] == "http://ollama:11434/api/ps"
+
+    async def test_false_when_only_other_models_loaded(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = _ps_response(["nomic-embed-text:latest"])
+        assert await chat_client.is_model_resident() is False
+
+    async def test_false_when_nothing_loaded(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = _ps_response([])
+        assert await chat_client.is_model_resident() is False
+
+    async def test_false_on_connection_error_never_raises(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.side_effect = httpx.ConnectError("Connection refused")
+        assert await chat_client.is_model_resident() is False
+
+    async def test_false_on_non_200(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = httpx.Response(
+            500, text="boom", request=httpx.Request("GET", "http://fake")
+        )
+        assert await chat_client.is_model_resident() is False
+
+    async def test_untagged_config_name_matches_latest_tag(
+        self, mock_http: AsyncMock
+    ) -> None:
+        client = OllamaChatClient(
+            base_url="http://ollama:11434",
+            http_client=mock_http,
+            chat_model="llama3.1",
+        )
+        mock_http.get.return_value = _ps_response(["llama3.1:latest"])
+        assert await client.is_model_resident() is True
+
+    async def test_uses_health_timeout(
+        self, chat_client: OllamaChatClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.get.return_value = _ps_response(["llama3.1:8b"])
+        await chat_client.is_model_resident()
+        assert mock_http.get.call_args.kwargs["timeout"] == 5.0

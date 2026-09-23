@@ -639,3 +639,37 @@ class TestChatEndpointStructuredFallback:
         assert "couldn't put together" in parsed[2]["content"].lower()
         # The free-prose path must never be invoked on the fallback.
         chat_client.chat_stream.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# SSE heartbeat framing (cold-start / proxy idle-timeout fix)
+# ---------------------------------------------------------------------------
+
+
+class TestSSEHeartbeatFraming:
+    """Heartbeat events are rendered as SSE comment frames, never as data.
+
+    A comment frame (``: heartbeat``) keeps the upstream socket busy through
+    reverse-proxy idle timeouts (e.g. Next.js rewrites at 30s) while Ollama is
+    loading a model, and is ignored by every compliant SSE parser — the
+    frontend never sees a JSON event it doesn't understand.
+    """
+
+    async def test_heartbeat_rendered_as_sse_comment(self) -> None:
+        from app.chat.models import SSEEventType
+        from app.chat.router import _sse_generator
+
+        async def _events():
+            yield {"type": SSEEventType.STATUS, "phase": "generating"}
+            yield {"type": SSEEventType.HEARTBEAT}
+            yield {"type": SSEEventType.DONE}
+
+        frames = [frame async for frame in _sse_generator(_events())]
+
+        assert frames[1] == ": heartbeat\n\n"
+        assert "data:" not in frames[1]
+        assert json.loads(frames[0].removeprefix("data: ")) == {
+            "type": "status",
+            "phase": "generating",
+        }
+        assert json.loads(frames[2].removeprefix("data: ")) == {"type": "done"}

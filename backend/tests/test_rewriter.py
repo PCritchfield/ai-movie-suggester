@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from app.ollama.errors import (
     OllamaConnectionError,
@@ -55,6 +55,8 @@ def _make_chat_client(stream_factory):
     """Build an AsyncMock chat client whose ``chat_stream`` returns ``stream``."""
     client = MagicMock()
     client.chat_stream = MagicMock(return_value=stream_factory())
+    # Default: model is warm, so the rewrite path is exercised.
+    client.is_model_resident = AsyncMock(return_value=True)
     return client
 
 
@@ -133,6 +135,7 @@ class TestQueryRewriterFallbacks:
 
         client = MagicMock()
         client.chat_stream = MagicMock(return_value=_explode())
+        client.is_model_resident = AsyncMock(return_value=True)
         rewriter = QueryRewriter(
             chat_client=client,
             cache=RewriteCache(max_entries=10, ttl_seconds=60),
@@ -149,6 +152,7 @@ class TestQueryRewriterFallbacks:
 
         client = MagicMock()
         client.chat_stream = MagicMock(return_value=_explode())
+        client.is_model_resident = AsyncMock(return_value=True)
         rewriter = QueryRewriter(
             chat_client=client,
             cache=RewriteCache(max_entries=10, ttl_seconds=60),
@@ -165,6 +169,7 @@ class TestQueryRewriterFallbacks:
 
         client = MagicMock()
         client.chat_stream = MagicMock(return_value=_explode())
+        client.is_model_resident = AsyncMock(return_value=True)
         rewriter = QueryRewriter(
             chat_client=client,
             cache=RewriteCache(max_entries=10, ttl_seconds=60),
@@ -235,3 +240,42 @@ class TestQueryRewriterPII:
         )
         assert "<" not in inner
         assert ">" not in inner
+
+
+class TestRewriterSkipsColdModel:
+    """The rewriter must not trigger a model load it will then abort.
+
+    With a 2s budget the rewriter can never wait for a cold load (~30s), and
+    Ollama aborts an in-flight load when the client disconnects — so a rewrite
+    attempt against a cold model wastes the load the main generation call then
+    has to restart. Skip the rewrite instead and let generation warm the model.
+    """
+
+    async def test_skips_rewrite_when_model_not_resident(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        client = _make_chat_client(lambda: _stream(["a comedy"]))
+        client.is_model_resident = AsyncMock(return_value=False)
+        rewriter = QueryRewriter(
+            chat_client=client,
+            cache=RewriteCache(max_entries=10, ttl_seconds=60),
+            timeout_seconds=2.0,
+            max_output_chars=200,
+        )
+        with caplog.at_level(logging.WARNING, logger="app.search.rewriter"):
+            result = await rewriter.rewrite("something funny")
+
+        assert result == "something funny"
+        client.chat_stream.assert_not_called()
+        assert "rewrite_skip reason=model_cold" in caplog.text
+
+    async def test_rewrites_when_model_resident(self) -> None:
+        client = _make_chat_client(lambda: _stream(["a comedy"]))
+        client.is_model_resident = AsyncMock(return_value=True)
+        rewriter = QueryRewriter(
+            chat_client=client,
+            cache=RewriteCache(max_entries=10, ttl_seconds=60),
+            timeout_seconds=2.0,
+            max_output_chars=200,
+        )
+        assert await rewriter.rewrite("something funny") == "a comedy"
