@@ -204,6 +204,10 @@ class Settings(BaseSettings):
     log_level: Literal["debug", "info", "warning", "error", "critical"] = "info"
     session_expiry_hours: int = 24
     chat_rate_limit: Annotated[str, Field(pattern=_RATE_LIMIT_RE)] = "10/minute"
+    # Interval between SSE heartbeat comment frames while chat generation
+    # blocks on Ollama. Must stay well under any reverse-proxy idle timeout in
+    # front of the backend (Next.js rewrites drop idle upstreams at 30s).
+    chat_heartbeat_interval_seconds: Annotated[float, Field(ge=0.01, le=25.0)] = 10.0
 
     @model_validator(mode="after")
     def _validate_cors_origin(self) -> Settings:

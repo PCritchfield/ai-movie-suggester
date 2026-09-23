@@ -68,6 +68,13 @@ class QueryRewriter:
         if cached is not None:
             return cached
 
+        # A cold model takes ~30s to load — far beyond the rewrite budget — and
+        # Ollama aborts the load when we hang up, so attempting a rewrite here
+        # would only sabotage the main generation call's own load. Skip.
+        if not await self._chat.is_model_resident():
+            logger.warning("rewrite_skip reason=model_cold query_len=%d", len(query))
+            return query
+
         try:
             rewritten = await asyncio.wait_for(
                 self._stream_rewrite(query),

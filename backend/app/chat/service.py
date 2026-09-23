@@ -51,6 +51,10 @@ FALLBACK_UNAVAILABLE_MESSAGE = (
     "may be busy. The closest matches from your library are shown above."
 )
 
+# Upper bound on a single structured-generation call (model load + prefill +
+# grammar-constrained decode). Module-level so tests can shrink it.
+GENERATION_TIMEOUT_SECONDS = 120.0
+
 
 class ChatPauseCounter:
     """Reference-counted GPU pause signal for concurrent chat requests.
@@ -252,10 +256,34 @@ class ChatService:
             # a staged wait state the frontend can surface while we wait.
             yield {"type": SSEEventType.STATUS, "phase": "generating"}
 
-            async with asyncio.timeout(120.0):
-                structured = await self._chat_client.chat_structured(
-                    messages, StructuredChatResponse
-                )
+            # Run generation as a task and emit heartbeats while it blocks.
+            # A cold Ollama model load alone can exceed 30s, and reverse
+            # proxies (Next.js rewrites) drop upstreams idle that long — which
+            # cancels this stream and makes Ollama abort the load, so it never
+            # finishes. The router renders heartbeats as SSE comment frames.
+            generation = asyncio.ensure_future(
+                self._chat_client.chat_structured(messages, StructuredChatResponse)
+            )
+            try:
+                async with asyncio.timeout(GENERATION_TIMEOUT_SECONDS):
+                    while True:
+                        done, _pending = await asyncio.wait(
+                            {generation},
+                            timeout=self._settings.chat_heartbeat_interval_seconds,
+                        )
+                        if done:
+                            break
+                        yield {"type": SSEEventType.HEARTBEAT}
+                structured = generation.result()
+            finally:
+                # Timeout, client disconnect (GeneratorExit), or any error:
+                # never leave the Ollama call running detached.
+                if not generation.done():
+                    generation.cancel()
+                    # Let the cancellation propagate into the task so the
+                    # underlying httpx request is actually torn down before
+                    # we move on (bounded — never block the fallback path).
+                    await asyncio.wait({generation}, timeout=1.0)
 
             # Validate every returned id against the permission-filtered
             # candidate set. A jellyfin_id from the model is a CLAIM, not a

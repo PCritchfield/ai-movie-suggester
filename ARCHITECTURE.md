@@ -79,6 +79,7 @@ contract, so a v1 frontend ignores unknown event types and still works:
 
 - `metadata` — `{version: 2, recommendations: SearchResultItem[], search_status, turn_count}` (all candidates; instant)
 - `status` — `{phase: "generating"}` (staged wait state; emitted when generation begins)
+- `: heartbeat` — SSE *comment* frame (not a `data:` event) emitted every `CHAT_HEARTBEAT_INTERVAL_SECONDS` (default 10s) while generation blocks. Ignored by parsers; exists so reverse proxies with idle timeouts (the Next.js `/api/*` rewrite drops idle upstreams at 30s) never sever the stream during a cold model load or a long grammar-constrained decode.
 - `picks` — `{version: 2, picks: [{jellyfin_id, reasoning, pick_order}]}` (validated recommendations, LLM order; **absent on the fallback path**)
 - `text` — `{content}` (prose synthesized deterministically from the picks; one event, not token-streamed)
 - `done` — stream complete
@@ -86,7 +87,13 @@ contract, so a v1 frontend ignores unknown event types and still works:
 
 Generation is non-streaming (grammar-constrained decoding produces the whole
 payload at once), so the 120s chat timeout now bounds a single blocking call;
-the `status` event is the user-facing mitigation.
+the `status` event is the user-facing mitigation and the heartbeat comment is
+the transport-level one. Without heartbeats, a cold Ollama load (~35s on the
+reference deployment) exceeded the proxy idle timeout, the proxy dropped the
+stream, the backend cancelled its Ollama call, and Ollama aborted the half-done
+load — so the model could never finish loading. The query rewriter also skips
+its 2s-budget rewrite when `/api/ps` shows the chat model is not resident, so
+it never triggers (and then aborts) a load the generation call needs.
 
 ## Data Flow: Library Sync & Embedding
 

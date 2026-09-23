@@ -12,6 +12,9 @@ class SSEEventType(StrEnum):
 
     METADATA = "metadata"
     STATUS = "status"  # Spec 27 — staged wait state ("generating")
+    # Keep-alive emitted while generation blocks; rendered as an SSE *comment*
+    # frame by the router (never a ``data:`` line), so clients ignore it.
+    HEARTBEAT = "heartbeat"
     PICKS = "picks"  # Spec 27 — validated LLM recommendations (version 2)
     TEXT = "text"
     DONE = "done"
