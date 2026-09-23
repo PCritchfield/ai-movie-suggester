@@ -829,12 +829,9 @@ class TestGenerationHeartbeat:
         assert "heartbeat" not in _types(events)
 
     async def test_generation_timeout_cancels_pending_call_and_falls_back(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
     ) -> None:
-        from app.chat import service as service_module
         from app.chat.service import FALLBACK_UNAVAILABLE_MESSAGE
-
-        monkeypatch.setattr(service_module, "GENERATION_TIMEOUT_SECONDS", 0.05)
 
         cancelled = asyncio.Event()
 
@@ -855,7 +852,10 @@ class TestGenerationHeartbeat:
         service = _make_chat_service(
             search_service=search,
             chat_client=chat_client,
-            settings_overrides={"chat_heartbeat_interval_seconds": 0.01},
+            settings_overrides={
+                "chat_heartbeat_interval_seconds": 0.01,
+                "chat_generation_timeout_seconds": 0.05,
+            },
         )
 
         events = await _collect_events(
@@ -868,3 +868,48 @@ class TestGenerationHeartbeat:
         assert events[-1]["type"] == "done"
         assert events[-2] == {"type": "text", "content": FALLBACK_UNAVAILABLE_MESSAGE}
         assert cancelled.is_set(), "pending Ollama call must be cancelled on timeout"
+
+    async def test_cancellation_that_does_not_complete_is_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """If the Ollama call ignores cancellation for >1s, we still fall back
+        promptly but leave a warning so the detached call is visible."""
+        from app.chat.service import FALLBACK_UNAVAILABLE_MESSAGE
+
+        async def _stubborn(*_args, **_kwargs):
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                # Swallow the first cancel and linger past the 1s grace window.
+                await asyncio.sleep(1.3)
+                raise
+            return _structured("never", [])
+
+        chat_client = AsyncMock()
+        chat_client.chat_structured = AsyncMock(side_effect=_stubborn)
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[make_search_result_item(title="Alien", jellyfin_id="a1")]
+        )
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            settings_overrides={
+                "chat_heartbeat_interval_seconds": 0.01,
+                "chat_generation_timeout_seconds": 0.05,
+            },
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.chat.service"):
+            events = await _collect_events(
+                service,
+                query="scary",
+                user_id="uid-1",
+                token="jf-token",
+                session_id="s1",
+            )
+
+        assert events[-2] == {"type": "text", "content": FALLBACK_UNAVAILABLE_MESSAGE}
+        assert "chat_generation_cancel_pending" in caplog.text
+        # Let the stubborn task finish so the loop shuts down cleanly.
+        await asyncio.sleep(0.5)

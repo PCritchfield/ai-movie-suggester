@@ -208,6 +208,9 @@ class Settings(BaseSettings):
     # blocks on Ollama. Must stay well under any reverse-proxy idle timeout in
     # front of the backend (Next.js rewrites drop idle upstreams at 30s).
     chat_heartbeat_interval_seconds: Annotated[float, Field(ge=0.01, le=25.0)] = 10.0
+    # Upper bound on a single structured-generation call (model load + prefill
+    # + grammar-constrained decode). On timeout the canned fallback is emitted.
+    chat_generation_timeout_seconds: Annotated[float, Field(ge=0.01, le=600.0)] = 120.0
 
     @model_validator(mode="after")
     def _validate_cors_origin(self) -> Settings:

@@ -86,7 +86,7 @@ contract, so a v1 frontend ignores unknown event types and still works:
 - `error` — only for pre-search failures (`search_unavailable`); generation failures degrade to the canned-text fallback, never an error event
 
 Generation is non-streaming (grammar-constrained decoding produces the whole
-payload at once), so the 120s chat timeout now bounds a single blocking call;
+payload at once), so the chat timeout (`CHAT_GENERATION_TIMEOUT_SECONDS`, default 120s) bounds a single blocking call;
 the `status` event is the user-facing mitigation and the heartbeat comment is
 the transport-level one. Without heartbeats, a cold Ollama load (~35s on the
 reference deployment) exceeded the proxy idle timeout, the proxy dropped the
@@ -208,7 +208,7 @@ All configuration via environment variables (`.env` file). See `.env.example` fo
 | Sync | `JELLYFIN_API_KEY`, `JELLYFIN_ADMIN_USER_ID`, `LIBRARY_SYNC_PAGE_SIZE`, `SYNC_INTERVAL_HOURS`, `TOMBSTONE_TTL_DAYS`, `WAL_CHECKPOINT_THRESHOLD_MB` | `JELLYFIN_API_KEY` for background sync |
 | Embedding | `EMBEDDING_BATCH_SIZE`, `EMBEDDING_WORKER_INTERVAL_SECONDS`, `EMBEDDING_MAX_RETRIES`, `EMBEDDING_COOLDOWN_SECONDS` | Defaults provided |
 | Search | `SEARCH_RATE_LIMIT`, `SEARCH_OVERFETCH_MULTIPLIER`, `FOREIGN_FILM_HOME_COUNTRIES` | Defaults provided (`FOREIGN_FILM_HOME_COUNTRIES=US`; ISO 3166-1 alpha-2 codes; set empty to disable the foreign-film route) |
-| Chat | `CHAT_RATE_LIMIT`, `CHAT_SYSTEM_PROMPT` | Defaults provided |
+| Chat | `CHAT_RATE_LIMIT`, `CHAT_SYSTEM_PROMPT`, `CHAT_HEARTBEAT_INTERVAL_SECONDS`, `CHAT_GENERATION_TIMEOUT_SECONDS` | Defaults provided |
 | Conversation | `CONVERSATION_MAX_TURNS`, `CONVERSATION_TTL_MINUTES`, `CONVERSATION_MAX_SESSIONS`, `CONVERSATION_CONTEXT_BUDGET` | Defaults provided |
 | Tuning | `LOG_LEVEL`, `ENABLE_DOCS` | Defaults provided |
 

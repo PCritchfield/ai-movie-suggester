@@ -51,10 +51,6 @@ FALLBACK_UNAVAILABLE_MESSAGE = (
     "may be busy. The closest matches from your library are shown above."
 )
 
-# Upper bound on a single structured-generation call (model load + prefill +
-# grammar-constrained decode). Module-level so tests can shrink it.
-GENERATION_TIMEOUT_SECONDS = 120.0
-
 
 class ChatPauseCounter:
     """Reference-counted GPU pause signal for concurrent chat requests.
@@ -265,7 +261,9 @@ class ChatService:
                 self._chat_client.chat_structured(messages, StructuredChatResponse)
             )
             try:
-                async with asyncio.timeout(GENERATION_TIMEOUT_SECONDS):
+                async with asyncio.timeout(
+                    self._settings.chat_generation_timeout_seconds
+                ):
                     while True:
                         done, _ = await asyncio.wait(
                             {generation},
@@ -284,6 +282,8 @@ class ChatService:
                     # underlying httpx request is actually torn down before
                     # we move on (bounded — never block the fallback path).
                     await asyncio.wait({generation}, timeout=1.0)
+                    if not generation.done():
+                        logger.warning("chat_generation_cancel_pending")
 
             # Validate every returned id against the permission-filtered
             # candidate set. A jellyfin_id from the model is a CLAIM, not a
