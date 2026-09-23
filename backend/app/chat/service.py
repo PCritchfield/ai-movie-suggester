@@ -261,13 +261,13 @@ class ChatService:
             # proxies (Next.js rewrites) drop upstreams idle that long — which
             # cancels this stream and makes Ollama abort the load, so it never
             # finishes. The router renders heartbeats as SSE comment frames.
-            generation = asyncio.ensure_future(
+            generation = asyncio.create_task(
                 self._chat_client.chat_structured(messages, StructuredChatResponse)
             )
             try:
                 async with asyncio.timeout(GENERATION_TIMEOUT_SECONDS):
                     while True:
-                        done, _pending = await asyncio.wait(
+                        done, _ = await asyncio.wait(
                             {generation},
                             timeout=self._settings.chat_heartbeat_interval_seconds,
                         )
