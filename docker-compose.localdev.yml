@@ -34,7 +34,7 @@ services:
   # No nvidia GPU reservation (works on macOS + Linux without GPU)
   # For GPU acceleration, use docker-compose.ollama.yml with make dev-full instead
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.34.3
     ports:
       - "127.0.0.1:11434:11434"
     volumes:
