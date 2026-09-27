@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from slowapi import Limiter  # noqa: TC002
 
 from app.auth.dependencies import get_current_session
-from app.chat.models import ChatRequest  # noqa: TC001
+from app.chat.models import ChatRequest, SSEEventType  # noqa: TC001
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -23,8 +23,19 @@ logger = logging.getLogger(__name__)
 
 
 async def _sse_generator(events: AsyncIterator[dict]) -> AsyncIterator[str]:
-    """Format event dicts as SSE data lines."""
+    """Format event dicts as SSE data lines.
+
+    ``heartbeat`` events are rendered as SSE comment frames (``: heartbeat``)
+    rather than ``data:`` lines. Comments are part of the SSE spec, are
+    ignored by every compliant parser, and keep the upstream socket busy so
+    reverse proxies with idle timeouts (Next.js rewrites: 30s) don't drop the
+    stream while Ollama is loading a model or generating a non-streamed
+    structured payload.
+    """
     async for event in events:
+        if event.get("type") == SSEEventType.HEARTBEAT:
+            yield ": heartbeat\n\n"
+            continue
         yield f"data: {json.dumps(event)}\n\n"
 
 

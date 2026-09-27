@@ -79,14 +79,21 @@ contract, so a v1 frontend ignores unknown event types and still works:
 
 - `metadata` — `{version: 2, recommendations: SearchResultItem[], search_status, turn_count}` (all candidates; instant)
 - `status` — `{phase: "generating"}` (staged wait state; emitted when generation begins)
+- `: heartbeat` — SSE *comment* frame (not a `data:` event) emitted every `CHAT_HEARTBEAT_INTERVAL_SECONDS` (default 10s) while generation blocks. Ignored by parsers; exists so reverse proxies with idle timeouts (the Next.js `/api/*` rewrite drops idle upstreams at 30s) never sever the stream during a cold model load or a long grammar-constrained decode.
 - `picks` — `{version: 2, picks: [{jellyfin_id, reasoning, pick_order}]}` (validated recommendations, LLM order; **absent on the fallback path**)
 - `text` — `{content}` (prose synthesized deterministically from the picks; one event, not token-streamed)
 - `done` — stream complete
 - `error` — only for pre-search failures (`search_unavailable`); generation failures degrade to the canned-text fallback, never an error event
 
 Generation is non-streaming (grammar-constrained decoding produces the whole
-payload at once), so the 120s chat timeout now bounds a single blocking call;
-the `status` event is the user-facing mitigation.
+payload at once), so the chat timeout (`CHAT_GENERATION_TIMEOUT_SECONDS`, default 120s) bounds a single blocking call;
+the `status` event is the user-facing mitigation and the heartbeat comment is
+the transport-level one. Without heartbeats, a cold Ollama load (~35s on the
+reference deployment) exceeded the proxy idle timeout, the proxy dropped the
+stream, the backend cancelled its Ollama call, and Ollama aborted the half-done
+load — so the model could never finish loading. The query rewriter also skips
+its 2s-budget rewrite when `/api/ps` shows the chat model is not resident, so
+it never triggers (and then aborts) a load the generation call needs.
 
 ## Data Flow: Library Sync & Embedding
 
@@ -201,7 +208,7 @@ All configuration via environment variables (`.env` file). See `.env.example` fo
 | Sync | `JELLYFIN_API_KEY`, `JELLYFIN_ADMIN_USER_ID`, `LIBRARY_SYNC_PAGE_SIZE`, `SYNC_INTERVAL_HOURS`, `TOMBSTONE_TTL_DAYS`, `WAL_CHECKPOINT_THRESHOLD_MB` | `JELLYFIN_API_KEY` for background sync |
 | Embedding | `EMBEDDING_BATCH_SIZE`, `EMBEDDING_WORKER_INTERVAL_SECONDS`, `EMBEDDING_MAX_RETRIES`, `EMBEDDING_COOLDOWN_SECONDS` | Defaults provided |
 | Search | `SEARCH_RATE_LIMIT`, `SEARCH_OVERFETCH_MULTIPLIER`, `FOREIGN_FILM_HOME_COUNTRIES` | Defaults provided (`FOREIGN_FILM_HOME_COUNTRIES=US`; ISO 3166-1 alpha-2 codes; set empty to disable the foreign-film route) |
-| Chat | `CHAT_RATE_LIMIT`, `CHAT_SYSTEM_PROMPT` | Defaults provided |
+| Chat | `CHAT_RATE_LIMIT`, `CHAT_SYSTEM_PROMPT`, `CHAT_HEARTBEAT_INTERVAL_SECONDS`, `CHAT_GENERATION_TIMEOUT_SECONDS` | Defaults provided |
 | Conversation | `CONVERSATION_MAX_TURNS`, `CONVERSATION_TTL_MINUTES`, `CONVERSATION_MAX_SESSIONS`, `CONVERSATION_CONTEXT_BUDGET` | Defaults provided |
 | Tuning | `LOG_LEVEL`, `ENABLE_DOCS` | Defaults provided |
 
