@@ -67,3 +67,31 @@ describe("parseSSEStream — Spec 27 v2 events", () => {
     expect(events.map((e) => e.type)).toEqual(["done"]);
   });
 });
+
+describe("parseSSEStream — heartbeat comment frames", () => {
+  it("ignores SSE comment frames used as proxy keep-alives", async () => {
+    const wire =
+      `data: ${JSON.stringify({ type: "status", phase: "generating" })}\n\n` +
+      ": heartbeat\n\n" +
+      ": heartbeat\n\n" +
+      `data: ${JSON.stringify({ type: "done" })}\n\n`;
+    const events = await collect(wire);
+    expect(events.map((e) => e.type)).toEqual(["status", "done"]);
+  });
+
+  it("ignores a comment frame split across chunk boundaries", async () => {
+    const chunks = [
+      ": heart",
+      "beat\n\n" + `data: ${JSON.stringify({ type: "done" })}\n\n`,
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(new TextEncoder().encode(c));
+        controller.close();
+      },
+    });
+    const out: SSEEvent[] = [];
+    for await (const ev of parseSSEStream(stream)) out.push(ev);
+    expect(out.map((e) => e.type)).toEqual(["done"]);
+  });
+});

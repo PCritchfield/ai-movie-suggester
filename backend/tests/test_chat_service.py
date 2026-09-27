@@ -10,7 +10,9 @@ back to a safe canned message (never free-prose) on any failure.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 from app.chat.conversation_store import ConversationStore
@@ -23,6 +25,9 @@ from app.ollama.errors import (
 )
 from app.search.models import SearchResponse, SearchResultItem, SearchStatus
 from tests.conftest import make_search_result_item, make_test_settings
+
+if TYPE_CHECKING:
+    import pytest
 
 # ---------------------------------------------------------------------------
 # Factories
@@ -69,8 +74,9 @@ def _make_chat_service(
     pause_counter: ChatPauseCounter | None = None,
     conversation_store: ConversationStore | None = None,
     watch_history_service: AsyncMock | None = None,
+    settings_overrides: dict | None = None,
 ) -> ChatService:
-    settings = make_test_settings()
+    settings = make_test_settings(**(settings_overrides or {}))
     _search = search_service or AsyncMock()
     _chat = chat_client or _chat_client_returning(
         _structured("Here you go.", [("jf-galaxy-quest", "A great match.")])
@@ -757,3 +763,153 @@ class TestChatServiceWatchHistory:
 
         assert events[-1]["type"] == "done"
         assert search.search.call_args.kwargs["exclude_ids"] is None
+
+
+# ---------------------------------------------------------------------------
+# SSE heartbeats during generation (cold-start / proxy idle-timeout fix)
+# ---------------------------------------------------------------------------
+
+
+class TestGenerationHeartbeat:
+    """While the (non-streaming) structured generation blocks, the service
+    must emit heartbeat events at ``chat_heartbeat_interval_seconds`` so the
+    SSE socket never sits idle long enough for a reverse proxy to drop it
+    (Next.js rewrites: 30s). Observed live: Ollama cold-load ≈ 35s → proxy
+    killed the stream → Ollama aborted the load → every attempt restarted it.
+    """
+
+    @staticmethod
+    def _slow_client(delay: float, response: StructuredChatResponse) -> AsyncMock:
+        client = AsyncMock()
+
+        async def _slow(*_args, **_kwargs):
+            await asyncio.sleep(delay)
+            return response
+
+        client.chat_structured = AsyncMock(side_effect=_slow)
+        return client
+
+    async def test_heartbeats_emitted_while_generation_blocks(self) -> None:
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[make_search_result_item(title="Alien", jellyfin_id="a1")]
+        )
+        chat_client = self._slow_client(0.12, _structured("Hi.", [("a1", "ok")]))
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            settings_overrides={"chat_heartbeat_interval_seconds": 0.02},
+        )
+
+        events = await _collect_events(
+            service, query="scary", user_id="uid-1", token="jf-token", session_id="s1"
+        )
+
+        types = _types(events)
+        assert types[:2] == ["metadata", "status"]
+        heartbeats = [i for i, t in enumerate(types) if t == "heartbeat"]
+        assert len(heartbeats) >= 2
+        # Heartbeats sit strictly between status and picks — never after.
+        assert types.index("picks") > heartbeats[-1]
+        assert types[types.index("picks") :] == ["picks", "text", "done"]
+        assert all(events[i] == {"type": "heartbeat"} for i in heartbeats)
+
+    async def test_no_heartbeat_when_generation_is_fast(self) -> None:
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[make_search_result_item(title="Alien", jellyfin_id="a1")]
+        )
+        chat_client = _chat_client_returning(_structured("Hi.", [("a1", "ok")]))
+        service = _make_chat_service(search_service=search, chat_client=chat_client)
+
+        events = await _collect_events(
+            service, query="scary", user_id="uid-1", token="jf-token", session_id="s1"
+        )
+
+        assert "heartbeat" not in _types(events)
+
+    async def test_generation_timeout_cancels_pending_call_and_falls_back(
+        self,
+    ) -> None:
+        from app.chat.service import FALLBACK_UNAVAILABLE_MESSAGE
+
+        cancelled = asyncio.Event()
+
+        async def _hang(*_args, **_kwargs):
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+            return _structured("never", [])
+
+        chat_client = AsyncMock()
+        chat_client.chat_structured = AsyncMock(side_effect=_hang)
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[make_search_result_item(title="Alien", jellyfin_id="a1")]
+        )
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            settings_overrides={
+                "chat_heartbeat_interval_seconds": 0.01,
+                "chat_generation_timeout_seconds": 0.05,
+            },
+        )
+
+        events = await _collect_events(
+            service, query="scary", user_id="uid-1", token="jf-token", session_id="s1"
+        )
+
+        types = _types(events)
+        assert "heartbeat" in types
+        assert "picks" not in types
+        assert events[-1]["type"] == "done"
+        assert events[-2] == {"type": "text", "content": FALLBACK_UNAVAILABLE_MESSAGE}
+        assert cancelled.is_set(), "pending Ollama call must be cancelled on timeout"
+
+    async def test_cancellation_that_does_not_complete_is_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """If the Ollama call ignores cancellation for >1s, we still fall back
+        promptly but leave a warning so the detached call is visible."""
+        from app.chat.service import FALLBACK_UNAVAILABLE_MESSAGE
+
+        async def _stubborn(*_args, **_kwargs):
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                # Swallow the first cancel and linger past the 1s grace window.
+                await asyncio.sleep(1.3)
+                raise
+            return _structured("never", [])
+
+        chat_client = AsyncMock()
+        chat_client.chat_structured = AsyncMock(side_effect=_stubborn)
+        search = AsyncMock()
+        search.search.return_value = _make_search_response(
+            results=[make_search_result_item(title="Alien", jellyfin_id="a1")]
+        )
+        service = _make_chat_service(
+            search_service=search,
+            chat_client=chat_client,
+            settings_overrides={
+                "chat_heartbeat_interval_seconds": 0.01,
+                "chat_generation_timeout_seconds": 0.05,
+            },
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.chat.service"):
+            events = await _collect_events(
+                service,
+                query="scary",
+                user_id="uid-1",
+                token="jf-token",
+                session_id="s1",
+            )
+
+        assert events[-2] == {"type": "text", "content": FALLBACK_UNAVAILABLE_MESSAGE}
+        assert "chat_generation_cancel_pending" in caplog.text
+        # Let the stubborn task finish so the loop shuts down cleanly.
+        await asyncio.sleep(0.5)

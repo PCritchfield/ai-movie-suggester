@@ -69,8 +69,10 @@ class QueryRewriter:
             return cached
 
         try:
+            # The residency probe shares the rewrite budget so a slow-but-
+            # reachable Ollama cannot cost probe-timeout + rewrite-timeout.
             rewritten = await asyncio.wait_for(
-                self._stream_rewrite(query),
+                self._probe_then_rewrite(query),
                 timeout=self._timeout,
             )
         except TimeoutError:
@@ -90,6 +92,13 @@ class QueryRewriter:
             )
             return query
 
+        if rewritten is None:
+            # A cold model takes ~30s to load — far beyond the rewrite budget —
+            # and Ollama aborts the load when we hang up, so attempting a
+            # rewrite would only sabotage the main generation call's own load.
+            logger.warning("rewrite_skip reason=model_cold query_len=%d", len(query))
+            return query
+
         clean = rewritten.strip()
         if not clean:
             logger.warning("rewrite_fallback reason=empty query_len=%d", len(query))
@@ -105,6 +114,12 @@ class QueryRewriter:
 
         self._cache.set(query, clean, REWRITE_PROMPT_VERSION_HASH)
         return clean
+
+    async def _probe_then_rewrite(self, query: str) -> str | None:
+        """Return the rewrite, or ``None`` if the chat model is not resident."""
+        if not await self._chat.is_model_resident():
+            return None
+        return await self._stream_rewrite(query)
 
     async def _stream_rewrite(self, query: str) -> str:
         """Issue the chat call, accumulate streaming tokens, return the result."""

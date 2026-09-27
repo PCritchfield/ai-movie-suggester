@@ -252,10 +252,38 @@ class ChatService:
             # a staged wait state the frontend can surface while we wait.
             yield {"type": SSEEventType.STATUS, "phase": "generating"}
 
-            async with asyncio.timeout(120.0):
-                structured = await self._chat_client.chat_structured(
-                    messages, StructuredChatResponse
-                )
+            # Run generation as a task and emit heartbeats while it blocks.
+            # A cold Ollama model load alone can exceed 30s, and reverse
+            # proxies (Next.js rewrites) drop upstreams idle that long — which
+            # cancels this stream and makes Ollama abort the load, so it never
+            # finishes. The router renders heartbeats as SSE comment frames.
+            generation = asyncio.create_task(
+                self._chat_client.chat_structured(messages, StructuredChatResponse)
+            )
+            try:
+                async with asyncio.timeout(
+                    self._settings.chat_generation_timeout_seconds
+                ):
+                    while True:
+                        done, _ = await asyncio.wait(
+                            {generation},
+                            timeout=self._settings.chat_heartbeat_interval_seconds,
+                        )
+                        if done:
+                            break
+                        yield {"type": SSEEventType.HEARTBEAT}
+                structured = generation.result()
+            finally:
+                # Timeout, client disconnect (GeneratorExit), or any error:
+                # never leave the Ollama call running detached.
+                if not generation.done():
+                    generation.cancel()
+                    # Let the cancellation propagate into the task so the
+                    # underlying httpx request is actually torn down before
+                    # we move on (bounded — never block the fallback path).
+                    await asyncio.wait({generation}, timeout=1.0)
+                    if not generation.done():
+                        logger.warning("chat_generation_cancel_pending")
 
             # Validate every returned id against the permission-filtered
             # candidate set. A jellyfin_id from the model is a CLAIM, not a
